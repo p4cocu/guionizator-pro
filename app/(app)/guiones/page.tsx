@@ -10,14 +10,24 @@ function formatDate(iso: string) {
   });
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  idea: "Idea",
+  produccion: "En producción",
+  publicado: "Publicado",
+};
+
 function ScriptCard({ script }: { script: ScriptRow }) {
   const clientName = script.clients?.nombre ?? "—";
+  const status = script.status ?? "idea";
 
   return (
     <Link href={`/guiones/${script.id}`} className={`card ${styles.card}`}>
       <div className={styles.cardMeta}>
         <span className={`${styles.typeBadge} ${styles[script.type]}`}>
           {script.type === "reel" ? "Reel" : "Carrusel"}
+        </span>
+        <span className={`${styles.statusBadge} ${styles[`status_${status}`]}`}>
+          {STATUS_LABELS[status] ?? status}
         </span>
         <span className={styles.cardDate}>{formatDate(script.created_at)}</span>
       </div>

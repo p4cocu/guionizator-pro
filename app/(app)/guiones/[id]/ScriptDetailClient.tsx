@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ScriptRow, ScriptVersion, saveScriptVersion, deleteScript } from "../actions";
+import { ScriptRow, ScriptVersion, ScriptStatus, saveScriptVersion, deleteScript, updateScriptStatus } from "../actions";
 import { ReelEditor, CarouselEditor } from "./ScriptEditors";
 import AiEditPanel from "./AiEditPanel";
 import styles from "../guiones.module.css";
@@ -28,6 +28,12 @@ export type CarouselSlide = {
 export type CarouselContent = { slides: CarouselSlide[] };
 
 type Mode = "view" | "edit-manual" | "edit-ai";
+
+const STATUS_OPTIONS: { value: ScriptStatus; label: string; color: string }[] = [
+  { value: "idea", label: "Idea", color: "var(--text-dim)" },
+  { value: "produccion", label: "En producción", color: "var(--signal)" },
+  { value: "publicado", label: "Publicado", color: "var(--emerald)" },
+];
 
 // ── Viewers (read-only) ──────────────────────────────────────────────────────
 
@@ -255,9 +261,11 @@ export default function ScriptDetailClient({ script, versions }: Props) {
   );
   const [isPending, startTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
+  const [isUpdatingStatus, startStatusTransition] = useTransition();
   const [copied, setCopied] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [currentStatus, setCurrentStatus] = useState<ScriptStatus>(script.status ?? "idea");
   const downloadRef = useRef<HTMLDivElement>(null);
 
   const isReel = script.type === "reel";
@@ -335,6 +343,13 @@ export default function ScriptDetailClient({ script, versions }: Props) {
     });
   }
 
+  function handleStatusChange(newStatus: ScriptStatus) {
+    setCurrentStatus(newStatus);
+    startStatusTransition(async () => {
+      await updateScriptStatus(script.id, newStatus);
+    });
+  }
+
   return (
     <div className={styles.detailPage}>
       {/* ── Header ── */}
@@ -363,6 +378,20 @@ export default function ScriptDetailClient({ script, versions }: Props) {
         </div>
 
         <div className={styles.detailActions}>
+          {/* Status selector */}
+          <div className={styles.statusSelector}>
+            {STATUS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                className={`${styles.statusBtn} ${currentStatus === opt.value ? styles.statusBtnActive : ""}`}
+                style={currentStatus === opt.value ? { color: opt.color, borderColor: opt.color } : {}}
+                onClick={() => handleStatusChange(opt.value)}
+                disabled={isUpdatingStatus}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           <Link href="/guiones/nuevo" className="btn btn-primary">
             + Nuevo guion
           </Link>
@@ -482,6 +511,8 @@ export default function ScriptDetailClient({ script, versions }: Props) {
         <AiEditPanel
           content={script.content}
           type={script.type}
+          clientId={script.client_id}
+          brief={script.brief}
           onApply={handleAiApply}
           onClose={() => setMode("view")}
           saving={isPending}

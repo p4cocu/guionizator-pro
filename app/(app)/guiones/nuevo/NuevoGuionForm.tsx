@@ -41,12 +41,19 @@ function isReel(c: ScriptContent): c is ReelContent {
   return "blocks" in c;
 }
 
+type InlineAiOption = { label: string; content: ScriptContent };
+type InlineAiState =
+  | { phase: "idle" }
+  | { phase: "loading" }
+  | { phase: "picking"; original: ScriptContent; options: InlineAiOption[] };
+
 type GeneratedScript = {
   structure: Structure;
   content: ScriptContent;
   brainVersionId: string | null;
   savedId: string | null;
   regenerating: boolean;
+  inlineAi: InlineAiState;
 };
 
 type Step = 1 | 2 | 3;
@@ -142,6 +149,90 @@ function CarouselViewer({ content }: { content: CarouselContent }) {
   );
 }
 
+// ── Inline AI chat (step 3) ─────────────────────────────────────────────────
+
+type InlineAiChatProps = {
+  state: InlineAiState;
+  onSubmit: (instruction: string) => void;
+  onSelect: (content: ScriptContent) => void;
+  onKeepOriginal: () => void;
+};
+
+function InlineAiChat({ state, onSubmit, onSelect, onKeepOriginal }: InlineAiChatProps) {
+  const [instruction, setInstruction] = useState("");
+
+  function handleSubmit() {
+    if (!instruction.trim() || state.phase === "loading") return;
+    onSubmit(instruction.trim());
+    setInstruction("");
+  }
+
+  return (
+    <div className={styles.inlineAiPanel}>
+      <div className={styles.inlineAiHeader}>
+        <span className={styles.inlineAiTitle}>✦ Editar con IA</span>
+      </div>
+
+      {state.phase === "picking" && (
+        <div className={styles.inlineAiOptions}>
+          <p className={styles.inlineAiOptionsLabel}>
+            Elige la versión que prefieres:
+          </p>
+          <div className={styles.inlineAiOptionsList}>
+            {state.options.map((opt, i) => (
+              <button
+                key={i}
+                className={styles.inlineAiOption}
+                onClick={() => onSelect(opt.content)}
+              >
+                <span className={styles.inlineAiOptionLabel}>{opt.label}</span>
+                <span className={styles.inlineAiOptionArrow}>→</span>
+              </button>
+            ))}
+            <button
+              className={`${styles.inlineAiOption} ${styles.inlineAiOptionOriginal}`}
+              onClick={onKeepOriginal}
+            >
+              <span className={styles.inlineAiOptionLabel}>Mantener original</span>
+              <span className={styles.inlineAiOptionArrow}>✕</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className={styles.inlineAiBody}>
+        <textarea
+          className="textarea"
+          rows={2}
+          placeholder="Ej: el hook no me convence, genera 3 alternativas · el cierre usa lenguaje más simple, dame 2 propuestas"
+          value={instruction}
+          onChange={(e) => setInstruction(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit();
+          }}
+          disabled={state.phase === "loading"}
+        />
+        <div className={styles.inlineAiFooter}>
+          {state.phase === "loading" && (
+            <div className={styles.inlineAiLoading}>
+              <div className={styles.spinnerSm} />
+              <span>Generando alternativas…</span>
+            </div>
+          )}
+          <button
+            className="btn btn-ghost"
+            style={{ marginLeft: "auto" }}
+            onClick={handleSubmit}
+            disabled={!instruction.trim() || state.phase === "loading"}
+          >
+            Aplicar →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main form ────────────────────────────────────────────────────────────────
 
 export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
@@ -171,7 +262,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
   }
 
   async function fetchScript(
-    structureName: string
+    s: Structure
   ): Promise<{ content: ScriptContent; brain_version_id: string | null }> {
     const res = await fetch("/api/ai/script", {
       method: "POST",
@@ -180,7 +271,8 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
         client_id: clientId,
         brief,
         type,
-        structure_name: structureName,
+        structure_name: s.name,
+        structure: { hook: s.hook, arc: s.arc, close: s.close },
       }),
     });
     const data = await res.json();
@@ -223,7 +315,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
     setError(null);
     try {
       const results = await Promise.all(
-        selectedStructures.map((s) => fetchScript(s.name))
+        selectedStructures.map((s) => fetchScript(s))
       );
       setGeneratedScripts(
         selectedStructures.map((s, i) => ({
@@ -232,6 +324,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
           brainVersionId: results[i].brain_version_id ?? null,
           savedId: null,
           regenerating: false,
+          inlineAi: { phase: "idle" },
         }))
       );
       setActiveTab(0);
@@ -251,7 +344,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
     );
     setError(null);
     try {
-      const data = await fetchScript(generatedScripts[idx].structure.name);
+      const data = await fetchScript(generatedScripts[idx].structure);
       setGeneratedScripts((prev) =>
         prev.map((g, i) =>
           i === idx
@@ -261,6 +354,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
                 brainVersionId: data.brain_version_id ?? null,
                 savedId: null,
                 regenerating: false,
+                inlineAi: { phase: "idle" },
               }
             : g
         )
@@ -271,6 +365,77 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
         prev.map((g, i) => (i === idx ? { ...g, regenerating: false } : g))
       );
     }
+  }
+
+  // ── Inline AI (step 3) ───────────────────────────────────────────────────
+
+  async function handleInlineAiSubmit(idx: number, instruction: string) {
+    const g = generatedScripts[idx];
+    setGeneratedScripts((prev) =>
+      prev.map((x, i) =>
+        i === idx ? { ...x, inlineAi: { phase: "loading" } } : x
+      )
+    );
+    try {
+      const res = await fetch("/api/ai/inline-edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: clientId,
+          brief,
+          type,
+          content: g.content,
+          instruction,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al editar");
+      const options: InlineAiOption[] = data.options ?? [];
+      if (options.length === 1) {
+        // Single change — auto-apply
+        setGeneratedScripts((prev) =>
+          prev.map((x, i) =>
+            i === idx
+              ? { ...x, content: options[0].content, savedId: null, inlineAi: { phase: "idle" } }
+              : x
+          )
+        );
+      } else {
+        // Multiple options — let user pick
+        setGeneratedScripts((prev) =>
+          prev.map((x, i) =>
+            i === idx
+              ? { ...x, inlineAi: { phase: "picking", original: x.content, options } }
+              : x
+          )
+        );
+      }
+    } catch (e) {
+      setError((e as Error).message);
+      setGeneratedScripts((prev) =>
+        prev.map((x, i) =>
+          i === idx ? { ...x, inlineAi: { phase: "idle" } } : x
+        )
+      );
+    }
+  }
+
+  function handleInlineAiSelect(idx: number, content: ScriptContent) {
+    setGeneratedScripts((prev) =>
+      prev.map((x, i) =>
+        i === idx
+          ? { ...x, content, savedId: null, inlineAi: { phase: "idle" } }
+          : x
+      )
+    );
+  }
+
+  function handleInlineAiKeepOriginal(idx: number) {
+    setGeneratedScripts((prev) =>
+      prev.map((x, i) =>
+        i === idx ? { ...x, inlineAi: { phase: "idle" } } : x
+      )
+    );
   }
 
   // ── Save one ─────────────────────────────────────────────────────────────
@@ -503,6 +668,16 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
                   <CarouselViewer content={g.content as CarouselContent} />
                 )}
 
+                {/* Panel de edición con IA (inline, paso 3) */}
+                {!g.regenerating && !g.savedId && (
+                  <InlineAiChat
+                    state={g.inlineAi}
+                    onSubmit={(instr) => handleInlineAiSubmit(activeTab, instr)}
+                    onSelect={(c) => handleInlineAiSelect(activeTab, c)}
+                    onKeepOriginal={() => handleInlineAiKeepOriginal(activeTab)}
+                  />
+                )}
+
                 {error && (
                   <p className={styles.formError} style={{ marginTop: 16 }}>
                     {error}
@@ -542,7 +717,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
                       type="button"
                       className="btn btn-primary"
                       onClick={() => handleSave(activeTab)}
-                      disabled={g.regenerating}
+                      disabled={g.regenerating || g.inlineAi.phase === "loading"}
                     >
                       Guardar guion
                     </button>

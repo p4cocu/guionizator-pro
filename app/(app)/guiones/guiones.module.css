@@ -1072,3 +1072,175 @@
   border: 1px solid var(--glass-border);
   background: rgba(255, 255, 255, 0.02);
 }
+
+/* ── Status badge (lista) ── */
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.status_idea {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-dim);
+  border: 1px solid var(--glass-border);
+}
+
+.status_produccion {
+  background: rgba(255, 210, 58, 0.12);
+  color: var(--signal);
+  border: 1px solid rgba(255, 210, 58, 0.25);
+}
+
+.status_publicado {
+  background: rgba(0, 159, 125, 0.12);
+  color: var(--emerald);
+  border: 1px solid rgba(0, 159, 125, 0.25);
+}
+
+/* ── Status selector (detalle) ── */
+.statusSelector {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  padding: 3px;
+}
+
+.statusBtn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.statusBtn:hover:not(.statusBtnActive) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+}
+
+.statusBtnActive {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Inline AI chat (paso 3) ── */
+.inlineAiPanel {
+  margin-top: 24px;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(0, 159, 125, 0.2);
+  background: rgba(0, 159, 125, 0.03);
+  overflow: hidden;
+}
+
+.inlineAiHeader {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(0, 159, 125, 0.15);
+}
+
+.inlineAiTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--emerald);
+  letter-spacing: 0.03em;
+}
+
+.inlineAiBody {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inlineAiFooter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inlineAiLoading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.spinnerSm {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0, 159, 125, 0.2);
+  border-top-color: var(--emerald);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+/* ── Inline AI options picker ── */
+.inlineAiOptions {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(0, 159, 125, 0.12);
+}
+
+.inlineAiOptionsLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
+.inlineAiOptionsList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inlineAiOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(0, 159, 125, 0.2);
+  background: rgba(0, 159, 125, 0.04);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.inlineAiOption:hover {
+  background: rgba(0, 159, 125, 0.1);
+  border-color: rgba(0, 159, 125, 0.4);
+}
+
+.inlineAiOptionOriginal {
+  border-color: var(--glass-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.inlineAiOptionOriginal:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.inlineAiOptionLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.inlineAiOptionArrow {
+  font-size: 12px;
+  color: var(--emerald);
+}

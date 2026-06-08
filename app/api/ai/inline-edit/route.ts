@@ -5,22 +5,6 @@ import { generateWithBrain, MODEL_DEFAULT } from "@/lib/ai/anthropic";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-function buildClientContext(c: Record<string, string | null>): string {
-  return [
-    `## Perfil del cliente: ${c.nombre}`,
-    c.marca && `**Marca:** ${c.marca}`,
-    c.que_vende && `**Qué vende:** ${c.que_vende}`,
-    c.cliente_ideal && `**Cliente ideal:** ${c.cliente_ideal}`,
-    c.nicho && `**Nicho:** ${c.nicho}`,
-    c.dolor && `**Dolor principal:** ${c.dolor}`,
-    c.deseo && `**Deseo principal:** ${c.deseo}`,
-    c.tono && `**Tono de voz:** ${c.tono}`,
-    c.notas && `**Notas adicionales:** ${c.notas}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
 const REEL_FORMAT = `{
   "voice_off": "texto completo para teleprompter, flujo continuo sin etiquetas",
   "blocks": [
@@ -54,16 +38,16 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { client_id, brief, type, structure_name, structure } = (await req.json()) as {
+  const { client_id, brief, type, content, instruction } = (await req.json()) as {
     client_id: string;
     brief: string;
     type: "reel" | "carousel";
-    structure_name: string;
-    structure?: { hook: string; arc: string; close: string };
+    content: Record<string, unknown>;
+    instruction: string;
   };
 
-  if (!client_id || !brief?.trim() || !type || !structure_name) {
-    return NextResponse.json({ error: "client_id, brief, type y structure_name son requeridos" }, { status: 400 });
+  if (!client_id || !brief?.trim() || !type || !content || !instruction?.trim()) {
+    return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
   }
 
   const { data: client } = await supabase
@@ -82,28 +66,45 @@ export async function POST(req: NextRequest) {
     .eq("is_active", true)
     .single();
 
+  const clientCtx = [
+    `## Perfil del cliente: ${client.nombre}`,
+    client.marca && `**Marca:** ${client.marca}`,
+    client.cliente_ideal && `**Cliente ideal:** ${client.cliente_ideal}`,
+    client.nicho && `**Nicho:** ${client.nicho}`,
+    client.dolor && `**Dolor principal:** ${client.dolor}`,
+    client.tono && `**Tono de voz:** ${client.tono}`,
+  ].filter(Boolean).join("\n");
+
   const format = type === "reel" ? REEL_FORMAT : CAROUSEL_FORMAT;
 
-  const structurePlan = structure
-    ? `\nPlanteamiento de la estructura (respétalo fielmente):\n- Hook: ${structure.hook}\n- Arco: ${structure.arc}\n- Cierre: ${structure.close}`
-    : "";
+  const userMessage = `Eres editor de guiones de ${type === "reel" ? "Reels de Instagram (30–60s)" : "carruseles de Instagram"}.
 
-  const userMessage = `Tipo de contenido: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (8–10 slides)"}
+Brief original: ${brief.trim()}
 
-Brief:
-${brief.trim()}
+Guion actual:
+${JSON.stringify(content, null, 2)}
 
-Estructura elegida: ${structure_name}${structurePlan}
+Instrucción del usuario: "${instruction.trim()}"
 
-Genera el guion completo desarrollando exactamente el planteamiento indicado arriba. Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
-${format}`;
+REGLAS:
+- Si la instrucción pide N alternativas/opciones/propuestas de una parte (ej: "3 alternativas de hook", "2 propuestas de cierre"), devuelve exactamente N variantes completas del guion donde SOLO esa parte cambia. Los labels serán "Opción 1", "Opción 2", etc.
+- Si la instrucción es un cambio directo (ej: "el cierre usa lenguaje más simple"), devuelve 1 variante con el cambio aplicado. Label: "Cambio aplicado".
+- Siempre devuelve guiones COMPLETOS en el formato exacto indicado.
+- Respeta el brief y el perfil del cliente en todas las variantes.
+
+Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional):
+{
+  "options": [
+    { "label": "Opción 1", "content": ${format} }
+  ]
+}`;
 
   const result = await generateWithBrain({
     userMessage,
     brainContent: activeBrain?.content ?? undefined,
-    clientContext: buildClientContext(client),
+    clientContext: clientCtx,
     model: MODEL_DEFAULT,
-    maxTokens: 4096,
+    maxTokens: 6000,
   });
 
   let parsed;
@@ -114,8 +115,5 @@ ${format}`;
     return NextResponse.json({ error: "Error al parsear respuesta de IA", raw: result.text }, { status: 500 });
   }
 
-  return NextResponse.json({
-    content: parsed,
-    brain_version_id: activeBrain?.id ?? null,
-  });
+  return NextResponse.json(parsed);
 }

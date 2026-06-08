@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 
 export type ScriptType = "reel" | "carousel";
 
+export type ScriptStatus = "idea" | "produccion" | "publicado";
+
 export type ScriptRow = {
   id: string;
   client_id: string;
@@ -18,6 +20,7 @@ export type ScriptRow = {
   version_number: number;
   parent_id: string | null;
   is_latest: boolean;
+  status: ScriptStatus;
   clients: { nombre: string; marca: string | null } | null;
 };
 
@@ -164,6 +167,23 @@ export async function getScriptWithVersions(id: string): Promise<{
     script: script as ScriptRow,
     versions: (versions ?? []) as ScriptVersion[],
   };
+}
+
+export async function updateScriptStatus(
+  scriptId: string,
+  status: ScriptStatus
+): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+
+  const { error } = await supabase
+    .from("scripts")
+    .update({ status })
+    .eq("id", scriptId)
+    .eq("owner_id", user.id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/guiones");
+  revalidatePath(`/guiones/${scriptId}`);
 }
 
 export async function saveScriptVersion(
