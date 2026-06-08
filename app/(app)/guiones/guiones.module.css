@@ -350,6 +350,108 @@
   margin-top: 4px;
 }
 
+/* ── Multi-select hint ── */
+.multiSelectHint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 14px;
+}
+
+/* ── Structure checkbox state ── */
+.structureCheck {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: var(--emerald) !important;
+  background: var(--emerald) !important;
+  box-shadow: none !important;
+}
+
+.checkMark {
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--ink);
+  line-height: 1;
+}
+
+/* ── Script tabs ── */
+.scriptTabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.scriptTab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: left;
+  max-width: 240px;
+}
+
+.scriptTab:hover {
+  border-color: rgba(0, 159, 125, 0.3);
+}
+
+.scriptTabActive {
+  border-color: var(--emerald);
+  background: rgba(0, 159, 125, 0.08);
+}
+
+.scriptTabSaved {
+  border-color: rgba(0, 159, 125, 0.4);
+}
+
+.scriptTabIdx {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--emerald);
+  flex-shrink: 0;
+}
+
+.scriptTabName {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scriptTabActive .scriptTabName {
+  color: var(--text);
+}
+
+.scriptTabDot {
+  font-size: 10px;
+  color: var(--emerald);
+  flex-shrink: 0;
+}
+
+/* ── Saved banner ── */
+.savedBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 12px 16px;
+  border-radius: var(--r-md);
+  background: rgba(0, 159, 125, 0.06);
+  border: 1px solid rgba(0, 159, 125, 0.2);
+  font-size: 13px;
+  color: var(--emerald);
+  font-weight: 600;
+}
+
 /* ── Script viewer ── */
 .scriptContainer {
   display: flex;

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { saveScript } from "../actions";
+import { useRouter } from "next/navigation";
+import { saveScriptSilent } from "../actions";
 import styles from "../guiones.module.css";
 
 type Cliente = { id: string; nombre: string; marca: string | null };
@@ -21,47 +22,48 @@ type StructuresResponse = {
 type ReelLine = { tag: string; text: string };
 type ReelBlock = { name: string; duration: string; lines: ReelLine[] };
 type MusicRec = { name: string; why: string; prompt: string };
-
 type ReelContent = {
   voice_off: string;
   blocks: ReelBlock[];
   music_a: MusicRec;
   music_b: MusicRec;
 };
-
 type CarouselSlide = {
   number: number;
   text: string;
   visual: string;
   micro_anchor: string | null;
 };
-
 type CarouselContent = { slides: CarouselSlide[] };
-
 type ScriptContent = ReelContent | CarouselContent;
 
 function isReel(c: ScriptContent): c is ReelContent {
   return "blocks" in c;
 }
 
+type GeneratedScript = {
+  structure: Structure;
+  content: ScriptContent;
+  brainVersionId: string | null;
+  savedId: string | null;
+  regenerating: boolean;
+};
+
 type Step = 1 | 2 | 3;
+const STEP_LABELS = ["Brief", "Estructuras", "Guiones"];
 
-const STEP_LABELS = ["Brief", "Estructura", "Guion"];
+// ── Step indicator ──────────────────────────────────────────────────────────
 
-// ── Step indicator ──
 function Steps({ current }: { current: Step }) {
   return (
     <div className={styles.steps}>
       {STEP_LABELS.map((label, i) => {
         const num = (i + 1) as Step;
-        const cls =
-          num === current ? "active" : num < current ? "done" : "";
+        const cls = num === current ? "active" : num < current ? "done" : "";
         return (
           <>
             <div key={num} className={`${styles.step} ${cls ? styles[cls] : ""}`}>
-              <div className={styles.stepNum}>
-                {num < current ? "✓" : num}
-              </div>
+              <div className={styles.stepNum}>{num < current ? "✓" : num}</div>
               <span>{label}</span>
             </div>
             {i < STEP_LABELS.length - 1 && (
@@ -74,7 +76,8 @@ function Steps({ current }: { current: Step }) {
   );
 }
 
-// ── Reel viewer ──
+// ── Viewers ─────────────────────────────────────────────────────────────────
+
 function ReelViewer({ content }: { content: ReelContent }) {
   return (
     <div className={styles.scriptContainer}>
@@ -82,7 +85,6 @@ function ReelViewer({ content }: { content: ReelContent }) {
         <p className={styles.voiceOffLabel}>Voz en off (teleprompter)</p>
         <p className={styles.voiceOffText}>{content.voice_off}</p>
       </div>
-
       <p className={styles.sectionTitle}>Guion de producción</p>
       {content.blocks?.map((block, i) => (
         <div key={i} className={styles.scriptBlock}>
@@ -100,7 +102,6 @@ function ReelViewer({ content }: { content: ReelContent }) {
           </div>
         </div>
       ))}
-
       {(content.music_a || content.music_b) && (
         <>
           <p className={styles.sectionTitle}>Música</p>
@@ -124,7 +125,6 @@ function ReelViewer({ content }: { content: ReelContent }) {
   );
 }
 
-// ── Carousel viewer ──
 function CarouselViewer({ content }: { content: CarouselContent }) {
   return (
     <div className={styles.slidesGrid}>
@@ -142,19 +142,53 @@ function CarouselViewer({ content }: { content: CarouselContent }) {
   );
 }
 
-// ── Main form ──
+// ── Main form ────────────────────────────────────────────────────────────────
+
 export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
+  const router = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [clientId, setClientId] = useState(clientes[0]?.id ?? "");
   const [type, setType] = useState<"reel" | "carousel">("reel");
   const [brief, setBrief] = useState("");
   const [structuresData, setStructuresData] = useState<StructuresResponse | null>(null);
-  const [selectedStructure, setSelectedStructure] = useState<Structure | null>(null);
-  const [scriptContent, setScriptContent] = useState<ScriptContent | null>(null);
-  const [brainVersionId, setBrainVersionId] = useState<string | null>(null);
+  const [selectedStructures, setSelectedStructures] = useState<Structure[]>([]);
+  const [generatedScripts, setGeneratedScripts] = useState<GeneratedScript[]>([]);
+  const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+
+  function isSelected(s: Structure) {
+    return selectedStructures.some((x) => x.name === s.name);
+  }
+
+  function toggleStructure(s: Structure) {
+    setSelectedStructures((prev) =>
+      isSelected(s) ? prev.filter((x) => x.name !== s.name) : [...prev, s]
+    );
+  }
+
+  async function fetchScript(
+    structureName: string
+  ): Promise<{ content: ScriptContent; brain_version_id: string | null }> {
+    const res = await fetch("/api/ai/script", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: clientId,
+        brief,
+        type,
+        structure_name: structureName,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Error al generar guion");
+    return data;
+  }
+
+  // ── Step 1 → 2 ──────────────────────────────────────────────────────────
 
   async function handleProposeStructures() {
     if (!clientId || !brief.trim()) {
@@ -172,7 +206,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al proponer estructuras");
       setStructuresData(data);
-      setSelectedStructure(data.structures?.[0] ?? null);
+      setSelectedStructures(data.structures ?? []);
       setStep(2);
     } catch (e) {
       setError((e as Error).message);
@@ -181,25 +215,26 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
     }
   }
 
-  async function handleGenerateScript() {
-    if (!selectedStructure) return;
+  // ── Step 2 → 3 ──────────────────────────────────────────────────────────
+
+  async function handleGenerateScripts() {
+    if (!selectedStructures.length) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/ai/script", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          client_id: clientId,
-          brief,
-          type,
-          structure_name: selectedStructure.name,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error al generar guion");
-      setScriptContent(data.content);
-      setBrainVersionId(data.brain_version_id ?? null);
+      const results = await Promise.all(
+        selectedStructures.map((s) => fetchScript(s.name))
+      );
+      setGeneratedScripts(
+        selectedStructures.map((s, i) => ({
+          structure: s,
+          content: results[i].content,
+          brainVersionId: results[i].brain_version_id ?? null,
+          savedId: null,
+          regenerating: false,
+        }))
+      );
+      setActiveTab(0);
       setStep(3);
     } catch (e) {
       setError((e as Error).message);
@@ -208,19 +243,64 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
     }
   }
 
-  function handleSave() {
-    if (!scriptContent || !selectedStructure) return;
+  // ── Regenerate one tab ───────────────────────────────────────────────────
+
+  async function handleRegenerate(idx: number) {
+    setGeneratedScripts((prev) =>
+      prev.map((g, i) => (i === idx ? { ...g, regenerating: true } : g))
+    );
+    setError(null);
+    try {
+      const data = await fetchScript(generatedScripts[idx].structure.name);
+      setGeneratedScripts((prev) =>
+        prev.map((g, i) =>
+          i === idx
+            ? {
+                ...g,
+                content: data.content,
+                brainVersionId: data.brain_version_id ?? null,
+                savedId: null,
+                regenerating: false,
+              }
+            : g
+        )
+      );
+    } catch (e) {
+      setError((e as Error).message);
+      setGeneratedScripts((prev) =>
+        prev.map((g, i) => (i === idx ? { ...g, regenerating: false } : g))
+      );
+    }
+  }
+
+  // ── Save one ─────────────────────────────────────────────────────────────
+
+  function handleSave(idx: number) {
+    const g = generatedScripts[idx];
     startTransition(async () => {
-      await saveScript({
-        client_id: clientId,
-        type,
-        brief,
-        structure_name: selectedStructure.name,
-        content: scriptContent as Record<string, unknown>,
-        brain_version_id: brainVersionId,
-      });
+      try {
+        const id = await saveScriptSilent({
+          client_id: clientId,
+          type,
+          brief,
+          structure_name: g.structure.name,
+          content: g.content as Record<string, unknown>,
+          brain_version_id: g.brainVersionId,
+        });
+        setGeneratedScripts((prev) =>
+          prev.map((x, i) => (i === idx ? { ...x, savedId: id } : x))
+        );
+      } catch (e) {
+        setError((e as Error).message);
+      }
     });
   }
+
+  const allSaved =
+    generatedScripts.length > 0 && generatedScripts.every((g) => g.savedId);
+  const anySaved = generatedScripts.some((g) => g.savedId);
+
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -238,7 +318,8 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
             >
               {clientes.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nombre}{c.marca ? ` — ${c.marca}` : ""}
+                  {c.nombre}
+                  {c.marca ? ` — ${c.marca}` : ""}
                 </option>
               ))}
             </select>
@@ -297,36 +378,47 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
         </div>
       )}
 
-      {/* ── PASO 2: Estructuras ── */}
+      {/* ── PASO 2: Estructuras (multi-select) ── */}
       {step === 2 && structuresData && (
         <div>
+          <p className={styles.multiSelectHint}>
+            Selecciona una o más estructuras para desarrollar en detalle.
+          </p>
+
           <div className={styles.structuresGrid}>
-            {structuresData.structures.map((s) => (
-              <div
-                key={s.name}
-                className={`${styles.structureCard} ${selectedStructure?.name === s.name ? styles.selected : ""}`}
-                onClick={() => setSelectedStructure(s)}
-              >
-                <div className={styles.structureRadio} />
-                <div className={styles.structureBody}>
-                  <p className={styles.structureName}>{s.name}</p>
-                  <div className={styles.structureRows}>
-                    <div className={styles.structureRow}>
-                      <span className={styles.structureRowLabel}>Hook</span>
-                      <span className={styles.structureRowText}>{s.hook}</span>
-                    </div>
-                    <div className={styles.structureRow}>
-                      <span className={styles.structureRowLabel}>Arco</span>
-                      <span className={styles.structureRowText}>{s.arc}</span>
-                    </div>
-                    <div className={styles.structureRow}>
-                      <span className={styles.structureRowLabel}>Cierre</span>
-                      <span className={styles.structureRowText}>{s.close}</span>
+            {structuresData.structures.map((s) => {
+              const selected = isSelected(s);
+              return (
+                <div
+                  key={s.name}
+                  className={`${styles.structureCard} ${selected ? styles.selected : ""}`}
+                  onClick={() => toggleStructure(s)}
+                >
+                  <div
+                    className={`${styles.structureRadio} ${selected ? styles.structureCheck : ""}`}
+                  >
+                    {selected && <span className={styles.checkMark}>✓</span>}
+                  </div>
+                  <div className={styles.structureBody}>
+                    <p className={styles.structureName}>{s.name}</p>
+                    <div className={styles.structureRows}>
+                      <div className={styles.structureRow}>
+                        <span className={styles.structureRowLabel}>Hook</span>
+                        <span className={styles.structureRowText}>{s.hook}</span>
+                      </div>
+                      <div className={styles.structureRow}>
+                        <span className={styles.structureRowLabel}>Arco</span>
+                        <span className={styles.structureRowText}>{s.arc}</span>
+                      </div>
+                      <div className={styles.structureRow}>
+                        <span className={styles.structureRowLabel}>Cierre</span>
+                        <span className={styles.structureRowText}>{s.close}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <p className={styles.discarded}>
@@ -334,71 +426,146 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
             {structuresData.discarded.reason}
           </p>
 
-          {error && <p className={styles.formError} style={{ marginTop: 12 }}>{error}</p>}
+          {error && (
+            <p className={styles.formError} style={{ marginTop: 12 }}>
+              {error}
+            </p>
+          )}
 
           {loading ? (
             <div className={styles.loadingState}>
               <div className={styles.spinner} />
-              <p className={styles.loadingText}>Generando guion completo…</p>
+              <p className={styles.loadingText}>
+                Generando {selectedStructures.length}{" "}
+                {selectedStructures.length === 1 ? "guion" : "guiones"}…
+              </p>
             </div>
           ) : (
             <div className={styles.formActions}>
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => { setStep(1); setError(null); }}
+                onClick={() => {
+                  setStep(1);
+                  setError(null);
+                }}
               >
                 ← Cambiar brief
               </button>
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={handleGenerateScript}
-                disabled={!selectedStructure}
+                onClick={handleGenerateScripts}
+                disabled={!selectedStructures.length}
               >
-                Generar guion →
+                Generar {selectedStructures.length || ""}{" "}
+                {selectedStructures.length === 1 ? "guion" : "guiones"} →
               </button>
             </div>
           )}
         </div>
       )}
 
-      {/* ── PASO 3: Guion ── */}
-      {step === 3 && scriptContent && (
+      {/* ── PASO 3: Guiones con tabs ── */}
+      {step === 3 && generatedScripts.length > 0 && (
         <div>
-          {isReel(scriptContent) ? (
-            <ReelViewer content={scriptContent} />
-          ) : (
-            <CarouselViewer content={scriptContent as CarouselContent} />
+          {/* Tabs */}
+          {generatedScripts.length > 1 && (
+            <div className={styles.scriptTabs}>
+              {generatedScripts.map((g, i) => (
+                <button
+                  key={i}
+                  className={`${styles.scriptTab} ${activeTab === i ? styles.scriptTabActive : ""} ${g.savedId ? styles.scriptTabSaved : ""}`}
+                  onClick={() => setActiveTab(i)}
+                >
+                  <span className={styles.scriptTabIdx}>Idea {i + 1}</span>
+                  <span className={styles.scriptTabName}>{g.structure.name}</span>
+                  {g.savedId && <span className={styles.scriptTabDot}>✓</span>}
+                </button>
+              ))}
+            </div>
           )}
 
-          {error && <p className={styles.formError} style={{ marginTop: 16 }}>{error}</p>}
+          {/* Contenido del tab activo */}
+          {(() => {
+            const g = generatedScripts[activeTab];
+            if (!g) return null;
+            return (
+              <div>
+                {g.regenerating ? (
+                  <div className={styles.loadingState}>
+                    <div className={styles.spinner} />
+                    <p className={styles.loadingText}>Regenerando {g.structure.name}…</p>
+                  </div>
+                ) : isReel(g.content) ? (
+                  <ReelViewer content={g.content} />
+                ) : (
+                  <CarouselViewer content={g.content as CarouselContent} />
+                )}
 
-          <div className={styles.formActions}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => { setStep(2); setError(null); }}
-            >
-              ← Cambiar estructura
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleGenerateScript}
-              disabled={loading}
-            >
-              Regenerar
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={handleSave}
-              disabled={isPending}
-            >
-              {isPending ? "Guardando…" : "Guardar guion"}
-            </button>
-          </div>
+                {error && (
+                  <p className={styles.formError} style={{ marginTop: 16 }}>
+                    {error}
+                  </p>
+                )}
+
+                <div className={styles.formActions}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setStep(2);
+                      setError(null);
+                    }}
+                  >
+                    ← Cambiar estructuras
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => handleRegenerate(activeTab)}
+                    disabled={g.regenerating}
+                  >
+                    Regenerar
+                  </button>
+                  {g.savedId ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ color: "var(--emerald)" }}
+                      onClick={() => router.push(`/guiones/${g.savedId}`)}
+                    >
+                      ✓ Ver guion →
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => handleSave(activeTab)}
+                      disabled={g.regenerating}
+                    >
+                      Guardar guion
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Ir a biblioteca cuando ya guardó algo */}
+          {anySaved && (
+            <div className={styles.savedBanner}>
+              {allSaved
+                ? `${generatedScripts.length} guion${generatedScripts.length > 1 ? "es guardados" : " guardado"}`
+                : `${generatedScripts.filter((g) => g.savedId).length} de ${generatedScripts.length} guardados`}
+              <button
+                className="btn btn-ghost"
+                onClick={() => router.push("/guiones")}
+              >
+                Ver en biblioteca →
+              </button>
+            </div>
+          )}
         </div>
       )}
     </>

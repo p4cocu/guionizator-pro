@@ -60,6 +60,35 @@ export async function saveScript(data: {
   redirect(`/guiones/${script.id}`);
 }
 
+export async function saveScriptSilent(data: {
+  client_id: string;
+  type: ScriptType;
+  brief: string;
+  structure_name: string;
+  content: Record<string, unknown>;
+  brain_version_id: string | null;
+}): Promise<string> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data: script, error } = await supabase
+    .from("scripts")
+    .insert({
+      owner_id: user.id,
+      client_id: data.client_id,
+      type: data.type,
+      brief: data.brief,
+      structure_name: data.structure_name,
+      content: data.content,
+      brain_version_id: data.brain_version_id,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/guiones");
+  return script.id;
+}
+
 export async function deleteScript(id: string) {
   const { supabase, user } = await getAuthUser();
 
