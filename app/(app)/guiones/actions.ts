@@ -1,0 +1,197 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+
+export type ScriptType = "reel" | "carousel";
+
+export type ScriptRow = {
+  id: string;
+  client_id: string;
+  type: ScriptType;
+  brief: string;
+  structure_name: string;
+  content: Record<string, unknown>;
+  brain_version_id: string | null;
+  created_at: string;
+  version_number: number;
+  parent_id: string | null;
+  is_latest: boolean;
+  clients: { nombre: string; marca: string | null } | null;
+};
+
+async function getAuthUser() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+  return { supabase, user };
+}
+
+export async function saveScript(data: {
+  client_id: string;
+  type: ScriptType;
+  brief: string;
+  structure_name: string;
+  content: Record<string, unknown>;
+  brain_version_id: string | null;
+}) {
+  const { supabase, user } = await getAuthUser();
+
+  const { data: script, error } = await supabase
+    .from("scripts")
+    .insert({
+      owner_id: user.id,
+      client_id: data.client_id,
+      type: data.type,
+      brief: data.brief,
+      structure_name: data.structure_name,
+      content: data.content,
+      brain_version_id: data.brain_version_id,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/guiones");
+  redirect(`/guiones/${script.id}`);
+}
+
+export async function deleteScript(id: string) {
+  const { supabase, user } = await getAuthUser();
+
+  const { error } = await supabase
+    .from("scripts")
+    .delete()
+    .eq("id", id)
+    .eq("owner_id", user.id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/guiones");
+  redirect("/guiones");
+}
+
+export async function getScripts(): Promise<ScriptRow[]> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data, error } = await supabase
+    .from("scripts")
+    .select("*, clients(nombre, marca)")
+    .eq("owner_id", user.id)
+    .eq("is_latest", true)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ScriptRow[];
+}
+
+export async function getScript(id: string): Promise<ScriptRow | null> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data } = await supabase
+    .from("scripts")
+    .select("*, clients(nombre, marca)")
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .single();
+
+  return (data ?? null) as ScriptRow | null;
+}
+
+export type ScriptVersion = Pick<
+  ScriptRow,
+  "id" | "version_number" | "is_latest" | "created_at" | "parent_id"
+>;
+
+export async function getScriptWithVersions(id: string): Promise<{
+  script: ScriptRow;
+  versions: ScriptVersion[];
+} | null> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data: script } = await supabase
+    .from("scripts")
+    .select("*, clients(nombre, marca)")
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .single();
+
+  if (!script) return null;
+
+  const rootId = script.parent_id ?? script.id;
+
+  const { data: versions } = await supabase
+    .from("scripts")
+    .select("id, version_number, is_latest, created_at, parent_id")
+    .or(`id.eq.${rootId},parent_id.eq.${rootId}`)
+    .eq("owner_id", user.id)
+    .order("version_number", { ascending: true });
+
+  return {
+    script: script as ScriptRow,
+    versions: (versions ?? []) as ScriptVersion[],
+  };
+}
+
+export async function saveScriptVersion(
+  scriptId: string,
+  content: Record<string, unknown>
+): Promise<string> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data: current } = await supabase
+    .from("scripts")
+    .select("*")
+    .eq("id", scriptId)
+    .eq("owner_id", user.id)
+    .single();
+
+  if (!current) throw new Error("Guion no encontrado");
+
+  const rootId = current.parent_id ?? current.id;
+
+  const { data: maxRow } = await supabase
+    .from("scripts")
+    .select("version_number")
+    .or(`id.eq.${rootId},parent_id.eq.${rootId}`)
+    .eq("owner_id", user.id)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .single();
+
+  const nextVersion = (maxRow?.version_number ?? 1) + 1;
+
+  await supabase
+    .from("scripts")
+    .update({ is_latest: false })
+    .or(`id.eq.${rootId},parent_id.eq.${rootId}`)
+    .eq("owner_id", user.id);
+
+  const { data: newScript, error } = await supabase
+    .from("scripts")
+    .insert({
+      owner_id: user.id,
+      client_id: current.client_id,
+      type: current.type,
+      brief: current.brief,
+      structure_name: current.structure_name,
+      content,
+      brain_version_id: current.brain_version_id,
+      parent_id: rootId,
+      version_number: nextVersion,
+      is_latest: true,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/guiones");
+  revalidatePath(`/guiones/${scriptId}`);
+
+  return newScript.id;
+}

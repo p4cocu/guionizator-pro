@@ -216,6 +216,11 @@ select {
   min-height: 96px;
   line-height: 1.5;
 }
+.field {
+  display: flex;
+  flex-direction: column;
+}
+
 .field-label {
   display: block;
   font-family: var(--font-display);

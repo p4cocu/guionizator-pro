@@ -33,7 +33,11 @@ Vive en `guionizator.pacocuevasia.com`.
 - Estilos por componente/página en `*.module.css` colocados junto al archivo.
 - Supabase: `lib/supabase/{client,server,middleware}.ts`. Nunca exponer `service_role`.
   Para auth en server: `getUser()` (no confiar solo en `getSession()`).
-- Knowledge base de guiones en `knowledge/` (se copiará a `brain/` en Fase 1).
+- Anthropic: `lib/ai/anthropic.ts` — `generateWithBrain()` con prompt caching vía
+  `client.beta.messages.create()` + `betas: ["prompt-caching-2024-07-31"]`. SDK 0.102.0.
+- Knowledge base en `knowledge/` (también copiada a `brain/knowledge/`).
+- Cerebro versionado: `brain_versions` en Supabase (activa por `is_active=true` + unique index).
+  Si no hay versión activa, cae back a `brain/system-prompt.md` leído con `fs.readFileSync`.
 
 ## Estructura de carpetas
 
@@ -43,12 +47,22 @@ app/
   globals.css           # tokens + utilitarios
   page.tsx              # redirect a /dashboard
   login/                # login/signup (client) + auth/callback
+  api/ai/route.ts       # route handler Anthropic (server-only, POST)
   (app)/                # grupo protegido: layout con Sidebar + Topbar
-    dashboard/  clientes/  guiones/  cerebro/
+    dashboard/  clientes/  guiones/
+    cerebro/            # page.tsx + CerebroEditor.tsx + actions.ts + cerebro.module.css
+    clientes/           # page.tsx + ClientesList + ClienteCard + ClienteForm + actions.ts + clientes.module.css
+      nuevo/            # page.tsx (nueva entrada)
+      [id]/             # page.tsx + ResearchSection + DeleteClienteButton (editar + investigación)
+brain/
+  system-prompt.md      # cerebro base (ROL actualizado: 4 estructuras equiparables)
+  knowledge/            # copia de knowledge/ (10 docs)
 components/             # Sidebar, Topbar, LogoutButton, Placeholder
-lib/supabase/           # clients server/browser + middleware de sesión
+lib/
+  supabase/             # clients server/browser + middleware de sesión
+  ai/anthropic.ts       # cliente Anthropic con prompt caching
 middleware.ts           # refresca sesión + protege rutas privadas
-knowledge/              # base de conocimiento de guiones
+knowledge/              # fuente original de la base de conocimiento
 ```
 
 ## Variables de entorno (`.env.local`, ver `.env.example`)
@@ -65,8 +79,11 @@ knowledge/              # base de conocimiento de guiones
 ## Estado por fases
 
 - [x] **Fase 0** — Setup, marca, login (Supabase Auth) y deploy. Shell de app con sidebar/topbar.
-- [ ] **Fase 1** — Cerebro (`brain/system-prompt.md` con Julian Alborna + regla de 3 estructuras) + knowledge + ruta Anthropic con caching + pantalla Cerebro.
-- [ ] **Fase 2** — Clientes (CRM-lite): cliente ideal, nicho, dolor, deseo, tono + RLS.
+- [x] **Fase 1** — `brain/system-prompt.md` (4 estructuras equiparables, IA propone 3 de 4 por brief),
+  `brain/knowledge/` (10 docs), tablas `narrative_structures` + `brain_versions` (Supabase),
+  `lib/ai/anthropic.ts` (prompt caching), `app/api/ai/route.ts`, pantalla Cerebro con versionado.
+- [x] **Fase 2** — Clientes (CRM-lite): tabla `clients` + `client_research` + RLS, CRUD completo
+  en `/clientes` (listado, crear, editar, eliminar), barra de completeness 0–100, sección de investigación por cliente.
 - [ ] **Fase 3** — Generación: brief → 3 estructuras + explicación → guion (Reel/carrusel).
 - [ ] **Fase 4** — Edición por IA (lenguaje natural) + editor manual + versionado/export.
 - [ ] **Fase 5** — Mejora continua: detección de info pobre + investigación + feedback.
