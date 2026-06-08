@@ -1,0 +1,93 @@
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-w);
+  background: var(--ink);
+  border-right: 1px solid rgba(0, 159, 125, 0.16);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+  z-index: 50;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 22px;
+}
+.brandMark {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background-image: var(--grad-g1);
+  box-shadow: var(--glow-g1);
+  flex-shrink: 0;
+}
+.brandName {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: background 0.16s, color 0.16s;
+}
+.link:hover {
+  background: rgba(0, 159, 125, 0.08);
+  color: var(--paper);
+}
+.active {
+  background: var(--ink-card);
+  color: var(--paper);
+  box-shadow: inset 0 0 0 1px rgba(0, 159, 125, 0.2);
+}
+.active span:first-child {
+  position: relative;
+}
+
+.phase {
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  border: 1px solid rgba(255, 251, 240, 0.14);
+  border-radius: var(--r-pill);
+  padding: 2px 7px;
+}
+
+.footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--emerald);
+  box-shadow: 0 0 0 3px rgba(0, 159, 125, 0.2);
+}

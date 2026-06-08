@@ -1,0 +1,16 @@
+# Configuración de despliegue en Netlify para Next.js (App Router).
+# El plugin oficial convierte route handlers y SSR en Netlify Functions.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Las variables de entorno (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+# ANTHROPIC_API_KEY, NEXT_PUBLIC_SITE_URL) se configuran en:
+# Netlify → Site settings → Environment variables. No se guardan en este archivo.

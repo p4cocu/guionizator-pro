@@ -1,0 +1,79 @@
+.wrap {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--ink);
+}
+
+.card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 400px;
+  padding: 36px 32px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 26px;
+}
+.mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background-image: var(--grad-g1);
+  box-shadow: var(--glow-g1);
+}
+.name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.heading {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 8px 0 6px;
+}
+.sub {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0 0 24px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.error {
+  color: var(--flare);
+  font-size: 13px;
+  margin: 0;
+}
+.notice {
+  color: var(--signal);
+  font-size: 13px;
+  margin: 0;
+}
+
+.toggle {
+  display: block;
+  width: 100%;
+  margin-top: 20px;
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.16s;
+}
+.toggle:hover {
+  color: var(--emerald);
+}
