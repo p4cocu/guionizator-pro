@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { generateWithBrain, MODEL_DEFAULT } from "@/lib/ai/anthropic";
+import { generateWithBrain, MODEL_DEFAULT, MODEL_FAST } from "@/lib/ai/anthropic";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -48,47 +48,48 @@ const CAROUSEL_FORMAT = `{
 }`;
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { client_id, brief, type, structure_name, structure } = (await req.json()) as {
-    client_id: string;
-    brief: string;
-    type: "reel" | "carousel";
-    structure_name: string;
-    structure?: { hook: string; arc: string; close: string };
-  };
+    const { client_id, brief, type, structure_name, structure } = (await req.json()) as {
+      client_id: string;
+      brief: string;
+      type: "reel" | "carousel";
+      structure_name: string;
+      structure?: { hook: string; arc: string; close: string };
+    };
 
-  if (!client_id || !brief?.trim() || !type || !structure_name) {
-    return NextResponse.json({ error: "client_id, brief, type y structure_name son requeridos" }, { status: 400 });
-  }
+    if (!client_id || !brief?.trim() || !type || !structure_name) {
+      return NextResponse.json({ error: "client_id, brief, type y structure_name son requeridos" }, { status: 400 });
+    }
 
-  const { data: client } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("id", client_id)
-    .eq("owner_id", user.id)
-    .single();
+    const { data: client } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("id", client_id)
+      .eq("owner_id", user.id)
+      .single();
 
-  if (!client) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+    if (!client) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
 
-  const { data: activeBrain } = await supabase
-    .from("brain_versions")
-    .select("id, content")
-    .eq("owner_id", user.id)
-    .eq("is_active", true)
-    .single();
+    const { data: activeBrain } = await supabase
+      .from("brain_versions")
+      .select("id, content")
+      .eq("owner_id", user.id)
+      .eq("is_active", true)
+      .single();
 
-  const format = type === "reel" ? REEL_FORMAT : CAROUSEL_FORMAT;
+    const format = type === "reel" ? REEL_FORMAT : CAROUSEL_FORMAT;
 
-  const structurePlan = structure
-    ? `\nPlanteamiento de la estructura (respétalo fielmente):\n- Hook: ${structure.hook}\n- Arco: ${structure.arc}\n- Cierre: ${structure.close}`
-    : "";
+    const structurePlan = structure
+      ? `\nPlanteamiento de la estructura (respétalo fielmente):\n- Hook: ${structure.hook}\n- Arco: ${structure.arc}\n- Cierre: ${structure.close}`
+      : "";
 
-  const userMessage = `Tipo de contenido: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (8–10 slides)"}
+    const userMessage = `Tipo de contenido: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (8–10 slides)"}
 
 Brief:
 ${brief.trim()}
@@ -98,30 +99,32 @@ Estructura elegida: ${structure_name}${structurePlan}
 Genera el guion completo desarrollando exactamente el planteamiento indicado arriba. Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
 ${format}`;
 
-  let result;
-  try {
-    result = await generateWithBrain({
+    // Carrusel usa modelo rápido (Haiku) — respuesta estructurada, ~3x más veloz
+    const model = type === "carousel" ? MODEL_FAST : MODEL_DEFAULT;
+    const maxTokens = type === "carousel" ? 2048 : 4096;
+
+    const result = await generateWithBrain({
       userMessage,
       brainContent: activeBrain?.content ?? undefined,
       clientContext: buildClientContext(client),
-      model: MODEL_DEFAULT,
-      maxTokens: 4096,
+      model,
+      maxTokens,
+    });
+
+    let parsed;
+    try {
+      const cleaned = result.text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return NextResponse.json({ error: "Error al parsear respuesta de IA", raw: result.text }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      content: parsed,
+      brain_version_id: activeBrain?.id ?? null,
     });
   } catch (e) {
-    console.error("script generation error:", e);
-    return NextResponse.json({ error: "Error al conectar con la IA" }, { status: 500 });
+    console.error("[script] Error:", e);
+    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
   }
-
-  let parsed;
-  try {
-    const cleaned = result.text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
-    parsed = JSON.parse(cleaned);
-  } catch {
-    return NextResponse.json({ error: "Error al parsear respuesta de IA", raw: result.text }, { status: 500 });
-  }
-
-  return NextResponse.json({
-    content: parsed,
-    brain_version_id: activeBrain?.id ?? null,
-  });
 }

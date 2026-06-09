@@ -22,39 +22,40 @@ function buildClientContext(c: Record<string, string | null>): string {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { client_id, brief, type } = (await req.json()) as {
-    client_id: string;
-    brief: string;
-    type: "reel" | "carousel";
-  };
+    const { client_id, brief, type } = (await req.json()) as {
+      client_id: string;
+      brief: string;
+      type: "reel" | "carousel";
+    };
 
-  if (!client_id || !brief?.trim() || !type) {
-    return NextResponse.json({ error: "client_id, brief y type son requeridos" }, { status: 400 });
-  }
+    if (!client_id || !brief?.trim() || !type) {
+      return NextResponse.json({ error: "client_id, brief y type son requeridos" }, { status: 400 });
+    }
 
-  const { data: client } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("id", client_id)
-    .eq("owner_id", user.id)
-    .single();
+    const { data: client } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("id", client_id)
+      .eq("owner_id", user.id)
+      .single();
 
-  if (!client) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+    if (!client) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
 
-  const { data: activeBrain } = await supabase
-    .from("brain_versions")
-    .select("content")
-    .eq("owner_id", user.id)
-    .eq("is_active", true)
-    .single();
+    const { data: activeBrain } = await supabase
+      .from("brain_versions")
+      .select("content")
+      .eq("owner_id", user.id)
+      .eq("is_active", true)
+      .single();
 
-  const userMessage = `Tipo de contenido: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (8–10 slides)"}
+    const userMessage = `Tipo de contenido: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (8–10 slides)"}
 
 Brief:
 ${brief.trim()}
@@ -84,27 +85,25 @@ Aplica el Paso 0 de tu flujo. Responde ÚNICAMENTE con JSON válido (sin markdow
   ]
 }`;
 
-  let result;
-  try {
-    result = await generateWithBrain({
+    const result = await generateWithBrain({
       userMessage,
       brainContent: activeBrain?.content ?? undefined,
       clientContext: buildClientContext(client),
       model: MODEL_DEFAULT,
       maxTokens: 1500,
     });
+
+    let parsed;
+    try {
+      const cleaned = result.text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return NextResponse.json({ error: "Error al parsear respuesta de IA", raw: result.text }, { status: 500 });
+    }
+
+    return NextResponse.json(parsed);
   } catch (e) {
-    console.error("structures generation error:", e);
-    return NextResponse.json({ error: "Error al conectar con la IA" }, { status: 500 });
+    console.error("[structures] Error:", e);
+    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
   }
-
-  let parsed;
-  try {
-    const cleaned = result.text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
-    parsed = JSON.parse(cleaned);
-  } catch {
-    return NextResponse.json({ error: "Error al parsear respuesta de IA", raw: result.text }, { status: 500 });
-  }
-
-  return NextResponse.json(parsed);
 }
