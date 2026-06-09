@@ -84,13 +84,19 @@ Aplica el Paso 0 de tu flujo. Responde ÚNICAMENTE con JSON válido (sin markdow
   ]
 }`;
 
-  const result = await generateWithBrain({
-    userMessage,
-    brainContent: activeBrain?.content ?? undefined,
-    clientContext: buildClientContext(client),
-    model: MODEL_DEFAULT,
-    maxTokens: 1500,
-  });
+  let result;
+  try {
+    result = await generateWithBrain({
+      userMessage,
+      brainContent: activeBrain?.content ?? undefined,
+      clientContext: buildClientContext(client),
+      model: MODEL_DEFAULT,
+      maxTokens: 1500,
+    });
+  } catch (e) {
+    console.error("structures generation error:", e);
+    return NextResponse.json({ error: "Error al conectar con la IA" }, { status: 500 });
+  }
 
   let parsed;
   try {

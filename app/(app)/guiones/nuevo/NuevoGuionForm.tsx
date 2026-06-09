@@ -377,7 +377,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
       )
     );
     try {
-      const res = await fetch("/api/ai/inline-edit", {
+      const res = await fetch("/api/ai/script-edit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

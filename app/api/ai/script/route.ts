@@ -98,13 +98,19 @@ Estructura elegida: ${structure_name}${structurePlan}
 Genera el guion completo desarrollando exactamente el planteamiento indicado arriba. Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
 ${format}`;
 
-  const result = await generateWithBrain({
-    userMessage,
-    brainContent: activeBrain?.content ?? undefined,
-    clientContext: buildClientContext(client),
-    model: MODEL_DEFAULT,
-    maxTokens: 4096,
-  });
+  let result;
+  try {
+    result = await generateWithBrain({
+      userMessage,
+      brainContent: activeBrain?.content ?? undefined,
+      clientContext: buildClientContext(client),
+      model: MODEL_DEFAULT,
+      maxTokens: 4096,
+    });
+  } catch (e) {
+    console.error("script generation error:", e);
+    return NextResponse.json({ error: "Error al conectar con la IA" }, { status: 500 });
+  }
 
   let parsed;
   try {
