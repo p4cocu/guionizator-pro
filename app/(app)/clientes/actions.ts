@@ -138,3 +138,38 @@ export async function deleteResearch(researchId: string, clientId: string) {
 
   revalidatePath(`/clientes/${clientId}`);
 }
+
+export async function addProduct(
+  clientId: string,
+  nombre: string,
+  descripcion: string,
+  tipo: "producto" | "servicio",
+) {
+  const { supabase, user } = await getAuthUser();
+
+  const { error } = await supabase.from("client_products").insert({
+    client_id: clientId,
+    owner_id: user.id,
+    nombre: nombre.trim(),
+    descripcion: descripcion.trim() || null,
+    tipo,
+  });
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/clientes/${clientId}`);
+}
+
+export async function deleteProduct(productId: string, clientId: string) {
+  const { supabase, user } = await getAuthUser();
+
+  const { error } = await supabase
+    .from("client_products")
+    .delete()
+    .eq("id", productId)
+    .eq("owner_id", user.id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/clientes/${clientId}`);
+}
