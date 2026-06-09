@@ -3,33 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { generateWithBrain, MODEL_DEFAULT } from "@/lib/ai/anthropic";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
-
-const REEL_FORMAT = `{
-  "voice_off": "texto completo para teleprompter, flujo continuo sin etiquetas",
-  "blocks": [
-    {
-      "name": "HOOK",
-      "duration": "Xs",
-      "lines": [
-        {"tag": "CÁMARA", "text": "texto del guion"}
-      ]
-    }
-  ],
-  "music_a": {"name": "nombre ≤5 palabras", "why": "por qué funciona en 1-2 oraciones", "prompt": "prompt de generación ≤200 chars sin nombres de artistas o marcas"},
-  "music_b": {"name": "...", "why": "...", "prompt": "..."}
-}`;
-
-const CAROUSEL_FORMAT = `{
-  "slides": [
-    {
-      "number": 1,
-      "text": "texto del slide ≤15 palabras",
-      "visual": "descripción del diseño visual: jerarquía tipográfica, elemento visual, color/contraste",
-      "micro_anchor": "elemento de retención o null si no aplica"
-    }
-  ]
-}`;
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -38,15 +12,16 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { client_id, brief, type, content, instruction } = (await req.json()) as {
+  const { client_id, brief, type, content, fragment, instruction } = (await req.json()) as {
     client_id: string;
     brief: string;
     type: "reel" | "carousel";
     content: Record<string, unknown>;
-    instruction: string;
+    fragment: string;
+    instruction?: string;
   };
 
-  if (!client_id || !brief?.trim() || !type || !content || !instruction?.trim()) {
+  if (!client_id || !brief?.trim() || !type || !content || !fragment?.trim()) {
     return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
   }
 
@@ -75,37 +50,44 @@ export async function POST(req: NextRequest) {
     client.tono && `**Tono de voz:** ${client.tono}`,
   ].filter(Boolean).join("\n");
 
-  const format = type === "reel" ? REEL_FORMAT : CAROUSEL_FORMAT;
-
   const userMessage = `Eres editor de guiones de ${type === "reel" ? "Reels de Instagram (30–60s)" : "carruseles de Instagram"}.
 
 Brief original: ${brief.trim()}
 
-Guion actual:
+Guion completo (contexto):
 ${JSON.stringify(content, null, 2)}
 
-Instrucción del usuario: "${instruction.trim()}"
+El usuario quiere reemplazar este fragmento exacto:
+"${fragment.trim()}"
 
-REGLAS:
-- Si la instrucción pide N alternativas/opciones/propuestas de una parte (ej: "3 alternativas de hook", "2 propuestas de cierre"), devuelve exactamente N variantes completas del guion donde SOLO esa parte cambia. Los labels serán "Opción 1", "Opción 2", etc.
-- Si la instrucción es un cambio directo (ej: "el cierre usa lenguaje más simple"), devuelve 1 variante con el cambio aplicado. Label: "Cambio aplicado".
-- Siempre devuelve guiones COMPLETOS en el formato exacto indicado.
-- Respeta el brief y el perfil del cliente en todas las variantes.
+${instruction?.trim() ? `Instrucción adicional: "${instruction.trim()}"` : ""}
+
+Genera exactamente 2 alternativas para ese fragmento. Cada alternativa debe:
+- Mantener la longitud y el tono del original
+- Ser coherente con el resto del guion
+- Adaptarse al perfil del cliente
 
 Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional):
 {
   "options": [
-    { "label": "Opción 1", "content": ${format} }
+    { "label": "Opción 1", "text": "..." },
+    { "label": "Opción 2", "text": "..." }
   ]
 }`;
 
-  const result = await generateWithBrain({
-    userMessage,
-    brainContent: activeBrain?.content ?? undefined,
-    clientContext: clientCtx,
-    model: MODEL_DEFAULT,
-    maxTokens: 6000,
-  });
+  let result;
+  try {
+    result = await generateWithBrain({
+      userMessage,
+      brainContent: activeBrain?.content ?? undefined,
+      clientContext: clientCtx,
+      model: MODEL_DEFAULT,
+      maxTokens: 1500,
+    });
+  } catch (e) {
+    console.error("inline-edit error:", e);
+    return NextResponse.json({ error: "Error al conectar con la IA" }, { status: 500 });
+  }
 
   let parsed;
   try {
