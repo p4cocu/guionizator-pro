@@ -65,3 +65,36 @@ export async function deletePromptStyle(id: string): Promise<void> {
     .eq("owner_id", user.id);
   revalidatePath("/prompts");
 }
+
+export type RecentReel = {
+  id: string;
+  structure_name: string;
+  brief: string;
+  created_at: string;
+  content: Record<string, unknown>;
+  clients: { nombre: string; marca: string | null } | null;
+};
+
+export async function getRecentReels(limit = 5): Promise<RecentReel[]> {
+  const { supabase, user } = await getAuthUser();
+  const { data } = await supabase
+    .from("scripts")
+    .select("id, structure_name, brief, created_at, content, clients(nombre, marca)")
+    .eq("owner_id", user.id)
+    .eq("type", "reel")
+    .eq("is_latest", true)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as unknown as RecentReel[];
+}
+
+export async function getScriptById(id: string): Promise<RecentReel | null> {
+  const { supabase, user } = await getAuthUser();
+  const { data } = await supabase
+    .from("scripts")
+    .select("id, structure_name, brief, created_at, content, clients(nombre, marca)")
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .single();
+  return data as unknown as RecentReel | null;
+}

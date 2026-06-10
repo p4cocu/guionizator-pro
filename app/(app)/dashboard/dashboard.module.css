@@ -409,3 +409,117 @@
   gap: 8px;
   padding-top: 4px;
 }
+
+/* ── Metrics button ── */
+.metricsBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 3px 0;
+  font-family: inherit;
+  transition: color 0.15s;
+  text-align: left;
+  width: fit-content;
+}
+
+.metricsBtn:hover { color: var(--signal); }
+
+/* ── AI generation period selector ── */
+.periodSelector {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.periodBtn {
+  padding: 10px 18px;
+  border-radius: var(--r-pill);
+  border: 1.5px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.periodBtnActive {
+  border-color: var(--emerald);
+  color: var(--emerald);
+  background: rgba(0, 159, 125, 0.1);
+}
+
+/* ── Gen preview list ── */
+.genPreviewList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.genWeekGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.genWeekLabel {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--emerald);
+  margin: 0;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.genEntryCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+}
+
+.genEntryTop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.genEntryTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.35;
+}
+
+.genEntryBrief {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Loading spinner ── */
+.genSpinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(0, 159, 125, 0.2);
+  border-top-color: var(--emerald);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }

@@ -349,3 +349,316 @@
   margin-top: 4px;
   align-self: flex-start;
 }
+
+/* ── Script section ── */
+.scriptSection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sectionLabel {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--emerald);
+  margin: 0;
+}
+
+.emptyReels {
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 14px;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--r-md);
+  text-align: center;
+}
+
+.reelGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 860px) {
+  .reelGrid { grid-template-columns: 1fr; }
+}
+
+.reelCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 1.5px solid var(--glass-border);
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+  width: 100%;
+}
+
+.reelCard:hover {
+  border-color: var(--emerald);
+  background: rgba(0, 159, 125, 0.04);
+}
+
+.reelCardActive {
+  border-color: var(--emerald) !important;
+  background: rgba(0, 159, 125, 0.1) !important;
+}
+
+.reelCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.reelBadge {
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 159, 125, 0.15);
+  color: var(--emerald);
+}
+
+.reelClient {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.reelTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.35;
+}
+
+.reelBrief {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Analyze section ── */
+.analyzeSection {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.voicePreview {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.voicePreviewText {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  margin: 0;
+  font-style: italic;
+}
+
+/* ── Scenes section ── */
+.scenesSection {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scenesSectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.scenesList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sceneCard {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sceneTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sceneNum {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--emerald);
+}
+
+.sceneActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sceneActionBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+  transition: color 0.15s, background 0.15s;
+  font-family: inherit;
+}
+
+.sceneActionBtn:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sceneActionBtn:disabled { opacity: 0.4; cursor: default; }
+
+.sceneDeleteBtn:hover { color: var(--flare) !important; background: rgba(255,111,97,0.08) !important; }
+
+.sceneVoice {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.5;
+  margin: 0;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--r-sm);
+  border-left: 2px solid var(--emerald);
+}
+
+.sceneIdeaBox {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sceneIdeaLabel {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--emerald);
+  flex-shrink: 0;
+}
+
+.sceneIdeaText {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sceneDesc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Generate bar ── */
+.generateBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  background: rgba(0, 159, 125, 0.06);
+  border-radius: var(--r-md);
+  border: 1px solid rgba(0, 159, 125, 0.15);
+}
+
+/* ── Prompts section ── */
+.promptsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.promptsSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.promptsList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.promptCard {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.promptCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.promptCardNum {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--emerald);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.promptCardIdea {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.promptVoice {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.copiedBtn {
+  color: var(--emerald) !important;
+  border-color: var(--emerald) !important;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useRef, useEffect, useCallback } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -14,7 +14,6 @@ import {
   addScriptToCalendar,
 } from "../actions";
 import { ReelEditor, CarouselEditor } from "./ScriptEditors";
-import AiEditPanel from "./AiEditPanel";
 import CopyExpertPanel from "./CopyExpertPanel";
 import styles from "../guiones.module.css";
 
@@ -37,7 +36,7 @@ export type CarouselSlide = {
 };
 export type CarouselContent = { slides: CarouselSlide[] };
 
-type Mode = "view" | "edit-manual" | "edit-ai";
+type Mode = "view" | "edit-manual";
 
 const STATUS_OPTIONS: { value: ScriptStatus; label: string; color: string }[] = [
   { value: "idea", label: "Idea", color: "var(--text-dim)" },
@@ -446,6 +445,7 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
   const [isDeleting, startDeleteTransition] = useTransition();
   const [isUpdatingStatus, startStatusTransition] = useTransition();
   const [copied, setCopied] = useState(false);
+  const [notebookCopied, setNotebookCopied] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [currentStatus, setCurrentStatus] = useState<ScriptStatus>(script.status ?? "idea");
@@ -516,15 +516,26 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
     });
   }
 
-  function handleAiApply(newContent: Record<string, unknown>) {
-    startTransition(async () => {
-      try {
-        const newId = await saveScriptVersion(script.id, newContent);
-        router.push(`/guiones/${newId}`);
-      } catch (e) {
-        setSaveError(e instanceof Error ? e.message : "Error al guardar");
-      }
-    });
+  async function handleOpenNotebook() {
+    const REEL_URL = "https://notebooklm.google.com/notebook/f9274dff-9a3d-4f77-8bf6-de2d0d16f06d/preview";
+    const CAROUSEL_URL = "https://notebooklm.google.com/notebook/ed49a5bf-a023-4f00-a621-5fa1b179bf3d/preview";
+
+    let textToCopy = "";
+    if (isReel) {
+      textToCopy = (content as ReelContent).voice_off ?? "";
+    } else {
+      const slides = (content as CarouselContent).slides ?? [];
+      textToCopy = slides.map((s) => `Slide ${s.number}: ${s.text}${s.micro_anchor ? `\n↳ ${s.micro_anchor}` : ""}`).join("\n\n");
+    }
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setNotebookCopied(true);
+      setTimeout(() => setNotebookCopied(false), 3000);
+    } catch {
+      // clipboard not available — open anyway
+    }
+    window.open(isReel ? REEL_URL : CAROUSEL_URL, "_blank");
   }
 
   function handleDelete() {
@@ -647,14 +658,22 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
             {mode === "edit-manual" ? "✕ Cancelar" : "Editar manualmente"}
           </button>
           <button
-            onClick={() => setMode(mode === "edit-ai" ? "view" : "edit-ai")}
-            className={`btn ${mode === "edit-ai" ? "btn-secondary" : "btn-ghost"}`}
+            onClick={handleOpenNotebook}
+            className={`btn btn-ghost ${notebookCopied ? styles.copiedState : ""}`}
+            title={isReel ? "Copia la voz en off y abre NotebookLM" : "Copia los slides y abre NotebookLM"}
           >
-            {mode === "edit-ai" ? "✕ Cerrar IA" : "✦ Editar con IA"}
+            {notebookCopied ? "✓ Copiado — abre NotebookLM" : "✦ Editar con IA"}
           </button>
         </div>
 
         <div className={styles.actionBarRight}>
+          <Link
+            href={`/prompts?script_id=${script.id}`}
+            className="btn btn-ghost"
+          >
+            ✦ Prompting
+          </Link>
+
           <button
             className={`btn btn-ghost ${showCopyPanel ? "btn-secondary" : ""}`}
             onClick={() => setShowCopyPanel((v) => !v)}
@@ -710,19 +729,6 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
         <p className={styles.briefLabel}>Brief</p>
         <p className={styles.briefText}>{script.brief}</p>
       </div>
-
-      {/* ── Panel IA ── */}
-      {mode === "edit-ai" && (
-        <AiEditPanel
-          content={script.content}
-          type={script.type}
-          clientId={script.client_id}
-          brief={script.brief}
-          onApply={handleAiApply}
-          onClose={() => setMode("view")}
-          saving={isPending}
-        />
-      )}
 
       {/* ── Contenido ── */}
       {mode === "edit-manual" ? (

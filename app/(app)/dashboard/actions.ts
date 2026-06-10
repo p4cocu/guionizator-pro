@@ -21,6 +21,11 @@ export type CalendarEntry = {
   cta_type: string | null;
   weekly_theme: string | null;
   created_at: string;
+  metrics_views: number | null;
+  metrics_likes: number | null;
+  metrics_comments: number | null;
+  metrics_shares: number | null;
+  metrics_saves: number | null;
   clients?: { nombre: string; marca: string | null } | null;
   scripts?: { id: string } | null;
 };
@@ -145,6 +150,31 @@ export async function deleteCalendarEntry(id: string) {
   const { error } = await supabase
     .from("content_calendar")
     .delete()
+    .eq("id", id)
+    .eq("owner_id", user.id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/dashboard");
+}
+
+export async function updateCalendarMetrics(
+  id: string,
+  metrics: {
+    metrics_views?: number | null;
+    metrics_likes?: number | null;
+    metrics_comments?: number | null;
+    metrics_shares?: number | null;
+    metrics_saves?: number | null;
+  },
+) {
+  const { supabase, user } = await getAuthUser();
+
+  const { error } = await supabase
+    .from("content_calendar")
+    .update({
+      ...metrics,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", id)
     .eq("owner_id", user.id);
 
