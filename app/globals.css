@@ -51,6 +51,10 @@
   --sidebar-w: 248px;
   --topbar-h: 64px;
   --container: 1160px;
+
+  /* Topbar adaptable */
+  --topbar-bg: rgba(0, 44, 43, 0.82);
+  --topbar-border: rgba(0, 159, 125, 0.16);
 }
 
 * {
@@ -278,6 +282,10 @@ select {
   --ink-card-2: #f7f4ee;
   --forest-card: #ede8de;
 
+  /* Topbar claro */
+  --topbar-bg: rgba(240, 235, 224, 0.92);
+  --topbar-border: rgba(0, 159, 125, 0.2);
+
   /* Glass redefinido para fondos claros */
   --glass-base: #ffffff;
   --glass-overlay: linear-gradient(165deg, rgba(0, 159, 125, 0.05) 0%, rgba(0, 159, 125, 0) 38%, rgba(0, 0, 0, 0.02) 100%);
@@ -297,6 +305,9 @@ select {
   --text-muted: rgba(255, 251, 240, 0.62);
   --text-dim: rgba(255, 251, 240, 0.38);
   --glass-border: rgba(0, 159, 125, 0.22);
+  /* Mantener las superficies oscuras del sidebar aunque el tema sea claro */
+  --ink-card: #053a36;
+  --ink-card-2: #07433f;
 }
 
 /* Botón secundario en tema claro */

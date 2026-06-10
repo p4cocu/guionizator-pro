@@ -62,6 +62,7 @@ type GeneratedScript = {
   savedId: string | null;
   regenerating: boolean;
   inlineAi: InlineAiState;
+  customTitle: string;
 };
 
 // Step 1=Brief, 2=BigIdea, 3=Estructuras, 4=Guiones
@@ -427,6 +428,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
           savedId: null,
           regenerating: false,
           inlineAi: { phase: "idle" },
+          customTitle: "",
         }))
       );
       setActiveTab(0);
@@ -457,6 +459,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
                 savedId: null,
                 regenerating: false,
                 inlineAi: { phase: "idle" },
+                customTitle: g.customTitle,
               }
             : g
         )
@@ -549,6 +552,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
           type,
           brief,
           structure_name: g.structure.name,
+          title: g.customTitle.trim() || null,
           content: g.content as Record<string, unknown>,
           brain_version_id: g.brainVersionId,
         });
@@ -915,6 +919,23 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
                     onSelect={(c) => handleInlineAiSelect(activeTab, c)}
                     onKeepOriginal={() => handleInlineAiKeepOriginal(activeTab)}
                   />
+                )}
+
+                {!g.regenerating && !g.savedId && (
+                  <div className="field" style={{ marginTop: 16 }}>
+                    <label className="field-label">Título de publicación (opcional)</label>
+                    <input
+                      className="input"
+                      placeholder={`ej. 3 errores que cometen los emprendedores al escalar`}
+                      value={g.customTitle}
+                      onChange={(e) => setGeneratedScripts((prev) =>
+                        prev.map((x, i) => i === activeTab ? { ...x, customTitle: e.target.value } : x)
+                      )}
+                    />
+                    <p style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 4 }}>
+                      Si lo dejas vacío, se usará la fórmula: "{g.structure.name}"
+                    </p>
+                  </div>
                 )}
 
                 {error && (

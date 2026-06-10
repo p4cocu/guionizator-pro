@@ -14,6 +14,7 @@ export type ScriptRow = {
   type: ScriptType;
   brief: string;
   structure_name: string;
+  title: string | null;
   content: Record<string, unknown>;
   brain_version_id: string | null;
   created_at: string;
@@ -38,6 +39,7 @@ export async function saveScript(data: {
   type: ScriptType;
   brief: string;
   structure_name: string;
+  title?: string | null;
   content: Record<string, unknown>;
   brain_version_id: string | null;
 }) {
@@ -51,6 +53,7 @@ export async function saveScript(data: {
       type: data.type,
       brief: data.brief,
       structure_name: data.structure_name,
+      title: data.title ?? null,
       content: data.content,
       brain_version_id: data.brain_version_id,
     })
@@ -68,6 +71,7 @@ export async function saveScriptSilent(data: {
   type: ScriptType;
   brief: string;
   structure_name: string;
+  title?: string | null;
   content: Record<string, unknown>;
   brain_version_id: string | null;
 }): Promise<string> {
@@ -81,6 +85,7 @@ export async function saveScriptSilent(data: {
       type: data.type,
       brief: data.brief,
       structure_name: data.structure_name,
+      title: data.title ?? null,
       content: data.content,
       brain_version_id: data.brain_version_id,
     })
@@ -90,6 +95,23 @@ export async function saveScriptSilent(data: {
   if (error) throw new Error(error.message);
   revalidatePath("/guiones");
   return script.id;
+}
+
+export async function updateScriptTitle(
+  scriptId: string,
+  title: string
+): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+
+  const { error } = await supabase
+    .from("scripts")
+    .update({ title: title.trim() || null })
+    .eq("id", scriptId)
+    .eq("owner_id", user.id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/guiones");
+  revalidatePath(`/guiones/${scriptId}`);
 }
 
 export async function deleteScript(id: string) {

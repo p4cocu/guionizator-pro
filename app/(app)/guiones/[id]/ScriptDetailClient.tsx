@@ -11,6 +11,7 @@ import {
   saveScriptVersion,
   deleteScript,
   updateScriptStatus,
+  updateScriptTitle,
   addScriptToCalendar,
 } from "../actions";
 import { ReelEditor, CarouselEditor } from "./ScriptEditors";
@@ -451,6 +452,11 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
   const [currentStatus, setCurrentStatus] = useState<ScriptStatus>(script.status ?? "idea");
   const [showCopyPanel, setShowCopyPanel] = useState(false);
   const [showCalModal, setShowCalModal] = useState(false);
+
+  // Title editing
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(script.title ?? "");
+  const [isSavingTitle, startTitleTransition] = useTransition();
   const [calForm, setCalForm] = useState({
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
@@ -548,6 +554,14 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
     startStatusTransition(async () => { await updateScriptStatus(script.id, newStatus); });
   }
 
+  function handleSaveTitle() {
+    startTitleTransition(async () => {
+      await updateScriptTitle(script.id, titleDraft);
+      setEditingTitle(false);
+      router.refresh();
+    });
+  }
+
   function handleAddToCalendar() {
     setCalSuccess(false);
     startCalTransition(async () => {
@@ -597,11 +611,46 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
             {script.clients?.nombre ?? "—"}
             {script.clients?.marca ? ` — ${script.clients.marca}` : ""}
           </p>
-          <h1 className={styles.detailTitle}>{script.structure_name}</h1>
+
+          {/* Title: editable inline */}
+          {editingTitle ? (
+            <div className={styles.titleEditRow}>
+              <input
+                className={`input ${styles.titleInput}`}
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                placeholder="Título de la publicación…"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveTitle();
+                  if (e.key === "Escape") setEditingTitle(false);
+                }}
+              />
+              <button className="btn btn-primary" onClick={handleSaveTitle} disabled={isSavingTitle} style={{ padding: "8px 16px", fontSize: 12 }}>
+                {isSavingTitle ? "…" : "Guardar"}
+              </button>
+              <button className="btn btn-ghost" onClick={() => { setEditingTitle(false); setTitleDraft(script.title ?? ""); }} style={{ padding: "8px 12px", fontSize: 12 }}>
+                ✕
+              </button>
+            </div>
+          ) : (
+            <div className={styles.titleRow}>
+              <h1 className={styles.detailTitle}>{script.title || script.structure_name}</h1>
+              <button
+                className={`btn btn-ghost ${styles.editTitleBtn}`}
+                onClick={() => { setTitleDraft(script.title ?? ""); setEditingTitle(true); }}
+                title="Editar título"
+              >
+                ✎
+              </button>
+            </div>
+          )}
+
           <p className={styles.detailSubtitle}>
             <span className={`${styles.typeBadge} ${styles[script.type]}`} style={{ display: "inline-flex", marginRight: 8 }}>
               {isReel ? "Reel" : "Carrusel"}
             </span>
+            <span style={{ marginRight: 8 }}>{script.structure_name}</span>
             {formatDate(script.created_at)}
           </p>
         </div>

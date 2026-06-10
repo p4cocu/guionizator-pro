@@ -6,9 +6,9 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 28px;
-  background: rgba(0, 44, 43, 0.82);
+  background: var(--topbar-bg);
   backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(0, 159, 125, 0.16);
+  border-bottom: 1px solid var(--topbar-border);
   z-index: 40;
 }
 

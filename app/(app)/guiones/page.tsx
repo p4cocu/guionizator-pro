@@ -32,7 +32,10 @@ function ScriptCard({ script }: { script: ScriptRow }) {
         <span className={styles.cardDate}>{formatDate(script.created_at)}</span>
       </div>
       <p className={styles.cardClient}>{clientName}</p>
-      <p className={styles.cardStructure}>{script.structure_name}</p>
+      <p className={styles.cardStructure}>{script.title || script.structure_name}</p>
+      {script.title && (
+        <p style={{ fontSize: 11, color: "var(--text-dim)", margin: 0 }}>{script.structure_name}</p>
+      )}
       <p className={styles.cardBrief}>{script.brief}</p>
     </Link>
   );
