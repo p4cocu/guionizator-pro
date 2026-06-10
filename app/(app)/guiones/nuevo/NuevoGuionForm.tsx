@@ -19,14 +19,18 @@ type StructuresResponse = {
   structures: Structure[];
 };
 
+type MicroStory = { id: number; title: string; text: string };
+
 type ReelLine = { tag: string; text: string };
 type ReelBlock = { name: string; duration: string; lines: ReelLine[] };
 type MusicRec = { name: string; why: string; prompt: string };
+type ScriptSource = { title: string; type: string; description: string };
 type ReelContent = {
   voice_off: string;
   blocks: ReelBlock[];
   music_a: MusicRec;
   music_b: MusicRec;
+  source?: ScriptSource;
 };
 type CarouselSlide = {
   number: number;
@@ -39,6 +43,10 @@ type ScriptContent = ReelContent | CarouselContent;
 
 function isReel(c: ScriptContent): c is ReelContent {
   return "blocks" in c;
+}
+
+function isAlborna(name: string) {
+  return name.toLowerCase().includes("alborna");
 }
 
 type InlineAiOption = { label: string; content: ScriptContent };
@@ -56,8 +64,9 @@ type GeneratedScript = {
   inlineAi: InlineAiState;
 };
 
-type Step = 1 | 2 | 3;
-const STEP_LABELS = ["Brief", "Estructuras", "Guiones"];
+// Step 1=Brief, 2=BigIdea, 3=Estructuras, 4=Guiones
+type Step = 1 | 2 | 3 | 4;
+const STEP_LABELS = ["Brief", "Big Idea", "Estructuras", "Guiones"];
 
 // ── Step indicator ──────────────────────────────────────────────────────────
 
@@ -128,6 +137,16 @@ function ReelViewer({ content }: { content: ReelContent }) {
           </div>
         </>
       )}
+      {content.source && (
+        <div className={styles.sourceCard}>
+          <p className={styles.sourceCardLabel}>Fuente / Inspiración</p>
+          <p className={styles.sourceCardTitle}>{content.source.title}</p>
+          <span className={styles.sourceCardType}>{content.source.type}</span>
+          {content.source.description && (
+            <p className={styles.sourceCardDesc}>{content.source.description}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -149,7 +168,7 @@ function CarouselViewer({ content }: { content: CarouselContent }) {
   );
 }
 
-// ── Inline AI chat (step 3) ─────────────────────────────────────────────────
+// ── Inline AI chat (step 4) ─────────────────────────────────────────────────
 
 type InlineAiChatProps = {
   state: InlineAiState;
@@ -238,16 +257,36 @@ function InlineAiChat({ state, onSubmit, onSelect, onKeepOriginal }: InlineAiCha
 export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
+
+  // Step 1 state
   const [clientId, setClientId] = useState(clientes[0]?.id ?? "");
   const [type, setType] = useState<"reel" | "carousel">("reel");
   const [brief, setBrief] = useState("");
+
+  // Step 2 state — Big Idea
+  const [bigIdea, setBigIdea] = useState("");
+  const [editingBigIdea, setEditingBigIdea] = useState(false);
+
+  // Step 3 state — Structures
   const [structuresData, setStructuresData] = useState<StructuresResponse | null>(null);
   const [selectedStructures, setSelectedStructures] = useState<Structure[]>([]);
+
+  // Step 3 sub-state — Micro-historias (Julian Alborna)
+  const [showMicroStories, setShowMicroStories] = useState(false);
+  const [microStories, setMicroStories] = useState<MicroStory[]>([]);
+  const [selectedMicroStory, setSelectedMicroStory] = useState<string>("");
+  const [editingMicroStory, setEditingMicroStory] = useState(false);
+  const [customMicroStory, setCustomMicroStory] = useState("");
+
+  // Step 4 state — Generated scripts
   const [generatedScripts, setGeneratedScripts] = useState<GeneratedScript[]>([]);
   const [activeTab, setActiveTab] = useState(0);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  const hasAlbornaSelected = selectedStructures.some((s) => isAlborna(s.name));
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -264,6 +303,10 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
   async function fetchScript(
     s: Structure
   ): Promise<{ content: ScriptContent; brain_version_id: string | null }> {
+    const microStoryText = isAlborna(s.name)
+      ? (editingMicroStory ? customMicroStory : selectedMicroStory)
+      : undefined;
+
     const res = await fetch("/api/ai/script", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -273,6 +316,8 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
         type,
         structure_name: s.name,
         structure: { hook: s.hook, arc: s.arc, close: s.close },
+        big_idea: bigIdea || undefined,
+        micro_story: microStoryText || undefined,
       }),
     });
     const data = await res.json();
@@ -280,9 +325,9 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
     return data;
   }
 
-  // ── Step 1 → 2 ──────────────────────────────────────────────────────────
+  // ── Step 1 → 2: Generate Big Idea ────────────────────────────────────────
 
-  async function handleProposeStructures() {
+  async function handleGenerateBigIdea() {
     if (!clientId || !brief.trim()) {
       setError("Selecciona un cliente y escribe el brief.");
       return;
@@ -290,15 +335,15 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/ai/structures", {
+      const res = await fetch("/api/ai/big-idea", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ client_id: clientId, brief, type }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error al proponer estructuras");
-      setStructuresData(data);
-      setSelectedStructures(data.structures ?? []);
+      if (!res.ok) throw new Error(data.error ?? "Error al generar Big Idea");
+      setBigIdea(data.big_idea ?? "");
+      setEditingBigIdea(false);
       setStep(2);
     } catch (e) {
       setError((e as Error).message);
@@ -307,10 +352,67 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
     }
   }
 
-  // ── Step 2 → 3 ──────────────────────────────────────────────────────────
+  // ── Step 2 → 3: Propose structures ───────────────────────────────────────
 
-  async function handleGenerateScripts() {
+  async function handleProposeStructures() {
+    if (!bigIdea.trim()) {
+      setError("La Big Idea no puede estar vacía.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/ai/structures", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: clientId, brief, type, big_idea: bigIdea }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al proponer estructuras");
+      setStructuresData(data);
+      setSelectedStructures(data.structures ?? []);
+      setShowMicroStories(false);
+      setMicroStories([]);
+      setSelectedMicroStory("");
+      setEditingMicroStory(false);
+      setCustomMicroStory("");
+      setStep(3);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Step 3: Fetch micro-stories for Alborna, then generate ───────────────
+
+  async function handleGenerateOrMicroStories() {
     if (!selectedStructures.length) return;
+
+    // If Alborna is selected and we haven't shown micro-stories yet, fetch them first
+    if (hasAlbornaSelected && !showMicroStories) {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/ai/micro-stories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ big_idea: bigIdea, brief }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Error al generar micro-historias");
+        setMicroStories(data.stories ?? []);
+        setSelectedMicroStory(data.stories?.[0]?.text ?? "");
+        setShowMicroStories(true);
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Generate all scripts
     setLoading(true);
     setError(null);
     try {
@@ -328,7 +430,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
         }))
       );
       setActiveTab(0);
-      setStep(3);
+      setStep(4);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -367,7 +469,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
     }
   }
 
-  // ── Inline AI (step 3) ───────────────────────────────────────────────────
+  // ── Inline AI (step 4) ───────────────────────────────────────────────────
 
   async function handleInlineAiSubmit(idx: number, instruction: string) {
     const g = generatedScripts[idx];
@@ -392,7 +494,6 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
       if (!res.ok) throw new Error(data.error ?? "Error al editar");
       const options: InlineAiOption[] = data.options ?? [];
       if (options.length === 1) {
-        // Single change — auto-apply
         setGeneratedScripts((prev) =>
           prev.map((x, i) =>
             i === idx
@@ -401,7 +502,6 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
           )
         );
       } else {
-        // Multiple options — let user pick
         setGeneratedScripts((prev) =>
           prev.map((x, i) =>
             i === idx
@@ -527,69 +627,199 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
             {loading ? (
               <div className={styles.loadingState}>
                 <div className={styles.spinner} />
-                <p className={styles.loadingText}>Analizando brief y proponiendo estructuras…</p>
+                <p className={styles.loadingText}>Definiendo Big Idea…</p>
               </div>
             ) : (
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={handleProposeStructures}
+                onClick={handleGenerateBigIdea}
                 disabled={!clientId || !brief.trim()}
               >
-                Proponer estructuras →
+                Generar Big Idea →
               </button>
             )}
           </div>
         </div>
       )}
 
-      {/* ── PASO 2: Estructuras (multi-select) ── */}
-      {step === 2 && structuresData && (
+      {/* ── PASO 2: Big Idea ── */}
+      {step === 2 && (
         <div>
-          <p className={styles.multiSelectHint}>
-            Selecciona una o más estructuras para desarrollar en detalle.
-          </p>
+          <div className={styles.bigIdeaCard}>
+            <div className={styles.bigIdeaHeader}>
+              <span className={styles.bigIdeaEyebrow}>Big Idea</span>
+              <span className={styles.bigIdeaHint}>El mensaje central de este guion</span>
+            </div>
 
-          <div className={styles.structuresGrid}>
-            {structuresData.structures.map((s) => {
-              const selected = isSelected(s);
-              return (
-                <div
-                  key={s.name}
-                  className={`${styles.structureCard} ${selected ? styles.selected : ""}`}
-                  onClick={() => toggleStructure(s)}
-                >
-                  <div
-                    className={`${styles.structureRadio} ${selected ? styles.structureCheck : ""}`}
-                  >
-                    {selected && <span className={styles.checkMark}>✓</span>}
-                  </div>
-                  <div className={styles.structureBody}>
-                    <p className={styles.structureName}>{s.name}</p>
-                    <div className={styles.structureRows}>
-                      <div className={styles.structureRow}>
-                        <span className={styles.structureRowLabel}>Hook</span>
-                        <span className={styles.structureRowText}>{s.hook}</span>
-                      </div>
-                      <div className={styles.structureRow}>
-                        <span className={styles.structureRowLabel}>Arco</span>
-                        <span className={styles.structureRowText}>{s.arc}</span>
-                      </div>
-                      <div className={styles.structureRow}>
-                        <span className={styles.structureRowLabel}>Cierre</span>
-                        <span className={styles.structureRowText}>{s.close}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {editingBigIdea ? (
+              <textarea
+                className="textarea"
+                rows={3}
+                value={bigIdea}
+                onChange={(e) => setBigIdea(e.target.value)}
+                style={{ marginTop: 12 }}
+                autoFocus
+              />
+            ) : (
+              <p className={styles.bigIdeaText}>&ldquo;{bigIdea}&rdquo;</p>
+            )}
+
+            <div className={styles.bigIdeaActions}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setEditingBigIdea((v) => !v)}
+              >
+                {editingBigIdea ? "Listo" : "Editar"}
+              </button>
+            </div>
           </div>
 
-          <p className={styles.discarded}>
-            Descartada: <strong>{structuresData.discarded.name}</strong> —{" "}
-            {structuresData.discarded.reason}
-          </p>
+          {error && <p className={styles.formError}>{error}</p>}
+
+          {loading ? (
+            <div className={styles.loadingState}>
+              <div className={styles.spinner} />
+              <p className={styles.loadingText}>Analizando brief y proponiendo estructuras…</p>
+            </div>
+          ) : (
+            <div className={styles.formActions}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => { setStep(1); setError(null); }}
+              >
+                ← Cambiar brief
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleProposeStructures}
+                disabled={!bigIdea.trim()}
+              >
+                Proponer estructuras →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── PASO 3: Estructuras + sub-paso micro-historias ── */}
+      {step === 3 && structuresData && (
+        <div>
+          {!showMicroStories ? (
+            <>
+              <p className={styles.multiSelectHint}>
+                Selecciona una o más estructuras para desarrollar en detalle.
+              </p>
+
+              <div className={styles.structuresGrid}>
+                {structuresData.structures.map((s) => {
+                  const selected = isSelected(s);
+                  return (
+                    <div
+                      key={s.name}
+                      className={`${styles.structureCard} ${selected ? styles.selected : ""}`}
+                      onClick={() => toggleStructure(s)}
+                    >
+                      <div className={`${styles.structureRadio} ${selected ? styles.structureCheck : ""}`}>
+                        {selected && <span className={styles.checkMark}>✓</span>}
+                      </div>
+                      <div className={styles.structureBody}>
+                        <p className={styles.structureName}>{s.name}</p>
+                        {isAlborna(s.name) && (
+                          <span className={styles.albornaTag}>✦ Alborna</span>
+                        )}
+                        <div className={styles.structureRows}>
+                          <div className={styles.structureRow}>
+                            <span className={styles.structureRowLabel}>Hook</span>
+                            <span className={styles.structureRowText}>{s.hook}</span>
+                          </div>
+                          <div className={styles.structureRow}>
+                            <span className={styles.structureRowLabel}>Arco</span>
+                            <span className={styles.structureRowText}>{s.arc}</span>
+                          </div>
+                          <div className={styles.structureRow}>
+                            <span className={styles.structureRowLabel}>Cierre</span>
+                            <span className={styles.structureRowText}>{s.close}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className={styles.discarded}>
+                Descartada: <strong>{structuresData.discarded.name}</strong> —{" "}
+                {structuresData.discarded.reason}
+              </p>
+            </>
+          ) : (
+            /* ── Sub-paso: Micro-historias (Alborna) ── */
+            <div className={styles.microStoriesSection}>
+              <div className={styles.microStoriesHeader}>
+                <p className={styles.microStoriesTitle}>Elige la micro-historia de apertura</p>
+                <p className={styles.microStoriesHint}>
+                  Esta situación cotidiana abrirá el guion al estilo Julian Alborna — elige la que conecte más naturalmente con tu historia.
+                </p>
+              </div>
+
+              <div className={styles.microStoriesList}>
+                {microStories.map((story) => {
+                  const isChosen = !editingMicroStory && selectedMicroStory === story.text;
+                  return (
+                    <div
+                      key={story.id}
+                      className={`${styles.microStoryCard} ${isChosen ? styles.microStorySelected : ""}`}
+                      onClick={() => {
+                        setSelectedMicroStory(story.text);
+                        setEditingMicroStory(false);
+                        setCustomMicroStory("");
+                      }}
+                    >
+                      <div className={`${styles.microStoryRadio} ${isChosen ? styles.microStoryCheck : ""}`}>
+                        {isChosen && <span className={styles.checkMark}>✓</span>}
+                      </div>
+                      <div className={styles.microStoryBody}>
+                        <p className={styles.microStoryName}>{story.title}</p>
+                        <p className={styles.microStoryText}>{story.text}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Editar/escribir propia */}
+              <div className={styles.microStoryEditSection}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ fontSize: 13 }}
+                  onClick={() => {
+                    setEditingMicroStory((v) => !v);
+                    if (!editingMicroStory) {
+                      setCustomMicroStory(selectedMicroStory);
+                    }
+                  }}
+                >
+                  {editingMicroStory ? "← Volver a opciones" : "✎ Escribir la mía"}
+                </button>
+                {editingMicroStory && (
+                  <textarea
+                    className="textarea"
+                    rows={4}
+                    style={{ marginTop: 12 }}
+                    placeholder="Escribe tu propia micro-historia cotidiana de apertura…"
+                    value={customMicroStory}
+                    onChange={(e) => setCustomMicroStory(e.target.value)}
+                    autoFocus
+                  />
+                )}
+              </div>
+            </div>
+          )}
 
           {error && (
             <p className={styles.formError} style={{ marginTop: 12 }}>
@@ -601,8 +831,9 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
             <div className={styles.loadingState}>
               <div className={styles.spinner} />
               <p className={styles.loadingText}>
-                Generando {selectedStructures.length}{" "}
-                {selectedStructures.length === 1 ? "guion" : "guiones"}…
+                {showMicroStories
+                  ? `Generando ${selectedStructures.length} ${selectedStructures.length === 1 ? "guion" : "guiones"}…`
+                  : "Generando opciones de apertura…"}
               </p>
             </div>
           ) : (
@@ -611,30 +842,40 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => {
-                  setStep(1);
+                  if (showMicroStories) {
+                    setShowMicroStories(false);
+                  } else {
+                    setStep(2);
+                  }
                   setError(null);
                 }}
               >
-                ← Cambiar brief
+                ← {showMicroStories ? "Cambiar estructuras" : "Cambiar Big Idea"}
               </button>
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={handleGenerateScripts}
-                disabled={!selectedStructures.length}
+                onClick={handleGenerateOrMicroStories}
+                disabled={
+                  !selectedStructures.length ||
+                  (showMicroStories && editingMicroStory && !customMicroStory.trim()) ||
+                  (showMicroStories && !editingMicroStory && !selectedMicroStory.trim())
+                }
               >
-                Generar {selectedStructures.length || ""}{" "}
-                {selectedStructures.length === 1 ? "guion" : "guiones"} →
+                {showMicroStories
+                  ? `Generar ${selectedStructures.length} ${selectedStructures.length === 1 ? "guion" : "guiones"} →`
+                  : hasAlbornaSelected
+                  ? "Elegir apertura →"
+                  : `Generar ${selectedStructures.length || ""} ${selectedStructures.length === 1 ? "guion" : "guiones"} →`}
               </button>
             </div>
           )}
         </div>
       )}
 
-      {/* ── PASO 3: Guiones con tabs ── */}
-      {step === 3 && generatedScripts.length > 0 && (
+      {/* ── PASO 4: Guiones con tabs ── */}
+      {step === 4 && generatedScripts.length > 0 && (
         <div>
-          {/* Tabs */}
           {generatedScripts.length > 1 && (
             <div className={styles.scriptTabs}>
               {generatedScripts.map((g, i) => (
@@ -651,7 +892,6 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
             </div>
           )}
 
-          {/* Contenido del tab activo */}
           {(() => {
             const g = generatedScripts[activeTab];
             if (!g) return null;
@@ -668,7 +908,6 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
                   <CarouselViewer content={g.content as CarouselContent} />
                 )}
 
-                {/* Panel de edición con IA (inline, paso 3) */}
                 {!g.regenerating && !g.savedId && (
                   <InlineAiChat
                     state={g.inlineAi}
@@ -689,7 +928,7 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
                     type="button"
                     className="btn btn-secondary"
                     onClick={() => {
-                      setStep(2);
+                      setStep(3);
                       setError(null);
                     }}
                   >
@@ -727,7 +966,6 @@ export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
             );
           })()}
 
-          {/* Ir a biblioteca cuando ya guardó algo */}
           {anySaved && (
             <div className={styles.savedBanner}>
               {allSaved

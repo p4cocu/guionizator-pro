@@ -1244,3 +1244,574 @@
   font-size: 12px;
   color: var(--emerald);
 }
+
+/* ── Fullscreen Reel Editor ─────────────────────────────────────────────────── */
+
+.fullscreenOverlay {
+  position: fixed;
+  top: 0;
+  left: var(--sidebar-w);
+  right: 0;
+  bottom: 0;
+  background: var(--forest);
+  z-index: 800;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fullscreenHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 28px;
+  height: var(--topbar-h);
+  border-bottom: 1px solid var(--glass-border);
+  background: var(--glass-base);
+  background-image: var(--glass-overlay);
+  flex-shrink: 0;
+}
+
+.fullscreenHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+}
+
+.fullscreenHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.fullscreenTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.formatToolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-left: 1px solid var(--glass-border);
+  padding-left: 16px;
+}
+
+.formatBtn {
+  background: none;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  font-size: 13px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.formatBtn:hover {
+  background: rgba(0, 159, 125, 0.12);
+  color: var(--emerald);
+  border-color: var(--emerald);
+}
+
+.fullscreenBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.fullscreenVoiceOff {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fullscreenTextarea {
+  min-height: 280px;
+  resize: vertical;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.fullscreenBlocks {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--glass-border);
+}
+
+/* ── Carousel toolbar ─────────────────────────────────────────────────────── */
+
+.carouselToolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.hideVisualsBtn {
+  font-size: 12px;
+  padding: 6px 14px;
+  opacity: 0.7;
+}
+
+.hideVisualsBtn:hover {
+  opacity: 1;
+}
+
+/* ── Copy Expert Panel ────────────────────────────────────────────────────── */
+
+.copyPanel {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg);
+  background: var(--glass-base);
+  background-image: var(--glass-overlay);
+  overflow: hidden;
+}
+
+.copyPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-wrap: wrap;
+}
+
+.copyPanelTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.copyTabs {
+  display: flex;
+  gap: 4px;
+}
+
+.copyTab {
+  padding: 7px 16px;
+  border-radius: var(--r-pill);
+  border: 1.5px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.copyTabActive {
+  border-color: var(--emerald);
+  color: var(--emerald);
+  background: rgba(0, 159, 125, 0.1);
+}
+
+.copyTabDisabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.copyTabSoon {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--signal);
+  color: var(--ink);
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+}
+
+.copyPanelBody {
+  padding: 24px;
+}
+
+.copyEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.copyResult {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.copySection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.copySectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.copySmallBtn {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.copyText {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-line;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+}
+
+.copyHashtags {
+  font-size: 13px;
+  color: var(--emerald);
+  line-height: 1.6;
+  padding: 10px 14px;
+  background: rgba(0, 159, 125, 0.05);
+  border: 1px solid rgba(0, 159, 125, 0.15);
+  border-radius: var(--r-sm);
+}
+
+.copySaveRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.copyError {
+  font-size: 13px;
+  color: var(--flare);
+}
+
+.copySaved {
+  font-size: 13px;
+  color: var(--emerald);
+  font-weight: 600;
+}
+
+/* ── Modal: Agregar al calendario ────────────────────────────────────────── */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.calModal {
+  background: var(--glass-base);
+  background-image: var(--glass-overlay);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-inset), 0 32px 80px -16px rgba(0,0,0,0.6);
+  border-radius: var(--r-lg);
+  width: 100%;
+  max-width: 460px;
+  overflow: hidden;
+}
+
+.calModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 0;
+}
+
+.calModalTitle {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.calModalClose {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  transition: color 0.15s;
+  font-family: inherit;
+}
+
+.calModalClose:hover { color: var(--text); }
+
+.calModalBody {
+  padding: 16px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.calModalDesc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.calFormRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.calModalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── Big Idea (paso 2) ── */
+.bigIdeaCard {
+  padding: 28px;
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(0, 159, 125, 0.35);
+  background: rgba(0, 159, 125, 0.06);
+  margin-bottom: 24px;
+}
+
+.bigIdeaHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.bigIdeaEyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--emerald);
+}
+
+.bigIdeaHint {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.bigIdeaText {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text);
+  margin: 0;
+  font-style: italic;
+}
+
+.bigIdeaActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 159, 125, 0.15);
+}
+
+/* ── Alborna tag en estructura card ── */
+.albornaTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--signal);
+  background: rgba(255, 210, 58, 0.1);
+  border: 1px solid rgba(255, 210, 58, 0.25);
+  margin-bottom: 8px;
+}
+
+/* ── Micro-historias (sub-paso 3) ── */
+.microStoriesSection {
+  margin-bottom: 8px;
+}
+
+.microStoriesHeader {
+  margin-bottom: 20px;
+}
+
+.microStoriesTitle {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.microStoriesHint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.microStoriesList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.microStoryCard {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 18px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.microStoryCard:hover {
+  border-color: rgba(255, 210, 58, 0.4);
+  background: rgba(255, 210, 58, 0.03);
+}
+
+.microStorySelected {
+  border-color: var(--signal) !important;
+  background: rgba(255, 210, 58, 0.06) !important;
+}
+
+.microStoryRadio {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--glass-border);
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.microStoryCheck {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: var(--signal) !important;
+  background: var(--signal) !important;
+}
+
+.microStoryBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.microStoryName {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--signal);
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+
+.microStoryText {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.6;
+  margin: 0;
+  font-style: italic;
+}
+
+.microStoryEditSection {
+  margin-top: 4px;
+}
+
+/* ── Source card (Julian Alborna) ── */
+.sourceCard {
+  padding: 18px 20px;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(255, 210, 58, 0.3);
+  background: rgba(255, 210, 58, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.sourceCardLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--signal);
+  margin: 0;
+}
+
+.sourceCardTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.sourceCardType {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(255, 210, 58, 0.12);
+  color: var(--signal);
+  border: 1px solid rgba(255, 210, 58, 0.2);
+  width: fit-content;
+}
+
+.sourceCardDesc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 2px 0 0;
+}

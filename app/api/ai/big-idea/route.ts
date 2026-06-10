@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { generateWithBrain, MODEL_DEFAULT } from "@/lib/ai/anthropic";
+import { generateWithBrain, MODEL_FAST } from "@/lib/ai/anthropic";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 30;
 
 function buildClientContext(c: Record<string, string | null>): string {
   return [
@@ -15,7 +15,6 @@ function buildClientContext(c: Record<string, string | null>): string {
     c.dolor && `**Dolor principal:** ${c.dolor}`,
     c.deseo && `**Deseo principal:** ${c.deseo}`,
     c.tono && `**Tono de voz:** ${c.tono}`,
-    c.notas && `**Notas adicionales:** ${c.notas}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -29,11 +28,10 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { client_id, brief, type, big_idea } = (await req.json()) as {
+    const { client_id, brief, type } = (await req.json()) as {
       client_id: string;
       brief: string;
       type: "reel" | "carousel";
-      big_idea?: string;
     };
 
     if (!client_id || !brief?.trim() || !type) {
@@ -49,49 +47,27 @@ export async function POST(req: NextRequest) {
 
     if (!client) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
 
-    const { data: activeBrain } = await supabase
-      .from("brain_versions")
-      .select("content")
-      .eq("owner_id", user.id)
-      .eq("is_active", true)
-      .single();
-
     const userMessage = `Tipo de contenido: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (8–10 slides)"}
 
 Brief:
 ${brief.trim()}
-${big_idea?.trim() ? `\nBig Idea (mensaje central confirmado por el usuario — todas las estructuras deben servir a este mensaje):\n"${big_idea.trim()}"\n` : ""}
-Aplica el Paso 0 de tu flujo. Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
-{
-  "discarded": {"name": "nombre exacto de la estructura descartada", "reason": "razón en ≤15 palabras"},
-  "structures": [
-    {
-      "name": "nombre completo de la estructura",
-      "hook": "primera frase o imagen de apertura — específica para este brief y cliente",
-      "arc": "cómo se desarrolla en 1 oración",
-      "close": "cómo termina — pregunta, invitación o revelación"
-    },
-    {
-      "name": "...",
-      "hook": "...",
-      "arc": "...",
-      "close": "..."
-    },
-    {
-      "name": "...",
-      "hook": "...",
-      "arc": "...",
-      "close": "..."
-    }
-  ]
-}`;
+
+Tu tarea: define LA BIG IDEA de este guion — el mensaje central más poderoso que queremos transmitir.
+
+La Big Idea debe:
+- Ser una sola oración clara y concreta (máximo 2 oraciones)
+- Conectar el dolor o deseo del cliente ideal con la propuesta de valor
+- Ser lo suficientemente específica para guiar todo el guion
+- Sonar como algo que la audiencia sentiría como propio
+
+Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional):
+{"big_idea": "..."}`;
 
     const result = await generateWithBrain({
       userMessage,
-      brainContent: activeBrain?.content ?? undefined,
       clientContext: buildClientContext(client),
-      model: MODEL_DEFAULT,
-      maxTokens: 1500,
+      model: MODEL_FAST,
+      maxTokens: 300,
     });
 
     let parsed;
@@ -104,7 +80,7 @@ Aplica el Paso 0 de tu flujo. Responde ÚNICAMENTE con JSON válido (sin markdow
 
     return NextResponse.json(parsed);
   } catch (e) {
-    console.error("[structures] Error:", e);
+    console.error("[big-idea] Error:", e);
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
   }
 }

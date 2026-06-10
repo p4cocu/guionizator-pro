@@ -36,6 +36,51 @@ const REEL_FORMAT = `{
   "music_b": {"name": "...", "why": "...", "prompt": "..."}
 }`;
 
+// Julian Alborna format includes source card
+const REEL_FORMAT_ALBORNA = `{
+  "voice_off": "texto completo para teleprompter, flujo continuo sin etiquetas",
+  "blocks": [
+    {
+      "name": "MICRO-HISTORIA",
+      "duration": "Xs",
+      "lines": [
+        {"tag": "CÁMARA", "text": "texto del guion"}
+      ]
+    },
+    {
+      "name": "PUENTE",
+      "duration": "Xs",
+      "lines": [
+        {"tag": "CÁMARA", "text": "texto del guion"}
+      ]
+    },
+    {
+      "name": "HISTORIA REAL",
+      "duration": "Xs",
+      "lines": [
+        {"tag": "CÁMARA", "text": "texto del guion"}
+      ]
+    },
+    {
+      "name": "LECCIÓN",
+      "duration": "Xs",
+      "lines": [
+        {"tag": "CÁMARA", "text": "texto del guion"}
+      ]
+    },
+    {
+      "name": "CIERRE",
+      "duration": "Xs",
+      "lines": [
+        {"tag": "CÁMARA", "text": "texto del guion"}
+      ]
+    }
+  ],
+  "music_a": {"name": "nombre ≤5 palabras", "why": "por qué funciona en 1-2 oraciones", "prompt": "prompt de generación ≤200 chars sin nombres de artistas o marcas"},
+  "music_b": {"name": "...", "why": "...", "prompt": "..."},
+  "source": {"title": "Título exacto de la película, serie, libro o descripción del evento real", "type": "película | serie | libro | historia real", "description": "contexto breve de la fuente en 1 oración — ¿por qué es relevante?"}
+}`;
+
 const CAROUSEL_FORMAT = `{
   "slides": [
     {
@@ -47,6 +92,10 @@ const CAROUSEL_FORMAT = `{
   ]
 }`;
 
+function isAlbornaStructure(name: string): boolean {
+  return name.toLowerCase().includes("alborna");
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
@@ -55,12 +104,14 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { client_id, brief, type, structure_name, structure } = (await req.json()) as {
+    const { client_id, brief, type, structure_name, structure, big_idea, micro_story } = (await req.json()) as {
       client_id: string;
       brief: string;
       type: "reel" | "carousel";
       structure_name: string;
       structure?: { hook: string; arc: string; close: string };
+      big_idea?: string;
+      micro_story?: string;
     };
 
     if (!client_id || !brief?.trim() || !type || !structure_name) {
@@ -83,23 +134,47 @@ export async function POST(req: NextRequest) {
       .eq("is_active", true)
       .single();
 
-    const format = type === "reel" ? REEL_FORMAT : CAROUSEL_FORMAT;
+    const isAlborna = isAlbornaStructure(structure_name);
+
+    let format: string;
+    if (type === "carousel") {
+      format = CAROUSEL_FORMAT;
+    } else if (isAlborna) {
+      format = REEL_FORMAT_ALBORNA;
+    } else {
+      format = REEL_FORMAT;
+    }
 
     const structurePlan = structure
       ? `\nPlanteamiento de la estructura (respétalo fielmente):\n- Hook: ${structure.hook}\n- Arco: ${structure.arc}\n- Cierre: ${structure.close}`
+      : "";
+
+    const bigIdeaLine = big_idea?.trim()
+      ? `\nBig Idea (mensaje central — todo el guion debe servir a esta idea):\n"${big_idea.trim()}"\n`
+      : "";
+
+    const microStoryLine = micro_story?.trim() && isAlborna
+      ? `\nMicro-historia de apertura (YA ESTÁ ELEGIDA por el usuario — úsala EXACTAMENTE como apertura del bloque MICRO-HISTORIA, sin cambiar su esencia, solo adaptando si es necesario para fluidez):\n"${micro_story.trim()}"\n`
+      : "";
+
+    const albornaRules = isAlborna
+      ? `\nREGLAS CRÍTICAS PARA JULIAN ALBORNA:
+1. La historia de apoyo (bloque HISTORIA REAL) DEBE ser una historia REAL y verificable: una película, serie, libro, o evento histórico documentado. PROHIBIDO inventar personajes o situaciones ficticias no atribuibles a una fuente real.
+2. Al final del JSON, en el campo "source", especifica SIEMPRE la fuente exacta: título de la película/serie/libro, o descripción del evento real con fecha/contexto.
+3. La micro-historia de apertura (bloque MICRO-HISTORIA) debe conectar de forma NATURAL con la historia real — el puente debe sentirse inevitable, no forzado.
+4. El guion completo debe construirse sobre la Big Idea arriba indicada.\n`
       : "";
 
     const userMessage = `Tipo de contenido: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (8–10 slides)"}
 
 Brief:
 ${brief.trim()}
-
+${bigIdeaLine}${microStoryLine}
 Estructura elegida: ${structure_name}${structurePlan}
-
+${albornaRules}
 Genera el guion completo desarrollando exactamente el planteamiento indicado arriba. Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
 ${format}`;
 
-    // Carrusel usa modelo rápido (Haiku) — respuesta estructurada, ~3x más veloz
     const model = type === "carousel" ? MODEL_FAST : MODEL_DEFAULT;
     const maxTokens = type === "carousel" ? 2048 : 4096;
 
