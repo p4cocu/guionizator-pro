@@ -9,7 +9,7 @@ export const maxDuration = 60;
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-function readKnowledge(filePath: string): string {
+function readFile(filePath: string): string {
   try {
     return fs.readFileSync(path.join(process.cwd(), filePath), "utf-8");
   } catch {
@@ -26,11 +26,6 @@ const PILLARS = [
   "CTA directo",
 ];
 
-const SYSTEM_PROMPT = `Eres un estratega experto en contenido para redes sociales (Instagram y LinkedIn).
-Tu especialidad es crear calendarios de contenido basados en metodología científica de crecimiento.
-Conoces profundamente los pilares de contenido: ${PILLARS.join(", ")}.
-Siempre devuelves JSON válido. No agregas explicaciones fuera del JSON.`;
-
 type ExistingEntry = {
   title: string;
   format: string;
@@ -45,16 +40,68 @@ type ExistingEntry = {
 type ClientInfo = {
   nombre: string;
   marca?: string | null;
-  descripcion?: string | null;
-  publico_objetivo?: string | null;
-  propuesta_valor?: string | null;
+  que_vende?: string | null;
+  cliente_ideal?: string | null;
+  nicho?: string | null;
+  dolor?: string | null;
+  deseo?: string | null;
+  tono?: string | null;
+  notas?: string | null;
 };
+
+type ResearchEntry = {
+  fuente?: string | null;
+  resumen: string;
+};
+
+type ProductEntry = {
+  nombre: string;
+  descripcion?: string | null;
+  tipo: string;
+};
+
+function buildClientContext(
+  clientInfo: ClientInfo,
+  research: ResearchEntry[],
+  products: ProductEntry[],
+): string {
+  const lines: string[] = [
+    `CLIENTE/MARCA: ${clientInfo.nombre}${clientInfo.marca ? ` (${clientInfo.marca})` : ""}`,
+  ];
+
+  if (clientInfo.que_vende) lines.push(`Qué vende: ${clientInfo.que_vende}`);
+  if (clientInfo.cliente_ideal) lines.push(`Cliente ideal: ${clientInfo.cliente_ideal}`);
+  if (clientInfo.nicho) lines.push(`Nicho: ${clientInfo.nicho}`);
+  if (clientInfo.dolor) lines.push(`Dolor principal del cliente: ${clientInfo.dolor}`);
+  if (clientInfo.deseo) lines.push(`Deseo/aspiración del cliente: ${clientInfo.deseo}`);
+  if (clientInfo.tono) lines.push(`Tono de voz: ${clientInfo.tono}`);
+  if (clientInfo.notas) lines.push(`Notas adicionales: ${clientInfo.notas}`);
+
+  if (products.length > 0) {
+    lines.push(`\nPRODUCTOS/SERVICIOS:`);
+    for (const p of products) {
+      lines.push(`- [${p.tipo}] ${p.nombre}${p.descripcion ? `: ${p.descripcion}` : ""}`);
+    }
+  }
+
+  if (research.length > 0) {
+    lines.push(`\nINVESTIGACIÓN DEL CLIENTE (insights clave):`);
+    for (const r of research) {
+      const fuenteLabel = r.fuente ? ` [${r.fuente}]` : "";
+      lines.push(`-${fuenteLabel} ${r.resumen}`);
+    }
+  }
+
+  return lines.join("\n");
+}
 
 function buildCalendarPrompt(
   period: "week" | "biweek" | "month",
   weekNumber: number | null,
   existingEntries: ExistingEntry[],
   clientInfo: ClientInfo | null,
+  research: ResearchEntry[],
+  products: ProductEntry[],
   knowledge: string,
 ): string {
   const count = period === "week" ? 5 : period === "biweek" ? 10 : 20;
@@ -74,10 +121,7 @@ function buildCalendarPrompt(
       : "";
 
   const clientContext = clientInfo
-    ? `\nCLIENTE/MARCA: ${clientInfo.nombre}${clientInfo.marca ? ` (${clientInfo.marca})` : ""}
-${clientInfo.descripcion ? `Descripción: ${clientInfo.descripcion}` : ""}
-${clientInfo.publico_objetivo ? `Público objetivo: ${clientInfo.publico_objetivo}` : ""}
-${clientInfo.propuesta_valor ? `Propuesta de valor: ${clientInfo.propuesta_valor}` : ""}`
+    ? `\n${buildClientContext(clientInfo, research, products)}`
     : "";
 
   const weekContext =
@@ -87,6 +131,11 @@ ${clientInfo.propuesta_valor ? `Propuesta de valor: ${clientInfo.propuesta_valor
 
   return `Genera un calendario de contenido para ${weeksCount} semana(s) con exactamente ${count} piezas de contenido.
 ${clientContext}${weekContext}
+
+INSTRUCCIÓN CRÍTICA: Todo el contenido debe surgir del cliente específico descrito arriba —
+su negocio, sus servicios, el dolor de su cliente ideal, su nicho. No generes contenido genérico
+sobre crecimiento en Instagram. Cada pieza debe poder publicarse directamente en la cuenta
+de este cliente sin sentirse fuera de lugar.
 
 METODOLOGÍA (aplica estrictamente):
 - Mix de formatos: equilibra reels, carruseles y posts de texto
@@ -100,11 +149,11 @@ ${existingTitles || "Ninguno aún — es la primera generación"}
 ${bestPerformersText}
 
 CONOCIMIENTO DE ESTRATEGIA:
-${knowledge.slice(0, 3000)}
+${knowledge.slice(0, 2000)}
 
 Para cada pieza genera:
-- title: título atractivo/gancho (máximo 80 caracteres)
-- brief: descripción del ángulo, gancho y desarrollo (2-3 oraciones)
+- title: título atractivo/gancho específico al cliente (máximo 80 caracteres)
+- brief: descripción del ángulo, gancho y desarrollo (2-3 oraciones). Debe ser específico al cliente y sus servicios.
 - format: "reel" | "carrusel" | "post_texto" | "story"
 - platforms: array con "instagram" y/o "linkedin"
 - pillar: uno de [${PILLARS.map((p) => `"${p}"`).join(", ")}]
@@ -163,34 +212,62 @@ export async function POST(req: NextRequest) {
 
     const { data: existingEntries } = await entriesQuery;
 
-    // Load client info if provided
+    // Load client info, research, and products if client selected
     let clientInfo: ClientInfo | null = null;
+    let research: ResearchEntry[] = [];
+    let products: ProductEntry[] = [];
+
     if (body.client_id) {
-      const { data: clientData } = await supabase
-        .from("clients")
-        .select("nombre, marca, descripcion, publico_objetivo, propuesta_valor")
-        .eq("id", body.client_id)
-        .eq("owner_id", user.id)
-        .single();
-      if (clientData) clientInfo = clientData as ClientInfo;
+      const [clientRes, researchRes, productsRes] = await Promise.all([
+        supabase
+          .from("clients")
+          .select("nombre, marca, que_vende, cliente_ideal, nicho, dolor, deseo, tono, notas")
+          .eq("id", body.client_id)
+          .eq("owner_id", user.id)
+          .single(),
+        supabase
+          .from("client_research")
+          .select("fuente, resumen")
+          .eq("client_id", body.client_id)
+          .eq("owner_id", user.id)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("client_products")
+          .select("nombre, descripcion, tipo")
+          .eq("client_id", body.client_id)
+          .eq("owner_id", user.id)
+          .order("created_at", { ascending: true }),
+      ]);
+
+      if (clientRes.data) clientInfo = clientRes.data as ClientInfo;
+      if (researchRes.data) research = researchRes.data as ResearchEntry[];
+      if (productsRes.data) products = productsRes.data as ProductEntry[];
     }
 
-    const knowledge = readKnowledge(
+    const knowledge = readFile(
       "knowledge/como-conseguir-100k-seguidores-metodo-cientifico.md",
     );
+
+    // Load brain system prompt
+    const brainPrompt = readFile("brain/system-prompt.md");
+    const systemPrompt = brainPrompt
+      ? `${brainPrompt}\n\n---\n\nPara esta tarea específica eres un estratega de contenido. Conoces profundamente los pilares: ${PILLARS.join(", ")}. Siempre devuelves JSON válido. No agregas explicaciones fuera del JSON.`
+      : `Eres un estratega experto en contenido para redes sociales. Conoces profundamente los pilares de contenido: ${PILLARS.join(", ")}. Siempre devuelves JSON válido. No agregas explicaciones fuera del JSON.`;
 
     const userMessage = buildCalendarPrompt(
       body.period,
       body.week_number ?? null,
       (existingEntries ?? []) as ExistingEntry[],
       clientInfo,
+      research,
+      products,
       knowledge,
     );
 
     const response = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
     });
 
