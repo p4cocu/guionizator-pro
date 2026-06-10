@@ -135,6 +135,7 @@ export default function DashboardClient({
   const [genError, setGenError] = useState<string | null>(null);
   const [genStep, setGenStep] = useState<"pick" | "preview" | "saving">("pick");
   const [savingGenerated, startSavingTransition] = useTransition();
+  const [selectedIdeas, setSelectedIdeas] = useState<Set<string>>(new Set());
 
   // Postpone menu state
   const [postponeMenuId, setPostponeMenuId] = useState<string | null>(null);
@@ -272,7 +273,11 @@ export default function DashboardClient({
         throw new Error(err.error ?? "Error generando contenido");
       }
       const data = await res.json();
-      setGeneratedWeeks(data.weeks ?? []);
+      const weeks: GeneratedWeek[] = data.weeks ?? [];
+      setGeneratedWeeks(weeks);
+      const allKeys = new Set<string>();
+      weeks.forEach((w, wi) => w.entries.forEach((_, ei) => allKeys.add(`${wi}-${ei}`)));
+      setSelectedIdeas(allKeys);
       setGenStep("preview");
     } catch (err) {
       setGenError(err instanceof Error ? err.message : "Error");
@@ -281,10 +286,30 @@ export default function DashboardClient({
     }
   }
 
+  function toggleIdea(key: string) {
+    setSelectedIdeas((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function selectAllIdeas() {
+    const allKeys = new Set<string>();
+    generatedWeeks.forEach((w, wi) => w.entries.forEach((_, ei) => allKeys.add(`${wi}-${ei}`)));
+    setSelectedIdeas(allKeys);
+  }
+
+  function deselectAllIdeas() {
+    setSelectedIdeas(new Set());
+  }
+
   function handleSaveGenerated() {
     startSavingTransition(async () => {
-      for (const week of generatedWeeks) {
-        for (const entry of week.entries) {
+      for (const [wi, week] of generatedWeeks.entries()) {
+        for (const [ei, entry] of week.entries.entries()) {
+          if (!selectedIdeas.has(`${wi}-${ei}`)) continue;
           await createCalendarEntry({
             client_id: selectedClientId || null,
             title: entry.title,
@@ -304,6 +329,7 @@ export default function DashboardClient({
       setShowGenModal(false);
       setGenStep("pick");
       setGeneratedWeeks([]);
+      setSelectedIdeas(new Set());
       router.refresh();
     });
   }
@@ -652,30 +678,53 @@ export default function DashboardClient({
 
             {genStep === "preview" && (
               <div className={s.modalForm}>
-                <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
-                  Revisa las ideas generadas. Al guardar, se añadirán al calendario con estado <strong>Idea</strong>.
-                </p>
+                <div className={s.genSelectBar}>
+                  <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
+                    <span style={{ color: "var(--text)", fontWeight: 600 }}>{selectedIdeas.size}</span>
+                    {" de "}
+                    {generatedWeeks.reduce((acc, w) => acc + w.entries.length, 0)} ideas seleccionadas
+                  </p>
+                  <div className={s.genSelectBtns}>
+                    <button type="button" className={s.genSelectBtn} onClick={selectAllIdeas}>Todas</button>
+                    <button type="button" className={s.genSelectBtn} onClick={deselectAllIdeas}>Ninguna</button>
+                  </div>
+                </div>
 
                 <div className={s.genPreviewList}>
-                  {generatedWeeks.map((week) => (
+                  {generatedWeeks.map((week, wi) => (
                     <div key={week.week_number} className={s.genWeekGroup}>
                       <p className={s.genWeekLabel}>Semana {week.week_number} — "{week.theme}"</p>
-                      {week.entries.map((entry, i) => (
-                        <div key={i} className={s.genEntryCard}>
-                          <div className={s.genEntryTop}>
-                            <span className={`badge ${s.formatBadge}`}>{FORMAT_LABELS[entry.format] ?? entry.format}</span>
-                            {entry.platforms.map((p) => (
-                              <span key={p} className={s.platformBadge}>
-                                {p === "instagram" ? "IG" : p === "linkedin" ? "LI" : p}
-                              </span>
-                            ))}
-                            <span className={s.ctaTag} data-cta={entry.cta_type}>CTA {entry.cta_type}</span>
+                      {week.entries.map((entry, ei) => {
+                        const key = `${wi}-${ei}`;
+                        const checked = selectedIdeas.has(key);
+                        return (
+                          <div
+                            key={ei}
+                            className={`${s.genEntryCard} ${!checked ? s.genEntryDeselected : ""}`}
+                            onClick={() => toggleIdea(key)}
+                          >
+                            <div className={s.genEntryTop}>
+                              <input
+                                type="checkbox"
+                                className={s.genEntryCheck}
+                                checked={checked}
+                                onChange={() => toggleIdea(key)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <span className={`badge ${s.formatBadge}`}>{FORMAT_LABELS[entry.format] ?? entry.format}</span>
+                              {entry.platforms.map((p) => (
+                                <span key={p} className={s.platformBadge}>
+                                  {p === "instagram" ? "IG" : p === "linkedin" ? "LI" : p}
+                                </span>
+                              ))}
+                              <span className={s.ctaTag} data-cta={entry.cta_type}>CTA {entry.cta_type}</span>
+                            </div>
+                            <p className={s.genEntryTitle}>{entry.title}</p>
+                            <p className={s.genEntryBrief}>{entry.brief}</p>
+                            <span className={s.pillarTag}>{entry.pillar}</span>
                           </div>
-                          <p className={s.genEntryTitle}>{entry.title}</p>
-                          <p className={s.genEntryBrief}>{entry.brief}</p>
-                          <span className={s.pillarTag}>{entry.pillar}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ))}
                 </div>
@@ -688,9 +737,11 @@ export default function DashboardClient({
                     type="button"
                     className="btn btn-primary"
                     onClick={handleSaveGenerated}
-                    disabled={savingGenerated}
+                    disabled={savingGenerated || selectedIdeas.size === 0}
                   >
-                    {savingGenerated ? "Guardando…" : `Guardar ${generatedWeeks.reduce((acc, w) => acc + w.entries.length, 0)} piezas`}
+                    {savingGenerated
+                      ? "Guardando…"
+                      : `Guardar ${selectedIdeas.size} ${selectedIdeas.size === 1 ? "pieza" : "piezas"}`}
                   </button>
                 </div>
               </div>

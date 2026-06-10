@@ -564,6 +564,62 @@
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--glass-border);
   border-radius: var(--r-md);
+  cursor: pointer;
+  transition: opacity 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.genEntryCard:hover {
+  border-color: rgba(0, 159, 125, 0.3);
+}
+
+.genEntryDeselected {
+  opacity: 0.35;
+  background: transparent;
+  border-color: transparent;
+}
+
+.genEntryDeselected:hover {
+  opacity: 0.55;
+  border-color: var(--glass-border);
+}
+
+.genEntryCheck {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--emerald);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.genSelectBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.genSelectBtns {
+  display: flex;
+  gap: 6px;
+}
+
+.genSelectBtn {
+  background: none;
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.genSelectBtn:hover {
+  color: var(--emerald);
+  border-color: var(--emerald);
 }
 
 .genEntryTop {
