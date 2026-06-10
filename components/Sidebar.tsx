@@ -31,7 +31,17 @@ export default function Sidebar({ isOpen, onClose }: Props) {
       className={`${styles.sidebar} ${isOpen ? styles.sidebarOpen : ""} sidebar-dark-scope`}
     >
       <div className={styles.brand}>
-        <span className={styles.brandMark} />
+        <img
+          src="https://res.cloudinary.com/dghuokhlw/image/upload/v1781072303/favicon1_dkjxxm.jpg"
+          alt=""
+          aria-hidden="true"
+          className={`${styles.brandIcon} ${styles.brandIconLight}`}
+        />
+        <img
+          src="https://res.cloudinary.com/dghuokhlw/image/upload/v1781072303/favicon2_tljxof.jpg"
+          alt="Guionizator"
+          className={`${styles.brandIcon} ${styles.brandIconDark}`}
+        />
         <span className={styles.brandName}>
           Guionizator <span className="text-grad">Pro</span>
         </span>

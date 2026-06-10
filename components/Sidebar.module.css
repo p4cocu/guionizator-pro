@@ -18,14 +18,18 @@
   gap: 10px;
   padding: 6px 12px 22px;
 }
-.brandMark {
-  width: 22px;
-  height: 22px;
+.brandIcon {
+  width: 26px;
+  height: 26px;
   border-radius: 7px;
-  background-image: var(--grad-g1);
-  box-shadow: var(--glow-g1);
   flex-shrink: 0;
+  object-fit: cover;
 }
+.brandIconDark { display: block; }
+.brandIconLight { display: none; }
+
+:global([data-theme="light"]) .brandIconDark { display: none; }
+:global([data-theme="light"]) .brandIconLight { display: block; }
 .brandName {
   font-family: var(--font-display);
   font-weight: 700;

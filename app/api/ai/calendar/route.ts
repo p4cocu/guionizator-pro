@@ -103,6 +103,7 @@ function buildCalendarPrompt(
   research: ResearchEntry[],
   products: ProductEntry[],
   knowledge: string,
+  weeklyTheme: string | null,
 ): string {
   const count = period === "week" ? 5 : period === "biweek" ? 10 : 20;
   const weeksCount = period === "week" ? 1 : period === "biweek" ? 2 : 4;
@@ -129,8 +130,13 @@ function buildCalendarPrompt(
       ? `\nEsta es la Semana ${weekNumber} del mes. Genera contenido coherente con esa posición en el mes.`
       : "";
 
+  const themeContext = weeklyTheme
+    ? `\nTEMA / CONTEXTO DE LA SEMANA: "${weeklyTheme}"
+INSTRUCCIÓN DE TEMA: Usa este tema como gancho y contexto para orientar el contenido. NO abandones los servicios, dolores y nicho del cliente — el tema es el vehículo, la marca es el destino. Busca ángulos creativos que conecten el tema con los problemas y soluciones reales del cliente.`
+    : "";
+
   return `Genera un calendario de contenido para ${weeksCount} semana(s) con exactamente ${count} piezas de contenido.
-${clientContext}${weekContext}
+${clientContext}${weekContext}${themeContext}
 
 INSTRUCCIÓN CRÍTICA: Todo el contenido debe surgir del cliente específico descrito arriba —
 su negocio, sus servicios, el dolor de su cliente ideal, su nicho. No generes contenido genérico
@@ -198,6 +204,7 @@ export async function POST(req: NextRequest) {
       month: number;
       year: number;
       client_id?: string | null;
+      weekly_theme?: string | null;
     };
 
     // Load existing entries for this month/client
@@ -262,6 +269,7 @@ export async function POST(req: NextRequest) {
       research,
       products,
       knowledge,
+      body.weekly_theme ?? null,
     );
 
     const response = await client.messages.create({

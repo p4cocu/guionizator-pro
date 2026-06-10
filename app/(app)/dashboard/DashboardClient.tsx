@@ -127,6 +127,8 @@ export default function DashboardClient({
   const [showGenModal, setShowGenModal] = useState(false);
   const [genPeriod, setGenPeriod] = useState<"week" | "biweek" | "month">("week");
   const [genWeekNumber, setGenWeekNumber] = useState<number>(1);
+  const [genClientId, setGenClientId] = useState<string | null>(selectedClientId);
+  const [genWeeklyTheme, setGenWeeklyTheme] = useState("");
   const [generatedWeeks, setGeneratedWeeks] = useState<GeneratedWeek[]>([]);
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
@@ -249,7 +251,8 @@ export default function DashboardClient({
           week_number: genPeriod === "week" ? genWeekNumber : null,
           month,
           year,
-          client_id: selectedClientId || null,
+          client_id: genClientId || null,
+          weekly_theme: genWeeklyTheme.trim() || null,
         }),
       });
       if (!res.ok) {
@@ -374,7 +377,7 @@ export default function DashboardClient({
           <button
             className="btn btn-primary"
             style={{ padding: "10px 18px", fontSize: 13 }}
-            onClick={() => { setShowGenModal(true); setGenStep("pick"); setGeneratedWeeks([]); setGenError(null); }}
+            onClick={() => { setGenClientId(selectedClientId); setGenWeeklyTheme(""); setShowGenModal(true); setGenStep("pick"); setGeneratedWeeks([]); setGenError(null); }}
           >
             ✦ Generar contenido
           </button>
@@ -521,6 +524,37 @@ export default function DashboardClient({
                   {selectedClientId ? ` · cliente seleccionado` : ""},
                   basadas en la metodología de crecimiento y tu contenido previo.
                 </p>
+
+                {clients.length > 0 && (
+                  <div className="field">
+                    <label className="field-label">Cliente</label>
+                    <select
+                      className="select"
+                      value={genClientId ?? ""}
+                      onChange={(e) => setGenClientId(e.target.value || null)}
+                    >
+                      <option value="">Sin asignar</option>
+                      {clients.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nombre}{c.marca ? ` · ${c.marca}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="field">
+                  <label className="field-label">Tema de la semana (opcional)</label>
+                  <input
+                    className="input"
+                    placeholder="ej. Mundial de Fútbol 2026, regreso a clases, lanzamiento de servicio…"
+                    value={genWeeklyTheme}
+                    onChange={(e) => setGenWeeklyTheme(e.target.value)}
+                  />
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4, marginBottom: 0 }}>
+                    La IA orientará el contenido a este tema manteniendo la voz y servicios del cliente.
+                  </p>
+                </div>
 
                 <div className="field">
                   <label className="field-label">¿Para cuánto tiempo generar?</label>
