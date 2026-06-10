@@ -255,14 +255,26 @@ function InlineAiChat({ state, onSubmit, onSelect, onKeepOriginal }: InlineAiCha
 
 // ── Main form ────────────────────────────────────────────────────────────────
 
-export default function NuevoGuionForm({ clientes }: { clientes: Cliente[] }) {
+export default function NuevoGuionForm({
+  clientes,
+  initialBrief,
+  initialClientId,
+}: {
+  clientes: Cliente[];
+  initialBrief?: string;
+  initialClientId?: string;
+}) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
 
   // Step 1 state
-  const [clientId, setClientId] = useState(clientes[0]?.id ?? "");
+  const [clientId, setClientId] = useState(
+    initialClientId && clientes.some((c) => c.id === initialClientId)
+      ? initialClientId
+      : (clientes[0]?.id ?? "")
+  );
   const [type, setType] = useState<"reel" | "carousel">("reel");
-  const [brief, setBrief] = useState("");
+  const [brief, setBrief] = useState(initialBrief ?? "");
 
   // Step 2 state — Big Idea
   const [bigIdea, setBigIdea] = useState("");

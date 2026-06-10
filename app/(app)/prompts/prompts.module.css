@@ -546,6 +546,9 @@
 
 .sceneDeleteBtn:hover { color: var(--flare) !important; background: rgba(255,111,97,0.08) !important; }
 
+.sceneGuionBtn { color: var(--signal) !important; font-weight: 600; }
+.sceneGuionBtn:hover { color: var(--ink) !important; background: var(--signal) !important; }
+
 .sceneVoice {
   font-size: 13px;
   color: var(--text-muted);

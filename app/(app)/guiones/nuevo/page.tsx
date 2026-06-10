@@ -3,7 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import NuevoGuionForm from "./NuevoGuionForm";
 import styles from "../guiones.module.css";
 
-export default async function NuevoGuionPage() {
+export default async function NuevoGuionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ brief?: string; client_id?: string }>;
+}) {
+  const { brief, client_id } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -34,7 +39,11 @@ export default async function NuevoGuionPage() {
           </Link>
         </div>
       ) : (
-        <NuevoGuionForm clientes={clientes} />
+        <NuevoGuionForm
+          clientes={clientes}
+          initialBrief={brief}
+          initialClientId={client_id}
+        />
       )}
     </div>
   );

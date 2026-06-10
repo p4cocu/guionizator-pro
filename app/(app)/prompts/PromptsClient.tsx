@@ -444,6 +444,18 @@ export default function PromptsClient({ customStyles, recentReels, preloadedScri
                   <span className={s.sceneNum}>Escena {idx + 1}</span>
                   <div className={s.sceneActions}>
                     <button
+                      className={`${s.sceneActionBtn} ${s.sceneGuionBtn}`}
+                      title="Generar guion a partir de esta idea"
+                      onClick={() => {
+                        const brief = `${scene.scene_idea}. ${scene.scene_description}`;
+                        const params = new URLSearchParams({ brief });
+                        if (selectedScript?.client_id) params.set("client_id", selectedScript.client_id);
+                        router.push(`/guiones/nuevo?${params.toString()}`);
+                      }}
+                    >
+                      ✦ Guionar
+                    </button>
+                    <button
                       className={s.sceneActionBtn}
                       title="Editar descripción"
                       onClick={() => editingIdx === idx ? saveEdit(idx) : startEditing(idx)}
