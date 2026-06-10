@@ -221,6 +221,30 @@ export async function postponeCalendarEntry(id: string, to: "week" | "month") {
   revalidatePath("/dashboard");
 }
 
+export async function sendToProduction(id: string): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data: entry } = await supabase
+    .from("content_calendar")
+    .select("status")
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .single();
+
+  if (!entry) return;
+
+  const newStatus = entry.status === "etapa0" ? "idea" : entry.status;
+
+  const { error } = await supabase
+    .from("content_calendar")
+    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("owner_id", user.id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/dashboard");
+}
+
 export async function reorderCalendarEntry(
   id: string,
   direction: "up" | "down",

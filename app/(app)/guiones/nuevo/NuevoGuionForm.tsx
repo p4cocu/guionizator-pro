@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveScriptSilent } from "../actions";
+import { saveScriptSilent, linkScriptToCalendar } from "../actions";
 import styles from "../guiones.module.css";
 
 type Cliente = { id: string; nombre: string; marca: string | null };
@@ -259,10 +259,14 @@ export default function NuevoGuionForm({
   clientes,
   initialBrief,
   initialClientId,
+  initialCalendarId,
+  initialType,
 }: {
   clientes: Cliente[];
   initialBrief?: string;
   initialClientId?: string;
+  initialCalendarId?: string;
+  initialType?: "reel" | "carousel";
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
@@ -273,7 +277,7 @@ export default function NuevoGuionForm({
       ? initialClientId
       : (clientes[0]?.id ?? "")
   );
-  const [type, setType] = useState<"reel" | "carousel">("reel");
+  const [type, setType] = useState<"reel" | "carousel">(initialType ?? "reel");
   const [brief, setBrief] = useState(initialBrief ?? "");
 
   // Step 2 state — Big Idea
@@ -568,6 +572,9 @@ export default function NuevoGuionForm({
           content: g.content as Record<string, unknown>,
           brain_version_id: g.brainVersionId,
         });
+        if (initialCalendarId) {
+          await linkScriptToCalendar(id, initialCalendarId);
+        }
         setGeneratedScripts((prev) =>
           prev.map((x, i) => (i === idx ? { ...x, savedId: id } : x))
         );

@@ -314,6 +314,22 @@ export async function saveScriptCopy(
   revalidatePath(`/guiones/${scriptId}`);
 }
 
+export async function linkScriptToCalendar(
+  scriptId: string,
+  calendarId: string,
+): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+
+  const { error } = await supabase
+    .from("content_calendar")
+    .update({ script_id: scriptId, updated_at: new Date().toISOString() })
+    .eq("id", calendarId)
+    .eq("owner_id", user.id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/dashboard");
+}
+
 export async function addScriptToCalendar(
   scriptId: string,
   data: {

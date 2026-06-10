@@ -11,6 +11,7 @@ import {
   reorderCalendarEntry,
   updateCalendarMetrics,
   postponeCalendarEntry,
+  sendToProduction,
 } from "./actions";
 import s from "./dashboard.module.css";
 
@@ -54,7 +55,7 @@ const EMPTY_FORM: CalendarEntryInput = {
   title: "",
   format: "reel",
   platforms: ["instagram"],
-  status: "idea",
+  status: "etapa0",
   pillar: "",
   month: new Date().getMonth() + 1,
   year: new Date().getFullYear(),
@@ -315,7 +316,7 @@ export default function DashboardClient({
             title: entry.title,
             format: entry.format,
             platforms: entry.platforms,
-            status: "idea",
+            status: "etapa0",
             pillar: entry.pillar,
             month,
             year,
@@ -331,6 +332,27 @@ export default function DashboardClient({
       setGeneratedWeeks([]);
       setSelectedIdeas(new Set());
       router.refresh();
+    });
+  }
+
+  function handleProduceEntry(entry: CalendarEntry) {
+    startTransition(async () => {
+      await sendToProduction(entry.id);
+
+      const briefParts: string[] = [];
+      if (entry.title) briefParts.push(entry.title);
+      if (entry.brief) briefParts.push(entry.brief);
+      if (entry.pillar) briefParts.push(`Pilar: ${entry.pillar}`);
+      if (entry.cta_type) briefParts.push(`CTA: ${entry.cta_type}`);
+      if (entry.weekly_theme) briefParts.push(`Tema semanal: ${entry.weekly_theme}`);
+
+      const params = new URLSearchParams();
+      if (entry.client_id) params.set("client_id", entry.client_id);
+      params.set("brief", briefParts.join("\n"));
+      params.set("calendar_id", entry.id);
+      if (entry.format === "carrusel") params.set("type", "carousel");
+
+      router.push(`/guiones/nuevo?${params.toString()}`);
     });
   }
 
@@ -551,11 +573,19 @@ export default function DashboardClient({
                           : "📊 Agregar métricas"}
                       </button>
                     )}
-                    {entry.script_id && (
-                      <Link href={`/guiones/${entry.script_id}`} className={s.scriptLink}>
+                    {entry.script_id ? (
+                      <Link href={`/guiones/${entry.script_id}`} className={s.viewGuionBtn}>
                         Ver guion →
                       </Link>
-                    )}
+                    ) : entry.status !== "publicado" ? (
+                      <button
+                        className={s.produceBtn}
+                        onClick={() => handleProduceEntry(entry)}
+                        disabled={isPending}
+                      >
+                        ✦ Producir guion
+                      </button>
+                    ) : null}
                   </div>
                 ))}
               </div>
