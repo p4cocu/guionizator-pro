@@ -10,6 +10,7 @@ import {
   deleteCalendarEntry,
   reorderCalendarEntry,
   updateCalendarMetrics,
+  postponeCalendarEntry,
 } from "./actions";
 import s from "./dashboard.module.css";
 
@@ -134,6 +135,17 @@ export default function DashboardClient({
   const [genError, setGenError] = useState<string | null>(null);
   const [genStep, setGenStep] = useState<"pick" | "preview" | "saving">("pick");
   const [savingGenerated, startSavingTransition] = useTransition();
+
+  // Postpone menu state
+  const [postponeMenuId, setPostponeMenuId] = useState<string | null>(null);
+
+  function handlePostpone(id: string, to: "week" | "month") {
+    setPostponeMenuId(null);
+    startTransition(async () => {
+      await postponeCalendarEntry(id, to);
+      router.refresh();
+    });
+  }
 
   // Metrics panel state
   const [metricsEntryId, setMetricsEntryId] = useState<string | null>(null);
@@ -459,6 +471,24 @@ export default function DashboardClient({
                           disabled={isPending || idx === entries.length - 1}
                           title="Bajar"
                         >↓</button>
+                        <div className={s.postponeWrap}>
+                          <button
+                            className={s.postponeBtn}
+                            onClick={() => setPostponeMenuId(postponeMenuId === entry.id ? null : entry.id)}
+                            title="Pasar para..."
+                            disabled={isPending}
+                          >⏭</button>
+                          {postponeMenuId === entry.id && (
+                            <div className={s.postponeMenu}>
+                              <button className={s.postponeOption} onClick={() => handlePostpone(entry.id, "week")}>
+                                Sig. semana
+                              </button>
+                              <button className={s.postponeOption} onClick={() => handlePostpone(entry.id, "month")}>
+                                Sig. mes
+                              </button>
+                            </div>
+                          )}
+                        </div>
                         <button
                           className={s.editBtn}
                           onClick={() => openEdit(entry)}
@@ -507,6 +537,11 @@ export default function DashboardClient({
           </div>
         );
       })}
+
+      {/* Overlay para cerrar el menú de posponer */}
+      {postponeMenuId && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setPostponeMenuId(null)} />
+      )}
 
       {/* ── Modal: Generar contenido con IA ── */}
       {showGenModal && (

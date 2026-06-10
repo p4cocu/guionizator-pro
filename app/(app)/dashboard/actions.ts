@@ -182,6 +182,45 @@ export async function updateCalendarMetrics(
   revalidatePath("/dashboard");
 }
 
+export async function postponeCalendarEntry(id: string, to: "week" | "month") {
+  const { supabase, user } = await getAuthUser();
+
+  const { data: entry } = await supabase
+    .from("content_calendar")
+    .select("month, year, week_number")
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .single();
+
+  if (!entry) return;
+
+  let newMonth = entry.month as number;
+  let newYear = entry.year as number;
+  let newWeek = (entry.week_number as number) ?? 1;
+
+  if (to === "week") {
+    if (newWeek < 4) {
+      newWeek += 1;
+    } else {
+      newWeek = 1;
+      if (newMonth === 12) { newMonth = 1; newYear += 1; }
+      else newMonth += 1;
+    }
+  } else {
+    if (newMonth === 12) { newMonth = 1; newYear += 1; }
+    else newMonth += 1;
+  }
+
+  const { error } = await supabase
+    .from("content_calendar")
+    .update({ month: newMonth, year: newYear, week_number: newWeek, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("owner_id", user.id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/dashboard");
+}
+
 export async function reorderCalendarEntry(
   id: string,
   direction: "up" | "down",
