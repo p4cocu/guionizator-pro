@@ -1,4 +1,4 @@
-import { getPromptStyles, getRecentReels, getScriptById } from "./actions";
+import { getPromptStyles, getRecentReels, getScriptById, getScriptPrompts } from "./actions";
 import PromptsClient from "./PromptsClient";
 
 export default async function PromptsPage({
@@ -13,8 +13,13 @@ export default async function PromptsPage({
   ]);
 
   let preloadedScript = null;
+  let preloadedPrompts = null;
+
   if (script_id) {
-    preloadedScript = await getScriptById(script_id);
+    [preloadedScript, preloadedPrompts] = await Promise.all([
+      getScriptById(script_id),
+      getScriptPrompts(script_id),
+    ]);
   }
 
   return (
@@ -22,6 +27,7 @@ export default async function PromptsPage({
       customStyles={customStyles}
       recentReels={recentReels}
       preloadedScript={preloadedScript}
+      preloadedPrompts={preloadedPrompts}
     />
   );
 }

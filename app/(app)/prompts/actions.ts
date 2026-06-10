@@ -3,6 +3,32 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
+// ── Shared types ───────────────────────────────────────────────────────────────
+
+export type SceneIdea = {
+  voice_segment: string;
+  scene_idea: string;
+  scene_description: string;
+};
+
+export type GeneratedPrompt = {
+  voice_segment: string;
+  scene_idea: string;
+  prompt_en: string;
+  description_es: string;
+  copied?: boolean;
+};
+
+export type SavedScriptPrompts = {
+  id: string;
+  script_id: string;
+  style_id: string;
+  style_name: string;
+  scenes: SceneIdea[];
+  prompts: GeneratedPrompt[];
+  updated_at: string;
+};
+
 export type PromptStyle = {
   id: string;
   name: string;
@@ -97,4 +123,40 @@ export async function getScriptById(id: string): Promise<RecentReel | null> {
     .eq("owner_id", user.id)
     .single();
   return data as unknown as RecentReel | null;
+}
+
+// ── Script prompts persistence ─────────────────────────────────────────────────
+
+export async function getScriptPrompts(script_id: string): Promise<SavedScriptPrompts | null> {
+  const { supabase, user } = await getAuthUser();
+  const { data } = await supabase
+    .from("script_prompts")
+    .select("*")
+    .eq("script_id", script_id)
+    .eq("owner_id", user.id)
+    .single();
+  return data as SavedScriptPrompts | null;
+}
+
+export async function saveScriptPrompts(data: {
+  script_id: string;
+  style_id: string;
+  style_name: string;
+  scenes: SceneIdea[];
+  prompts: GeneratedPrompt[];
+}): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+  const { error } = await supabase.from("script_prompts").upsert(
+    {
+      owner_id: user.id,
+      script_id: data.script_id,
+      style_id: data.style_id,
+      style_name: data.style_name,
+      scenes: data.scenes,
+      prompts: data.prompts,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "script_id,owner_id" },
+  );
+  if (error) throw new Error(error.message);
 }

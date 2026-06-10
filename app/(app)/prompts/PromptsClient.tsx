@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { PromptStyle, RecentReel } from "./actions";
-import { savePromptStyle, deletePromptStyle } from "./actions";
+import type { PromptStyle, RecentReel, SceneIdea, GeneratedPrompt, SavedScriptPrompts } from "./actions";
+import { savePromptStyle, deletePromptStyle, getScriptPrompts, saveScriptPrompts } from "./actions";
 import s from "./prompts.module.css";
 
 // ── Preset styles ──────────────────────────────────────────────────────────────
@@ -34,24 +34,11 @@ const PRESET_STYLES = [
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type SceneIdea = {
-  voice_segment: string;
-  scene_idea: string;
-  scene_description: string;
-};
-
-type GeneratedPrompt = {
-  voice_segment: string;
-  scene_idea: string;
-  prompt_en: string;
-  description_es: string;
-  copied?: boolean;
-};
-
 type Props = {
   customStyles: PromptStyle[];
   recentReels: RecentReel[];
   preloadedScript: RecentReel | null;
+  preloadedPrompts: SavedScriptPrompts | null;
 };
 
 const EMPTY_STYLE_FORM = {
@@ -61,17 +48,17 @@ const EMPTY_STYLE_FORM = {
   style_tokens: "",
 };
 
-export default function PromptsClient({ customStyles, recentReels, preloadedScript }: Props) {
+export default function PromptsClient({ customStyles, recentReels, preloadedScript, preloadedPrompts }: Props) {
   const router = useRouter();
 
   // ── Style selection ─────────────────────────────────────────────────────────
-  const [selectedStyleId, setSelectedStyleId] = useState("realistic");
+  const [selectedStyleId, setSelectedStyleId] = useState(preloadedPrompts?.style_id ?? "realistic");
 
   // ── Script selection ────────────────────────────────────────────────────────
   const [selectedScript, setSelectedScript] = useState<RecentReel | null>(preloadedScript);
 
   // ── Scene ideas ─────────────────────────────────────────────────────────────
-  const [scenes, setScenes] = useState<SceneIdea[]>([]);
+  const [scenes, setScenes] = useState<SceneIdea[]>(preloadedPrompts?.scenes ?? []);
   const [loadingScenes, setLoadingScenes] = useState(false);
   const [scenesError, setScenesError] = useState<string | null>(null);
   const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
@@ -79,9 +66,10 @@ export default function PromptsClient({ customStyles, recentReels, preloadedScri
   const [editDraft, setEditDraft] = useState("");
 
   // ── Prompts ──────────────────────────────────────────────────────────────────
-  const [prompts, setPrompts] = useState<GeneratedPrompt[]>([]);
+  const [prompts, setPrompts] = useState<GeneratedPrompt[]>(preloadedPrompts?.prompts ?? []);
   const [loadingPrompts, setLoadingPrompts] = useState(false);
   const [promptsError, setPromptsError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(preloadedPrompts?.updated_at ?? null);
 
   // ── Custom styles ────────────────────────────────────────────────────────────
   const [showNewStyleForm, setShowNewStyleForm] = useState(false);
@@ -102,6 +90,41 @@ export default function PromptsClient({ customStyles, recentReels, preloadedScri
     const custom = customStyles.find((c) => c.id === selectedStyleId);
     if (custom) return { base_style: custom.base_style ?? "custom", style_tokens: custom.style_tokens ?? undefined, name: custom.name };
     return { base_style: "realistic", style_tokens: undefined, name: "Hiperrealista" };
+  }
+
+  async function persistPrompts(script: RecentReel, newScenes: SceneIdea[], newPrompts: GeneratedPrompt[]) {
+    try {
+      const styleInfo = getSelectedStyleInfo();
+      await saveScriptPrompts({
+        script_id: script.id,
+        style_id: selectedStyleId,
+        style_name: styleInfo.name,
+        scenes: newScenes,
+        prompts: newPrompts,
+      });
+      setSavedAt(new Date().toISOString());
+    } catch {
+      // silently fail — UI state is still correct
+    }
+  }
+
+  async function handleSelectScript(reel: RecentReel) {
+    setSelectedScript(reel);
+    setScenes([]);
+    setPrompts([]);
+    setScenesError(null);
+    setSavedAt(null);
+    try {
+      const saved = await getScriptPrompts(reel.id);
+      if (saved) {
+        setScenes(saved.scenes);
+        setPrompts(saved.prompts);
+        setSelectedStyleId(saved.style_id);
+        setSavedAt(saved.updated_at);
+      }
+    } catch {
+      // no saved state — that's fine
+    }
   }
 
   // ── Scene analysis ────────────────────────────────────────────────────────────
@@ -127,7 +150,9 @@ export default function PromptsClient({ customStyles, recentReels, preloadedScri
         throw new Error(err.error ?? "Error analizando el guion");
       }
       const data = await res.json();
-      setScenes(data.scenes ?? []);
+      const newScenes: SceneIdea[] = data.scenes ?? [];
+      setScenes(newScenes);
+      await persistPrompts(selectedScript, newScenes, []);
     } catch (err) {
       setScenesError(err instanceof Error ? err.message : "Error");
     } finally {
@@ -216,6 +241,9 @@ export default function PromptsClient({ customStyles, recentReels, preloadedScri
         });
       }
       setPrompts(results);
+      if (selectedScript) {
+        await persistPrompts(selectedScript, scenes, results);
+      }
     } catch (err) {
       setPromptsError(err instanceof Error ? err.message : "Error generando prompts");
     } finally {
@@ -316,7 +344,14 @@ export default function PromptsClient({ customStyles, recentReels, preloadedScri
 
       {/* ── Script selector ── */}
       <div className={s.scriptSection}>
-        <p className={s.sectionLabel}>Selecciona un guion (Reel)</p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <p className={s.sectionLabel} style={{ margin: 0 }}>Selecciona un guion (Reel)</p>
+          {savedAt && (
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              ✓ Guardado · {new Date(savedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+        </div>
         {recentReels.length === 0 ? (
           <div className={s.emptyReels}>
             <span>No tienes guiones de reel generados aún.</span>
@@ -327,12 +362,7 @@ export default function PromptsClient({ customStyles, recentReels, preloadedScri
               <button
                 key={reel.id}
                 className={`card ${s.reelCard} ${selectedScript?.id === reel.id ? s.reelCardActive : ""}`}
-                onClick={() => {
-                  setSelectedScript(reel);
-                  setScenes([]);
-                  setPrompts([]);
-                  setScenesError(null);
-                }}
+                onClick={() => handleSelectScript(reel)}
               >
                 <div className={s.reelCardTop}>
                   <span className={s.reelBadge}>Reel</span>
