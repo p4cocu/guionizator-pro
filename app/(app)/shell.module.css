@@ -22,8 +22,26 @@
   padding: 40px 28px 80px;
 }
 
+/* Overlay oscuro detrás del drawer en móvil */
+.mobileOverlay {
+  display: none;
+}
+
 @media (max-width: 860px) {
   .main {
     margin-left: 0;
+  }
+
+  .inner {
+    padding: 24px 16px 72px;
+  }
+
+  .mobileOverlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 299;
+    backdrop-filter: blur(2px);
   }
 }

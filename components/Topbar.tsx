@@ -19,11 +19,25 @@ function titleFor(pathname: string): string {
   return match ? TITLES[match] : "Guionizator Pro";
 }
 
-export default function Topbar({ email }: { email?: string | null }) {
+type Props = {
+  email?: string | null;
+  onMenuToggle?: () => void;
+};
+
+export default function Topbar({ email, onMenuToggle }: Props) {
   const pathname = usePathname();
   return (
     <header className={styles.topbar}>
-      <h1 className={styles.title}>{titleFor(pathname)}</h1>
+      <div className={styles.left}>
+        <button
+          className={styles.menuBtn}
+          onClick={onMenuToggle}
+          aria-label="Abrir menú"
+        >
+          ☰
+        </button>
+        <h1 className={styles.title}>{titleFor(pathname)}</h1>
+      </div>
       <div className={styles.right}>
         {email && (
           <span className={styles.user} title={email}>

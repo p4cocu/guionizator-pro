@@ -18,11 +18,18 @@ const NAV: NavItem[] = [
   { href: "/cerebro", label: "Cerebro", phase: "F1" },
 ];
 
-export default function Sidebar() {
+type Props = {
+  isOpen?: boolean;
+  onClose?: () => void;
+};
+
+export default function Sidebar({ isOpen, onClose }: Props) {
   const pathname = usePathname();
 
   return (
-    <aside className={`${styles.sidebar} sidebar-dark-scope`}>
+    <aside
+      className={`${styles.sidebar} ${isOpen ? styles.sidebarOpen : ""} sidebar-dark-scope`}
+    >
       <div className={styles.brand}>
         <span className={styles.brandMark} />
         <span className={styles.brandName}>
@@ -42,6 +49,7 @@ export default function Sidebar() {
               key={item.href}
               href={item.href}
               className={`${styles.link} ${active ? styles.active : ""}`}
+              onClick={onClose}
             >
               <span>{item.label}</span>
               {item.phase && <span className={styles.phase}>{item.phase}</span>}

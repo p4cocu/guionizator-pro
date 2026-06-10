@@ -20,6 +20,21 @@
   margin: 6px 0 0;
 }
 
+@media (max-width: 640px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 20px;
+  }
+  .title {
+    font-size: 22px;
+  }
+  .steps {
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+}
+
 /* ── Grid de cards ── */
 .grid {
   display: grid;
@@ -1101,6 +1116,37 @@
   background: rgba(255, 255, 255, 0.02);
 }
 
+/* ── Mobile fixes: detalle de guion ── */
+@media (max-width: 640px) {
+  .detailHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .detailTitle {
+    font-size: 20px;
+  }
+
+  .detailActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .scriptLine {
+    grid-template-columns: 72px 1fr;
+    gap: 8px;
+  }
+
+  .calFormRow {
+    grid-template-columns: 1fr;
+  }
+
+  .actionBar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 /* ── Status badge (lista) ── */
 .statusBadge {
   display: inline-flex;
@@ -1288,6 +1334,12 @@
   overflow: hidden;
 }
 
+@media (max-width: 860px) {
+  .fullscreenOverlay {
+    left: 0;
+  }
+}
+
 .fullscreenHeader {
   display: flex;
   align-items: center;
@@ -1365,6 +1417,13 @@
   max-width: 960px;
   width: 100%;
   margin: 0 auto;
+}
+
+@media (max-width: 640px) {
+  .fullscreenBody {
+    padding: 20px 16px;
+    gap: 20px;
+  }
 }
 
 .fullscreenVoiceOff {

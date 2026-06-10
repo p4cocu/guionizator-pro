@@ -60,6 +60,30 @@
   }
 }
 
+@media (max-width: 640px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .title {
+    font-size: 22px;
+  }
+
+  .headerControls {
+    width: 100%;
+  }
+
+  .clientSelect {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .monthNav {
+    flex-shrink: 0;
+  }
+}
+
 .statCard {
   display: flex;
   flex-direction: column;
