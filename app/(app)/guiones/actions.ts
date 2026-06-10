@@ -244,3 +244,99 @@ export async function saveScriptVersion(
 
   return newScript.id;
 }
+
+export type ScriptCopy = {
+  id: string;
+  platform: string;
+  copy_text: string;
+  hashtags: string | null;
+  created_at: string;
+};
+
+export async function getScriptCopies(scriptId: string): Promise<ScriptCopy[]> {
+  const { supabase, user } = await getAuthUser();
+  const { data } = await supabase
+    .from("script_copies")
+    .select("id, platform, copy_text, hashtags, created_at")
+    .eq("script_id", scriptId)
+    .eq("owner_id", user.id)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as ScriptCopy[];
+}
+
+export async function saveScriptCopy(
+  scriptId: string,
+  platform: string,
+  copyText: string,
+  hashtags: string,
+): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+
+  // Upsert by script + platform (replace existing copy for same platform)
+  await supabase
+    .from("script_copies")
+    .delete()
+    .eq("script_id", scriptId)
+    .eq("platform", platform)
+    .eq("owner_id", user.id);
+
+  const { error } = await supabase.from("script_copies").insert({
+    owner_id: user.id,
+    script_id: scriptId,
+    platform,
+    copy_text: copyText,
+    hashtags: hashtags || null,
+  });
+
+  if (error) throw new Error(error.message);
+  revalidatePath(`/guiones/${scriptId}`);
+}
+
+export async function addScriptToCalendar(
+  scriptId: string,
+  data: {
+    client_id: string | null;
+    title: string;
+    format: string;
+    month: number;
+    year: number;
+    week_number: number;
+    position_preference: "inicio" | "fin";
+  },
+): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data: existing } = await supabase
+    .from("content_calendar")
+    .select("position")
+    .eq("owner_id", user.id)
+    .eq("month", data.month)
+    .eq("year", data.year)
+    .eq("week_number", data.week_number)
+    .order("position", {
+      ascending: data.position_preference === "fin",
+    })
+    .limit(1);
+
+  const refPos = (existing?.[0]?.position ?? 0) as number;
+  const position =
+    data.position_preference === "inicio" ? refPos - 1 : refPos + 1;
+
+  const { error } = await supabase.from("content_calendar").insert({
+    owner_id: user.id,
+    script_id: scriptId,
+    client_id: data.client_id,
+    title: data.title,
+    format: data.format,
+    platforms: ["instagram"],
+    status: "produccion",
+    month: data.month,
+    year: data.year,
+    week_number: data.week_number,
+    position,
+  });
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/dashboard");
+  revalidatePath(`/guiones/${scriptId}`);
+}

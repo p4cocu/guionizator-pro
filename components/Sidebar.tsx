@@ -11,9 +11,10 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { href: "/dashboard", label: "Inicio" },
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/clientes", label: "Clientes", phase: "F2" },
   { href: "/guiones", label: "Guiones", phase: "F3" },
+  { href: "/prompts", label: "Prompts", phase: "F4" },
   { href: "/cerebro", label: "Cerebro", phase: "F1" },
 ];
 
@@ -21,7 +22,7 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className={styles.sidebar}>
+    <aside className={`${styles.sidebar} sidebar-dark-scope`}>
       <div className={styles.brand}>
         <span className={styles.brandMark} />
         <span className={styles.brandName}>

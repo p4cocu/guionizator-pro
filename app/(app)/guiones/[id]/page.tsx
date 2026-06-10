@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getScriptWithVersions } from "../actions";
+import { getScriptWithVersions, getScriptCopies } from "../actions";
 import ScriptDetailClient from "./ScriptDetailClient";
 
 export default async function ScriptDetailPage({
@@ -8,8 +8,17 @@ export default async function ScriptDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const result = await getScriptWithVersions(id);
+  const [result, copies] = await Promise.all([
+    getScriptWithVersions(id),
+    getScriptCopies(id),
+  ]);
   if (!result) notFound();
 
-  return <ScriptDetailClient script={result.script} versions={result.versions} />;
+  return (
+    <ScriptDetailClient
+      script={result.script}
+      versions={result.versions}
+      initialCopies={copies}
+    />
+  );
 }

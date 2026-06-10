@@ -267,3 +267,47 @@ select {
   border: 0;
   margin: 0;
 }
+
+/* ============================================================
+   Tema claro — overrides al activar data-theme="light"
+   ============================================================ */
+[data-theme="light"] {
+  /* Superficies */
+  --forest: #f0ebe0;
+  --ink-card: #ffffff;
+  --ink-card-2: #f7f4ee;
+  --forest-card: #ede8de;
+
+  /* Glass redefinido para fondos claros */
+  --glass-base: #ffffff;
+  --glass-overlay: linear-gradient(165deg, rgba(0, 159, 125, 0.05) 0%, rgba(0, 159, 125, 0) 38%, rgba(0, 0, 0, 0.02) 100%);
+  --glass-border: rgba(0, 159, 125, 0.18);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 0 0 1px rgba(0, 159, 125, 0.06);
+  --glass-shadow: 0 1px 0 rgba(0, 0, 0, 0.06), 0 4px 16px -4px rgba(0, 0, 0, 0.12);
+
+  /* Texto */
+  --text: #002c2b;
+  --text-muted: rgba(0, 44, 43, 0.6);
+  --text-dim: rgba(0, 44, 43, 0.35);
+}
+
+/* El sidebar siempre se ve oscuro (en ambos temas) */
+[data-theme="light"] .sidebar-dark-scope {
+  --text: var(--paper);
+  --text-muted: rgba(255, 251, 240, 0.62);
+  --text-dim: rgba(255, 251, 240, 0.38);
+  --glass-border: rgba(0, 159, 125, 0.22);
+}
+
+/* Botón secundario en tema claro */
+[data-theme="light"] .btn-secondary {
+  color: var(--ink);
+}
+
+/* Inputs: en tema claro el fondo de papel sigue visible */
+[data-theme="light"] .input,
+[data-theme="light"] .textarea,
+[data-theme="light"] .select {
+  background: #ffffff;
+  border-color: rgba(0, 159, 125, 0.2);
+}

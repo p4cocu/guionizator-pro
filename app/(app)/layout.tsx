@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
+import ThemeToggle from "@/components/ThemeToggle";
 import { createClient } from "@/lib/supabase/server";
 import styles from "./shell.module.css";
 
@@ -26,6 +27,7 @@ export default async function AppLayout({
           <div className={styles.inner}>{children}</div>
         </div>
       </div>
+      <ThemeToggle />
     </div>
   );
 }

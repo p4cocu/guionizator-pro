@@ -1,11 +1,21 @@
 "use client";
 
-import { useState, useTransition, useRef, useEffect } from "react";
+import { useState, useTransition, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ScriptRow, ScriptVersion, ScriptStatus, saveScriptVersion, deleteScript, updateScriptStatus } from "../actions";
+import {
+  ScriptRow,
+  ScriptVersion,
+  ScriptStatus,
+  ScriptCopy,
+  saveScriptVersion,
+  deleteScript,
+  updateScriptStatus,
+  addScriptToCalendar,
+} from "../actions";
 import { ReelEditor, CarouselEditor } from "./ScriptEditors";
 import AiEditPanel from "./AiEditPanel";
+import CopyExpertPanel from "./CopyExpertPanel";
 import styles from "../guiones.module.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -35,6 +45,28 @@ const STATUS_OPTIONS: { value: ScriptStatus; label: string; color: string }[] = 
   { value: "publicado", label: "Publicado", color: "var(--emerald)" },
 ];
 
+// ── Markdown renderer (bold / underline / highlight) ─────────────────────────
+
+function renderMarkdown(text: string) {
+  const parts: React.ReactNode[] = [];
+  const regex = /(\*\*(.+?)\*\*|_(.+?)_|==(.+?)==)/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > last) parts.push(text.slice(last, match.index));
+
+    if (match[2] !== undefined) parts.push(<strong key={match.index}>{match[2]}</strong>);
+    else if (match[3] !== undefined) parts.push(<u key={match.index}>{match[3]}</u>);
+    else if (match[4] !== undefined) parts.push(<mark key={match.index}>{match[4]}</mark>);
+
+    last = match.index + match[0].length;
+  }
+
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 // ── Viewers (read-only) ──────────────────────────────────────────────────────
 
 function ReelViewer({ content }: { content: ReelContent }) {
@@ -42,7 +74,7 @@ function ReelViewer({ content }: { content: ReelContent }) {
     <div className={styles.scriptContainer}>
       <div className={styles.voiceOff}>
         <p className={styles.voiceOffLabel}>Voz en off (teleprompter)</p>
-        <p className={styles.voiceOffText}>{content.voice_off}</p>
+        <p className={styles.voiceOffText}>{renderMarkdown(content.voice_off)}</p>
       </div>
 
       <p className={styles.sectionTitle} style={{ marginTop: 8 }}>
@@ -89,28 +121,227 @@ function ReelViewer({ content }: { content: ReelContent }) {
 }
 
 function CarouselViewer({ content }: { content: CarouselContent }) {
+  const [hideVisuals, setHideVisuals] = useState(false);
+
   return (
-    <div className={styles.slidesGrid}>
-      {content.slides?.map((slide) => (
-        <div key={slide.number} className={styles.slide}>
-          <span className={styles.slideNum}>Slide {slide.number}</span>
-          <p className={styles.slideText}>{slide.text}</p>
-          <p className={styles.slideVisual}>{slide.visual}</p>
-          {slide.micro_anchor && (
-            <p className={styles.slideAnchor}>↳ {slide.micro_anchor}</p>
-          )}
+    <div className={styles.scriptContainer}>
+      <div className={styles.carouselToolbar}>
+        <button
+          className={`btn btn-ghost ${styles.hideVisualsBtn}`}
+          onClick={() => setHideVisuals((v) => !v)}
+        >
+          {hideVisuals ? "👁 Mostrar visuales" : "🙈 Ocultar visuales"}
+        </button>
+      </div>
+      <div className={styles.slidesGrid}>
+        {content.slides?.map((slide) => (
+          <div key={slide.number} className={styles.slide}>
+            <span className={styles.slideNum}>Slide {slide.number}</span>
+            <p className={styles.slideText}>{slide.text}</p>
+            {slide.micro_anchor && (
+              <p className={styles.slideAnchor}>↳ {slide.micro_anchor}</p>
+            )}
+            {!hideVisuals && (
+              <p className={styles.slideVisual}>{slide.visual}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Fullscreen Reel Editor ────────────────────────────────────────────────────
+
+type FullscreenReelEditorProps = {
+  content: ReelContent;
+  onChange: (c: Record<string, unknown>) => void;
+  onSave: () => void;
+  onClose: () => void;
+  saving: boolean;
+  saveError: string | null;
+  title: string;
+};
+
+function FullscreenReelEditor({
+  content,
+  onChange,
+  onSave,
+  onClose,
+  saving,
+  saveError,
+  title,
+}: FullscreenReelEditorProps) {
+  const lastFocusedTextarea = useRef<HTMLTextAreaElement | null>(null);
+
+  function insertFormat(token: string) {
+    const el = lastFocusedTextarea.current;
+    if (!el) return;
+
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const val = el.value;
+    const newVal =
+      val.slice(0, start) + token + val.slice(start, end) + token + val.slice(end);
+
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      "value"
+    )?.set;
+    nativeSetter?.call(el, newVal);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + token.length, end + token.length);
+    });
+  }
+
+  return (
+    <div className={styles.fullscreenOverlay}>
+      {/* Header fijo */}
+      <div className={styles.fullscreenHeader}>
+        <div className={styles.fullscreenHeaderLeft}>
+          <span className={styles.fullscreenTitle}>{title}</span>
+          <div className={styles.formatToolbar}>
+            <button
+              className={styles.formatBtn}
+              title="Negrita (**texto**)"
+              onMouseDown={(e) => { e.preventDefault(); insertFormat("**"); }}
+            >
+              <strong>B</strong>
+            </button>
+            <button
+              className={styles.formatBtn}
+              title="Subrayado (_texto_)"
+              onMouseDown={(e) => { e.preventDefault(); insertFormat("_"); }}
+            >
+              <u>U</u>
+            </button>
+            <button
+              className={styles.formatBtn}
+              title="Resaltar (==texto==)"
+              onMouseDown={(e) => { e.preventDefault(); insertFormat("=="); }}
+            >
+              <mark style={{ padding: "0 2px", borderRadius: 3 }}>HL</mark>
+            </button>
+          </div>
         </div>
-      ))}
+        <div className={styles.fullscreenHeaderRight}>
+          {saveError && <span className={styles.saveError}>{saveError}</span>}
+          <button
+            className="btn btn-primary"
+            onClick={onSave}
+            disabled={saving}
+          >
+            {saving ? "Guardando…" : "Guardar versión"}
+          </button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            ✕ Salir
+          </button>
+        </div>
+      </div>
+
+      {/* Contenido scrollable */}
+      <div className={styles.fullscreenBody}>
+        {/* Voice off — sección principal */}
+        <div className={styles.fullscreenVoiceOff}>
+          <label className={styles.editorLabel}>Voz en off (teleprompter)</label>
+          <textarea
+            className={`textarea ${styles.fullscreenTextarea}`}
+            value={content.voice_off ?? ""}
+            rows={16}
+            onFocus={(e) => { lastFocusedTextarea.current = e.currentTarget; }}
+            onChange={(e) =>
+              onChange({ ...content, voice_off: e.target.value })
+            }
+          />
+        </div>
+
+        {/* Bloques de producción */}
+        {content.blocks?.length > 0 && (
+          <div className={styles.fullscreenBlocks}>
+            <p className={styles.editorSectionTitle}>Bloques de producción</p>
+            {content.blocks.map((block, bi) => (
+              <div key={bi} className={styles.editorBlock}>
+                <div className={styles.editorBlockMeta}>
+                  <div className={styles.editorField}>
+                    <label className={styles.editorLabel}>Bloque</label>
+                    <input
+                      className="input"
+                      value={block.name}
+                      onChange={(e) => {
+                        const blocks = content.blocks.map((b, i) =>
+                          i === bi ? { ...b, name: e.target.value } : b
+                        );
+                        onChange({ ...content, blocks });
+                      }}
+                    />
+                  </div>
+                  <div className={styles.editorField} style={{ maxWidth: 120 }}>
+                    <label className={styles.editorLabel}>Duración</label>
+                    <input
+                      className="input"
+                      value={block.duration}
+                      onChange={(e) => {
+                        const blocks = content.blocks.map((b, i) =>
+                          i === bi ? { ...b, duration: e.target.value } : b
+                        );
+                        onChange({ ...content, blocks });
+                      }}
+                    />
+                  </div>
+                </div>
+                {block.lines?.map((line, li) => (
+                  <div key={li} className={styles.editorLineRow}>
+                    <div style={{ width: 90, flexShrink: 0 }}>
+                      <label className={styles.editorLabel}>Tag</label>
+                      <input
+                        className="input"
+                        value={line.tag}
+                        onFocus={(e) => { lastFocusedTextarea.current = null; }}
+                        onChange={(e) => {
+                          const blocks = content.blocks.map((b, i) => {
+                            if (i !== bi) return b;
+                            const lines = b.lines.map((l, j) =>
+                              j === li ? { ...l, tag: e.target.value } : l
+                            );
+                            return { ...b, lines };
+                          });
+                          onChange({ ...content, blocks });
+                        }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label className={styles.editorLabel}>Texto</label>
+                      <input
+                        className="input"
+                        value={line.text}
+                        onChange={(e) => {
+                          const blocks = content.blocks.map((b, i) => {
+                            if (i !== bi) return b;
+                            const lines = b.lines.map((l, j) =>
+                              j === li ? { ...l, text: e.target.value } : l
+                            );
+                            return { ...b, lines };
+                          });
+                          onChange({ ...content, blocks });
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 // ── Export helpers ───────────────────────────────────────────────────────────
 
-function buildTxt(
-  script: ScriptRow,
-  content: ReelContent | CarouselContent
-): string {
+function buildTxt(script: ScriptRow, content: ReelContent | CarouselContent): string {
   const clientName = script.clients?.nombre ?? "—";
   const marca = script.clients?.marca ? ` — ${script.clients.marca}` : "";
   const lines: string[] = [
@@ -119,8 +350,7 @@ function buildTxt(
     `TIPO: ${script.type === "reel" ? "Reel" : "Carrusel"}`,
     `VERSION: v${script.version_number}`,
     `BRIEF: ${script.brief}`,
-    "─".repeat(60),
-    "",
+    "─".repeat(60), "",
   ];
 
   if (script.type === "reel") {
@@ -129,29 +359,13 @@ function buildTxt(
     lines.push("GUION DE PRODUCCIÓN", "");
     for (const block of c.blocks ?? []) {
       lines.push(`[${block.name}] ${block.duration}`);
-      for (const line of block.lines ?? []) {
-        lines.push(`  [${line.tag}] "${line.text}"`);
-      }
+      for (const line of block.lines ?? []) lines.push(`  [${line.tag}] "${line.text}"`);
       lines.push("");
     }
     if (c.music_a || c.music_b) {
       lines.push("─".repeat(60), "", "MÚSICA", "");
-      if (c.music_a) {
-        lines.push(
-          `Estilo A (0–30s): ${c.music_a.name}`,
-          `  ${c.music_a.why}`,
-          `  Prompt: ${c.music_a.prompt}`,
-          ""
-        );
-      }
-      if (c.music_b) {
-        lines.push(
-          `Estilo B (30–60s): ${c.music_b.name}`,
-          `  ${c.music_b.why}`,
-          `  Prompt: ${c.music_b.prompt}`,
-          ""
-        );
-      }
+      if (c.music_a) lines.push(`Estilo A: ${c.music_a.name}`, `  ${c.music_a.why}`, `  Prompt: ${c.music_a.prompt}`, "");
+      if (c.music_b) lines.push(`Estilo B: ${c.music_b.name}`, `  ${c.music_b.why}`, `  Prompt: ${c.music_b.prompt}`, "");
     }
   } else {
     const c = content as CarouselContent;
@@ -159,29 +373,20 @@ function buildTxt(
     for (const slide of c.slides ?? []) {
       lines.push(`Slide ${slide.number}:`);
       lines.push(`  Texto: ${slide.text}`);
-      lines.push(`  Visual: ${slide.visual}`);
       if (slide.micro_anchor) lines.push(`  Micro-anchor: ${slide.micro_anchor}`);
-      lines.push("");
+      lines.push(`  Visual: ${slide.visual}`, "");
     }
   }
-
   return lines.join("\n");
 }
 
-function buildMd(
-  script: ScriptRow,
-  content: ReelContent | CarouselContent
-): string {
+function buildMd(script: ScriptRow, content: ReelContent | CarouselContent): string {
   const clientName = script.clients?.nombre ?? "—";
   const marca = script.clients?.marca ? ` — ${script.clients.marca}` : "";
   const lines: string[] = [
     `# ${script.structure_name}`,
     `**Cliente:** ${clientName}${marca} | **Tipo:** ${script.type === "reel" ? "Reel" : "Carrusel"} | **Versión:** v${script.version_number}`,
-    "",
-    `> ${script.brief}`,
-    "",
-    "---",
-    "",
+    "", `> ${script.brief}`, "", "---", "",
   ];
 
   if (script.type === "reel") {
@@ -190,52 +395,28 @@ function buildMd(
     lines.push("## Guion de producción", "");
     for (const block of c.blocks ?? []) {
       lines.push(`### ${block.name} — ${block.duration}`, "");
-      for (const line of block.lines ?? []) {
-        lines.push(`- **[${line.tag}]** "${line.text}"`);
-      }
+      for (const line of block.lines ?? []) lines.push(`- **[${line.tag}]** "${line.text}"`);
       lines.push("");
     }
     if (c.music_a || c.music_b) {
       lines.push("---", "", "## Música", "");
-      if (c.music_a) {
-        lines.push(
-          `### Estilo A (0–30s): ${c.music_a.name}`,
-          `_${c.music_a.why}_`,
-          "",
-          `\`${c.music_a.prompt}\``,
-          ""
-        );
-      }
-      if (c.music_b) {
-        lines.push(
-          `### Estilo B (30–60s): ${c.music_b.name}`,
-          `_${c.music_b.why}_`,
-          "",
-          `\`${c.music_b.prompt}\``,
-          ""
-        );
-      }
+      if (c.music_a) lines.push(`### Estilo A: ${c.music_a.name}`, `_${c.music_a.why}_`, "", `\`${c.music_a.prompt}\``, "");
+      if (c.music_b) lines.push(`### Estilo B: ${c.music_b.name}`, `_${c.music_b.why}_`, "", `\`${c.music_b.prompt}\``, "");
     }
   } else {
     const c = content as CarouselContent;
     lines.push("## Slides", "");
     for (const slide of c.slides ?? []) {
-      lines.push(`### Slide ${slide.number}`, "");
-      lines.push(`**${slide.text}**`, "");
-      lines.push(`_Visual:_ ${slide.visual}`, "");
+      lines.push(`### Slide ${slide.number}`, "", `**${slide.text}**`, "");
       if (slide.micro_anchor) lines.push(`↳ ${slide.micro_anchor}`, "");
+      lines.push(`_Visual:_ ${slide.visual}`, "");
     }
   }
-
   return lines.join("\n");
 }
 
 function slugify(s: string) {
-  return s
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .slice(0, 60);
+  return s.toLowerCase().replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").slice(0, 60);
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
@@ -243,6 +424,7 @@ function slugify(s: string) {
 type Props = {
   script: ScriptRow;
   versions: ScriptVersion[];
+  initialCopies: ScriptCopy[];
 };
 
 function formatDate(iso: string) {
@@ -253,12 +435,13 @@ function formatDate(iso: string) {
   });
 }
 
-export default function ScriptDetailClient({ script, versions }: Props) {
+const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+export default function ScriptDetailClient({ script, versions, initialCopies }: Props) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("view");
-  const [editContent, setEditContent] = useState<Record<string, unknown>>(
-    script.content
-  );
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [editContent, setEditContent] = useState<Record<string, unknown>>(script.content);
   const [isPending, startTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
   const [isUpdatingStatus, startStatusTransition] = useTransition();
@@ -266,13 +449,22 @@ export default function ScriptDetailClient({ script, versions }: Props) {
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [currentStatus, setCurrentStatus] = useState<ScriptStatus>(script.status ?? "idea");
+  const [showCopyPanel, setShowCopyPanel] = useState(false);
+  const [showCalModal, setShowCalModal] = useState(false);
+  const [calForm, setCalForm] = useState({
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+    week_number: 1,
+    position_preference: "fin" as "inicio" | "fin",
+  });
+  const [calPending, startCalTransition] = useTransition();
+  const [calSuccess, setCalSuccess] = useState(false);
   const downloadRef = useRef<HTMLDivElement>(null);
 
   const isReel = script.type === "reel";
   const content = script.content as ReelContent | CarouselContent;
   const showVersions = versions.length > 1;
 
-  // Cierra el menú de descarga al hacer click fuera
   useEffect(() => {
     if (!downloadMenuOpen) return;
     function handler(e: MouseEvent) {
@@ -286,6 +478,7 @@ export default function ScriptDetailClient({ script, versions }: Props) {
 
   function handleCancelEdit() {
     setMode("view");
+    setIsFullscreen(false);
     setEditContent(script.content);
     setSaveError(null);
   }
@@ -299,10 +492,7 @@ export default function ScriptDetailClient({ script, versions }: Props) {
   }
 
   function handleDownload(format: "txt" | "md") {
-    const text =
-      format === "txt"
-        ? buildTxt(script, content)
-        : buildMd(script, content);
+    const text = format === "txt" ? buildTxt(script, content) : buildMd(script, content);
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -318,6 +508,7 @@ export default function ScriptDetailClient({ script, versions }: Props) {
     startTransition(async () => {
       try {
         const newId = await saveScriptVersion(script.id, editContent);
+        setIsFullscreen(false);
         router.push(`/guiones/${newId}`);
       } catch (e) {
         setSaveError(e instanceof Error ? e.message : "Error al guardar");
@@ -338,16 +529,49 @@ export default function ScriptDetailClient({ script, versions }: Props) {
 
   function handleDelete() {
     if (!confirm("¿Eliminar este guion y todas sus versiones? Esta acción no se puede deshacer.")) return;
-    startDeleteTransition(async () => {
-      await deleteScript(script.id);
-    });
+    startDeleteTransition(async () => { await deleteScript(script.id); });
   }
 
   function handleStatusChange(newStatus: ScriptStatus) {
     setCurrentStatus(newStatus);
-    startStatusTransition(async () => {
-      await updateScriptStatus(script.id, newStatus);
+    startStatusTransition(async () => { await updateScriptStatus(script.id, newStatus); });
+  }
+
+  function handleAddToCalendar() {
+    setCalSuccess(false);
+    startCalTransition(async () => {
+      try {
+        await addScriptToCalendar(script.id, {
+          client_id: script.client_id ?? null,
+          title: script.structure_name,
+          format: script.type === "reel" ? "reel" : "carrusel",
+          month: calForm.month,
+          year: calForm.year,
+          week_number: calForm.week_number,
+          position_preference: calForm.position_preference,
+        });
+        setCalSuccess(true);
+        setTimeout(() => { setShowCalModal(false); setCalSuccess(false); }, 1500);
+      } catch (e) {
+        console.error(e);
+      }
     });
+  }
+
+  // ── Fullscreen overlay (Reel editor) ─────────────────────────────────────
+
+  if (isFullscreen && isReel && mode === "edit-manual") {
+    return (
+      <FullscreenReelEditor
+        content={editContent as ReelContent}
+        onChange={setEditContent}
+        onSave={handleSaveManual}
+        onClose={handleCancelEdit}
+        saving={isPending}
+        saveError={saveError}
+        title={script.structure_name}
+      />
+    );
   }
 
   return (
@@ -355,10 +579,7 @@ export default function ScriptDetailClient({ script, versions }: Props) {
       {/* ── Header ── */}
       <div className={styles.detailHeader}>
         <div className={styles.detailMeta}>
-          <Link
-            href="/guiones"
-            style={{ fontSize: 13, color: "var(--text-muted)", textDecoration: "none" }}
-          >
+          <Link href="/guiones" style={{ fontSize: 13, color: "var(--text-muted)", textDecoration: "none" }}>
             ← Guiones
           </Link>
           <p className={styles.detailClientName}>
@@ -367,10 +588,7 @@ export default function ScriptDetailClient({ script, versions }: Props) {
           </p>
           <h1 className={styles.detailTitle}>{script.structure_name}</h1>
           <p className={styles.detailSubtitle}>
-            <span
-              className={`${styles.typeBadge} ${styles[script.type]}`}
-              style={{ display: "inline-flex", marginRight: 8 }}
-            >
+            <span className={`${styles.typeBadge} ${styles[script.type]}`} style={{ display: "inline-flex", marginRight: 8 }}>
               {isReel ? "Reel" : "Carrusel"}
             </span>
             {formatDate(script.created_at)}
@@ -378,7 +596,6 @@ export default function ScriptDetailClient({ script, versions }: Props) {
         </div>
 
         <div className={styles.detailActions}>
-          {/* Status selector */}
           <div className={styles.statusSelector}>
             {STATUS_OPTIONS.map((opt) => (
               <button
@@ -392,30 +609,19 @@ export default function ScriptDetailClient({ script, versions }: Props) {
               </button>
             ))}
           </div>
-          <Link href="/guiones/nuevo" className="btn btn-primary">
-            + Nuevo guion
-          </Link>
-          <button
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="btn btn-ghost"
-            style={{ color: "var(--flare)" }}
-          >
+          <Link href="/guiones/nuevo" className="btn btn-primary">+ Nuevo guion</Link>
+          <button onClick={handleDelete} disabled={isDeleting} className="btn btn-ghost" style={{ color: "var(--flare)" }}>
             {isDeleting ? "Eliminando…" : "Eliminar"}
           </button>
         </div>
       </div>
 
-      {/* ── Selector de versiones ── */}
+      {/* ── Versiones ── */}
       {showVersions && (
         <div className={styles.versionBar}>
           <span className={styles.versionBarLabel}>Versiones:</span>
           {versions.map((v) => (
-            <Link
-              key={v.id}
-              href={`/guiones/${v.id}`}
-              className={`${styles.versionPill} ${v.id === script.id ? styles.versionPillActive : ""}`}
-            >
+            <Link key={v.id} href={`/guiones/${v.id}`} className={`${styles.versionPill} ${v.id === script.id ? styles.versionPillActive : ""}`}>
               v{v.version_number}
               {v.is_latest && <span className={styles.versionLatestDot} />}
             </Link>
@@ -423,7 +629,7 @@ export default function ScriptDetailClient({ script, versions }: Props) {
         </div>
       )}
 
-      {/* ── Barra de acciones de edición ── */}
+      {/* ── Barra de acciones ── */}
       <div className={styles.actionBar}>
         <div className={styles.actionBarLeft}>
           <button
@@ -433,6 +639,7 @@ export default function ScriptDetailClient({ script, versions }: Props) {
               } else {
                 setMode("edit-manual");
                 setEditContent(script.content);
+                if (isReel) setIsFullscreen(true);
               }
             }}
             className={`btn ${mode === "edit-manual" ? "btn-secondary" : "btn-ghost"}`}
@@ -448,35 +655,37 @@ export default function ScriptDetailClient({ script, versions }: Props) {
         </div>
 
         <div className={styles.actionBarRight}>
+          <button
+            className={`btn btn-ghost ${showCopyPanel ? "btn-secondary" : ""}`}
+            onClick={() => setShowCopyPanel((v) => !v)}
+          >
+            ✍ Copy Expert
+          </button>
+
+          <button
+            className="btn btn-ghost"
+            onClick={() => setShowCalModal(true)}
+          >
+            📅 Calendario
+          </button>
+
           {isReel && (
-            <button
-              onClick={handleCopy}
-              className={`btn btn-ghost ${copied ? styles.copiedState : ""}`}
-            >
+            <button onClick={handleCopy} className={`btn btn-ghost ${copied ? styles.copiedState : ""}`}>
               {copied ? "¡Copiado!" : "Copiar voz en off"}
             </button>
           )}
 
           <div ref={downloadRef} style={{ position: "relative" }}>
-            <button
-              onClick={() => setDownloadMenuOpen((o) => !o)}
-              className="btn btn-ghost"
-            >
+            <button onClick={() => setDownloadMenuOpen((o) => !o)} className="btn btn-ghost">
               Descargar ↓
             </button>
             {downloadMenuOpen && (
               <div className={styles.downloadMenu}>
-                <button
-                  className={styles.downloadMenuItem}
-                  onClick={() => handleDownload("txt")}
-                >
+                <button className={styles.downloadMenuItem} onClick={() => handleDownload("txt")}>
                   <span className={styles.downloadExt}>.txt</span>
                   <span className={styles.downloadDesc}>Texto plano</span>
                 </button>
-                <button
-                  className={styles.downloadMenuItem}
-                  onClick={() => handleDownload("md")}
-                >
+                <button className={styles.downloadMenuItem} onClick={() => handleDownload("md")}>
                   <span className={styles.downloadExt}>.md</span>
                   <span className={styles.downloadDesc}>Markdown</span>
                 </button>
@@ -486,15 +695,11 @@ export default function ScriptDetailClient({ script, versions }: Props) {
         </div>
       </div>
 
-      {/* ── Guardar edición manual ── */}
-      {mode === "edit-manual" && (
+      {/* ── Guardar edición manual (carousel) ── */}
+      {mode === "edit-manual" && !isReel && (
         <div className={styles.saveBar}>
           {saveError && <span className={styles.saveError}>{saveError}</span>}
-          <button
-            onClick={handleSaveManual}
-            disabled={isPending}
-            className="btn btn-primary"
-          >
+          <button onClick={handleSaveManual} disabled={isPending} className="btn btn-primary">
             {isPending ? "Guardando…" : "Guardar como nueva versión"}
           </button>
         </div>
@@ -522,20 +727,100 @@ export default function ScriptDetailClient({ script, versions }: Props) {
       {/* ── Contenido ── */}
       {mode === "edit-manual" ? (
         isReel ? (
-          <ReelEditor
-            content={editContent as ReelContent}
-            onChange={setEditContent}
-          />
+          <ReelEditor content={editContent as ReelContent} onChange={setEditContent} />
         ) : (
-          <CarouselEditor
-            content={editContent as CarouselContent}
-            onChange={setEditContent}
-          />
+          <CarouselEditor content={editContent as CarouselContent} onChange={setEditContent} />
         )
       ) : isReel ? (
         <ReelViewer content={content as ReelContent} />
       ) : (
         <CarouselViewer content={content as CarouselContent} />
+      )}
+
+      {/* ── Copy Expert Panel ── */}
+      {showCopyPanel && (
+        <CopyExpertPanel
+          scriptId={script.id}
+          scriptContent={script.content}
+          scriptType={script.type}
+          initialCopies={initialCopies}
+        />
+      )}
+
+      {/* ── Modal: Agregar al calendario ── */}
+      {showCalModal && (
+        <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && setShowCalModal(false)}>
+          <div className={styles.calModal}>
+            <div className={styles.calModalHeader}>
+              <h3 className={styles.calModalTitle}>📅 Agregar al calendario</h3>
+              <button className={styles.calModalClose} onClick={() => setShowCalModal(false)}>✕</button>
+            </div>
+            <div className={styles.calModalBody}>
+              <p className={styles.calModalDesc}>
+                Este guion se añadirá al Dashboard de publicaciones como una pieza de tipo <strong>{isReel ? "Reel" : "Carrusel"}</strong>.
+              </p>
+              <div className={styles.calFormRow}>
+                <div className="field">
+                  <label className="field-label">Mes</label>
+                  <select
+                    className="select"
+                    value={calForm.month}
+                    onChange={(e) => setCalForm((p) => ({ ...p, month: parseInt(e.target.value) }))}
+                  >
+                    {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field-label">Año</label>
+                  <input
+                    className="input"
+                    type="number"
+                    value={calForm.year}
+                    onChange={(e) => setCalForm((p) => ({ ...p, year: parseInt(e.target.value) }))}
+                  />
+                </div>
+              </div>
+              <div className={styles.calFormRow}>
+                <div className="field">
+                  <label className="field-label">Semana</label>
+                  <select
+                    className="select"
+                    value={calForm.week_number}
+                    onChange={(e) => setCalForm((p) => ({ ...p, week_number: parseInt(e.target.value) }))}
+                  >
+                    <option value={1}>Semana 1</option>
+                    <option value={2}>Semana 2</option>
+                    <option value={3}>Semana 3</option>
+                    <option value={4}>Semana 4</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field-label">Posición</label>
+                  <select
+                    className="select"
+                    value={calForm.position_preference}
+                    onChange={(e) => setCalForm((p) => ({ ...p, position_preference: e.target.value as "inicio" | "fin" }))}
+                  >
+                    <option value="fin">Al final de la semana</option>
+                    <option value="inicio">Al inicio de la semana</option>
+                  </select>
+                </div>
+              </div>
+              {calSuccess ? (
+                <p style={{ color: "var(--emerald)", fontWeight: 600, textAlign: "center", marginTop: 8 }}>
+                  ✓ Añadido al calendario
+                </p>
+              ) : (
+                <div className={styles.calModalActions}>
+                  <button className="btn btn-ghost" onClick={() => setShowCalModal(false)}>Cancelar</button>
+                  <button className="btn btn-primary" onClick={handleAddToCalendar} disabled={calPending}>
+                    {calPending ? "Agregando…" : "Agregar al calendario"}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

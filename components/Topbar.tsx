@@ -5,9 +5,10 @@ import styles from "./Topbar.module.css";
 import LogoutButton from "./LogoutButton";
 
 const TITLES: Record<string, string> = {
-  "/dashboard": "Inicio",
+  "/dashboard": "Dashboard",
   "/clientes": "Clientes",
   "/guiones": "Guiones",
+  "/prompts": "Prompts de imagen",
   "/cerebro": "Cerebro",
 };
 
