@@ -763,16 +763,6 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
         </div>
       </div>
 
-      {/* ── Guardar edición manual (carousel) ── */}
-      {mode === "edit-manual" && !isReel && (
-        <div className={styles.saveBar}>
-          {saveError && <span className={styles.saveError}>{saveError}</span>}
-          <button onClick={handleSaveManual} disabled={isPending} className="btn btn-primary">
-            {isPending ? "Guardando…" : "Guardar como nueva versión"}
-          </button>
-        </div>
-      )}
-
       {/* ── Brief ── */}
       <div className={styles.briefBox}>
         <p className={styles.briefLabel}>Brief</p>
@@ -790,6 +780,19 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
         <ReelViewer content={content as ReelContent} />
       ) : (
         <CarouselViewer content={content as CarouselContent} />
+      )}
+
+      {/* ── Guardar edición manual (sticky footer) ── */}
+      {mode === "edit-manual" && !isFullscreen && (
+        <div className={styles.saveBar}>
+          {saveError && <span className={styles.saveError}>{saveError}</span>}
+          <button className="btn btn-ghost" onClick={handleCancelEdit}>
+            Cancelar
+          </button>
+          <button onClick={handleSaveManual} disabled={isPending} className="btn btn-primary">
+            {isPending ? "Guardando…" : "Guardar cambios"}
+          </button>
+        </div>
       )}
 
       {/* ── Copy Expert Panel ── */}
