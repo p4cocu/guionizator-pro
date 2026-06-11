@@ -160,6 +160,7 @@ export async function listInstagramAccounts() {
   return (data ?? []).map((a) => ({
     id: a.id as string,
     username: (a.username as string) ?? a.ig_user_id,
+    clientId: (a.client_id as string | null) ?? null,
     clientName:
       (a.clients as { nombre?: string } | null)?.nombre ?? null,
   }));
@@ -208,6 +209,129 @@ export async function fetchBestPosts(accountId: string): Promise<BestPostsResult
         : "No se pudieron traer las métricas.";
     return { ok: false, error: msg };
   }
+}
+
+// ─── Transcripción ───────────────────────────────────────────────────────────
+
+export type QueueTranscriptionResult =
+  | { ok: true; jobId: string; alreadyQueued: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Registra el media en instagram_media y encola un job de transcripción.
+ * Si ya hay un job pending/processing/done para ese media, lo devuelve sin duplicar.
+ */
+export async function queueTranscription(
+  accountId: string,
+  post: {
+    ig_media_id: string;
+    media_type: string;
+    media_url?: string;
+    thumbnail_url?: string;
+    permalink?: string;
+    caption?: string;
+    timestamp?: string;
+  },
+): Promise<QueueTranscriptionResult> {
+  const { supabase, user } = await getAuthUser();
+
+  // Upsert en instagram_media para tener el registro listo
+  const { error: upsertErr } = await supabase.from("instagram_media").upsert(
+    {
+      owner_id: user.id,
+      account_id: accountId,
+      ig_media_id: post.ig_media_id,
+      media_type: post.media_type,
+      media_url: post.media_url ?? null,
+      thumbnail_url: post.thumbnail_url ?? null,
+      permalink: post.permalink ?? null,
+      caption: post.caption ?? null,
+      posted_at: post.timestamp ?? null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "account_id,ig_media_id" },
+  );
+  if (upsertErr) return { ok: false, error: upsertErr.message };
+
+  // Verificar si ya existe un job activo (no queremos duplicar)
+  const { data: existing } = await supabase
+    .from("transcription_jobs")
+    .select("id, status")
+    .eq("account_id", accountId)
+    .eq("ig_media_id", post.ig_media_id)
+    .in("status", ["pending", "processing", "done"])
+    .maybeSingle();
+
+  if (existing) {
+    return { ok: true, jobId: existing.id as string, alreadyQueued: true };
+  }
+
+  const { data: job, error: jobErr } = await supabase
+    .from("transcription_jobs")
+    .insert({
+      owner_id: user.id,
+      account_id: accountId,
+      ig_media_id: post.ig_media_id,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+
+  if (jobErr || !job) return { ok: false, error: jobErr?.message ?? "Error al crear job" };
+  return { ok: true, jobId: job.id as string, alreadyQueued: false };
+}
+
+export type TranscriptionStatus = {
+  status: "pending" | "processing" | "done" | "error";
+  transcript?: string;
+  error?: string;
+};
+
+/**
+ * Devuelve el estado de transcripción de todos los reels de una cuenta,
+ * keyed por ig_media_id.
+ */
+export async function getTranscriptionStatuses(
+  accountId: string,
+): Promise<{ ok: true; statuses: Record<string, TranscriptionStatus> } | { ok: false; error: string }> {
+  const { supabase, user } = await getAuthUser();
+
+  // Traer jobs (el más reciente por media para evitar duplicados de reintentos)
+  const { data: jobs, error: jobsErr } = await supabase
+    .from("transcription_jobs")
+    .select("ig_media_id, status, error")
+    .eq("account_id", accountId)
+    .eq("owner_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (jobsErr) return { ok: false, error: jobsErr.message };
+
+  // Traer transcripciones guardadas
+  const { data: media } = await supabase
+    .from("instagram_media")
+    .select("ig_media_id, transcript")
+    .eq("account_id", accountId)
+    .eq("owner_id", user.id)
+    .not("transcript", "is", null);
+
+  const transcriptMap: Record<string, string> = {};
+  for (const m of media ?? []) {
+    if (m.transcript) transcriptMap[m.ig_media_id as string] = m.transcript as string;
+  }
+
+  // Merge: un entry por ig_media_id (el más reciente job gana)
+  const statuses: Record<string, TranscriptionStatus> = {};
+  for (const j of jobs ?? []) {
+    const id = j.ig_media_id as string;
+    if (statuses[id]) continue; // ya procesamos uno más reciente
+    statuses[id] = {
+      status: j.status as TranscriptionStatus["status"],
+      transcript: transcriptMap[id],
+      error: j.error as string | undefined,
+    };
+  }
+
+  return { ok: true, statuses };
 }
 
 /** Refresca el token y actualiza la fecha de expiración. */

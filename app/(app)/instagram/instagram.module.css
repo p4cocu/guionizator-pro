@@ -54,6 +54,117 @@
   color: var(--text-muted);
 }
 
+/* ── Análisis con IA ─────────────────────────────────── */
+.analyzeBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.analyzeTitle {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.analyzeHint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.analysisPanel {
+  padding: 24px;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.analysisResumen {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.analysisBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.analysisList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.analysisItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 14px;
+  border-left: 2px solid var(--emerald);
+}
+
+.analysisItem strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.analysisItem span {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.ideaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.ideaCard {
+  background: var(--ink-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ideaHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ideaHead strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.ideaHook {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--emerald);
+  line-height: 1.4;
+}
+
+.ideaWhy {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
 /* ── Selector de orden ───────────────────────────────── */
 .sortRow {
   display: flex;
@@ -168,4 +279,98 @@
   color: var(--text-muted);
   border-top: 1px solid var(--glass-border);
   padding-top: 8px;
+}
+
+/* postLink: el <a> interno que ocupa la parte clickable del card */
+.postLink {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: var(--text);
+  flex: 1;
+}
+
+/* ── Transcripción ───────────────────────────────────────── */
+.transcriptBar {
+  padding: 10px 12px;
+  border-top: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.transcriptBtn {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+  font-size: 12px;
+  border-radius: var(--r-pill);
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  align-self: flex-start;
+}
+
+.transcriptBtn:hover:not(:disabled) {
+  border-color: var(--emerald);
+  color: var(--text);
+}
+
+.transcriptBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.transcriptBadge {
+  font-size: 12px;
+  border-radius: var(--r-pill);
+  padding: 4px 10px;
+  align-self: flex-start;
+  cursor: default;
+}
+
+.badgePending {
+  background: color-mix(in srgb, var(--signal) 15%, transparent);
+  color: var(--signal);
+  border: none;
+}
+
+.badgeProcessing {
+  background: color-mix(in srgb, var(--emerald) 15%, transparent);
+  color: var(--emerald);
+  border: none;
+}
+
+.badgeDone {
+  background: color-mix(in srgb, var(--emerald) 20%, transparent);
+  color: var(--emerald);
+  border: none;
+  cursor: pointer;
+}
+
+.transcriptError {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.transcriptError span {
+  font-size: 11px;
+  color: var(--flare);
+}
+
+.transcriptText {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  background: color-mix(in srgb, var(--glass-border) 30%, transparent);
+  border-radius: var(--r-sm);
+  padding: 8px;
+  margin: 0;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.transcribedNote {
+  color: var(--emerald);
 }
