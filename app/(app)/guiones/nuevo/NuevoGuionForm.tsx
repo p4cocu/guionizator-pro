@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveScriptSilent, linkScriptToCalendar } from "../actions";
+import { saveScriptSilent, linkScriptToCalendar, saveScriptWithNewIdea } from "../actions";
 import styles from "../guiones.module.css";
 
 type Cliente = { id: string; nombre: string; marca: string | null };
@@ -571,7 +571,7 @@ export default function NuevoGuionForm({
     const g = generatedScripts[idx];
     startTransition(async () => {
       try {
-        const id = await saveScriptSilent({
+        const payload = {
           client_id: clientId,
           type,
           brief,
@@ -579,9 +579,16 @@ export default function NuevoGuionForm({
           title: g.customTitle.trim() || null,
           content: g.content as Record<string, unknown>,
           brain_version_id: g.brainVersionId,
-        });
+        };
+        let id: string;
         if (initialCalendarId) {
+          // Viene de una idea del dashboard: guarda el favorito y vincúlalo
+          // a esa idea (solo se permite uno).
+          id = await saveScriptSilent(payload);
           await linkScriptToCalendar(id, initialCalendarId);
+        } else {
+          // Nace en la pestaña Guiones: crea también la idea en el dashboard.
+          id = await saveScriptWithNewIdea(payload);
         }
         setGeneratedScripts((prev) =>
           prev.map((x, i) => (i === idx ? { ...x, savedId: id } : x))
@@ -595,6 +602,10 @@ export default function NuevoGuionForm({
   const allSaved =
     generatedScripts.length > 0 && generatedScripts.every((g) => g.savedId);
   const anySaved = generatedScripts.some((g) => g.savedId);
+  // Desde una idea del dashboard solo se guarda 1 guion: una vez elegido uno,
+  // las demás versiones quedan bloqueadas como comparación descartada.
+  const fromIdea = !!initialCalendarId;
+  const lockOthers = fromIdea && anySaved;
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -907,6 +918,13 @@ export default function NuevoGuionForm({
       {/* ── PASO 4: Guiones con tabs ── */}
       {step === 4 && generatedScripts.length > 0 && (
         <div>
+          {fromIdea && generatedScripts.length > 1 && !anySaved && (
+            <p className={styles.multiSelectHint}>
+              Vienes de una idea del dashboard: compara las versiones y guarda
+              solo la que más te guste. Esa se vinculará a la idea.
+            </p>
+          )}
+
           {generatedScripts.length > 1 && (
             <div className={styles.scriptTabs}>
               {generatedScripts.map((g, i) => (
@@ -939,7 +957,7 @@ export default function NuevoGuionForm({
                   <CarouselViewer content={g.content as CarouselContent} />
                 )}
 
-                {!g.regenerating && !g.savedId && (
+                {!g.regenerating && !g.savedId && !lockOthers && (
                   <InlineAiChat
                     state={g.inlineAi}
                     onSubmit={(instr) => handleInlineAiSubmit(activeTab, instr)}
@@ -948,7 +966,7 @@ export default function NuevoGuionForm({
                   />
                 )}
 
-                {!g.regenerating && !g.savedId && (
+                {!g.regenerating && !g.savedId && !lockOthers && (
                   <div className="field" style={{ marginTop: 16 }}>
                     <label className="field-label">Título de publicación (opcional)</label>
                     <input
@@ -999,6 +1017,17 @@ export default function NuevoGuionForm({
                     >
                       ✓ Ver guion →
                     </button>
+                  ) : lockOthers ? (
+                    <span
+                      style={{
+                        marginLeft: "auto",
+                        alignSelf: "center",
+                        fontSize: 13,
+                        color: "var(--text-dim)",
+                      }}
+                    >
+                      Ya elegiste una versión para esta idea.
+                    </span>
                   ) : (
                     <button
                       type="button"
@@ -1016,14 +1045,16 @@ export default function NuevoGuionForm({
 
           {anySaved && (
             <div className={styles.savedBanner}>
-              {allSaved
-                ? `${generatedScripts.length} guion${generatedScripts.length > 1 ? "es guardados" : " guardado"}`
-                : `${generatedScripts.filter((g) => g.savedId).length} de ${generatedScripts.length} guardados`}
+              {fromIdea
+                ? "Guion guardado y vinculado a la idea del dashboard"
+                : allSaved
+                ? `${generatedScripts.length} guion${generatedScripts.length > 1 ? "es guardados" : " guardado"} · ${generatedScripts.length > 1 ? "ideas creadas" : "idea creada"} en el dashboard`
+                : `${generatedScripts.filter((g) => g.savedId).length} de ${generatedScripts.length} guardados · ideas creadas en el dashboard`}
               <button
                 className="btn btn-ghost"
-                onClick={() => router.push("/guiones")}
+                onClick={() => router.push(fromIdea ? "/dashboard" : "/guiones")}
               >
-                Ver en biblioteca →
+                {fromIdea ? "Volver al dashboard →" : "Ver en biblioteca →"}
               </button>
             </div>
           )}

@@ -97,6 +97,78 @@ export async function saveScriptSilent(data: {
   return script.id;
 }
 
+/**
+ * Guarda un guion nuevo Y crea una idea vinculada en el dashboard de
+ * publicaciones (content_calendar). Se usa cuando el guion nace en la pestaña
+ * Guiones (sin idea previa): dashboard y guiones quedan como dos vistas de lo
+ * mismo. Entra con estatus "idea" en la primera semana del mes actual.
+ */
+export async function saveScriptWithNewIdea(data: {
+  client_id: string;
+  type: ScriptType;
+  brief: string;
+  structure_name: string;
+  title?: string | null;
+  content: Record<string, unknown>;
+  brain_version_id: string | null;
+}): Promise<string> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data: script, error } = await supabase
+    .from("scripts")
+    .insert({
+      owner_id: user.id,
+      client_id: data.client_id,
+      type: data.type,
+      brief: data.brief,
+      structure_name: data.structure_name,
+      title: data.title ?? null,
+      content: data.content,
+      brain_version_id: data.brain_version_id,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+
+  const { data: existing } = await supabase
+    .from("content_calendar")
+    .select("position")
+    .eq("owner_id", user.id)
+    .eq("month", month)
+    .eq("year", year)
+    .eq("week_number", 1)
+    .order("position", { ascending: false })
+    .limit(1);
+
+  const maxPos = (existing?.[0]?.position ?? -1) as number;
+
+  const { error: calError } = await supabase.from("content_calendar").insert({
+    owner_id: user.id,
+    client_id: data.client_id,
+    script_id: script.id,
+    title: data.title?.trim() || data.structure_name,
+    format: data.type === "carousel" ? "carrusel" : "reel",
+    platforms: ["instagram"],
+    status: "idea",
+    month,
+    year,
+    week_number: 1,
+    position: maxPos + 1,
+    brief: data.brief || null,
+  });
+
+  if (calError) throw new Error(calError.message);
+
+  revalidatePath("/guiones");
+  revalidatePath("/dashboard");
+  return script.id;
+}
+
 export async function updateScriptTitle(
   scriptId: string,
   title: string
