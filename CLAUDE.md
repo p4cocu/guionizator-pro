@@ -84,10 +84,31 @@ knowledge/              # fuente original de la base de conocimiento
   `lib/ai/anthropic.ts` (prompt caching), `app/api/ai/route.ts`, pantalla Cerebro con versionado.
 - [x] **Fase 2** — Clientes (CRM-lite): tabla `clients` + `client_research` + RLS, CRUD completo
   en `/clientes` (listado, crear, editar, eliminar), barra de completeness 0–100, sección de investigación por cliente.
-- [ ] **Fase 3** — Generación: brief → 3 estructuras + explicación → guion (Reel/carrusel).
-- [ ] **Fase 4** — Edición por IA (lenguaje natural) + editor manual + versionado/export.
-- [ ] **Fase 5** — Mejora continua: detección de info pobre + investigación + feedback.
+- [x] **Fase 3** — Generación: brief → 3 estructuras + explicación → guion (Reel/carrusel).
+- [x] **Fase 4** — Edición: flujo adoptado = exportar el guion generado a Claude/Gemini Projects
+  para pulido externo y regresar el resultado a la app. No se implementó editor IA in-app
+  (tiempos de respuesta inaceptables). El editor manual sí está operativo.
+- [~] **Fase 5** — Mejora continua: **descartada como sistema automático.** La mejora se hace
+  puntualmente: (a) agregar campo "tono de voz" (archivo de texto plano) al perfil de cliente
+  para enriquecer los guiones, (b) ajustes directos al knowledge cuando Paco los solicite.
 - [ ] **Fase 6** — Hardening multi-tenant + base SaaS + placeholder YouTube.
 
-> Al cerrar cada fase: actualizar este archivo y entregar a Paco un prompt copy-paste
-> para la siguiente fase.
+## Integración Instagram (Etapa A — lectura de métricas)
+
+Flujo **Instagram Login** (`graph.instagram.com`, NO Facebook Login). Tabla
+`instagram_accounts` (RLS owner-only), `lib/instagram/client.ts`,
+`app/(app)/instagram/` (dashboard + actions), panel de conexión en perfil de cliente.
+Etapas B (publicar) y C (programar) en **stand-by indefinido**.
+
+### ⚠️ Pendiente de infraestructura — Auto-refresh del token de Instagram
+
+El long-lived token de Instagram **caduca a los ~60 días**. Hoy se renueva con un
+**botón manual** ("Renovar token" en el perfil del cliente). Esto es frágil: si Paco
+no entra a renovar, las cuentas dejan de traer métricas.
+
+**RECORDATORIO PARA CLAUDE:** cuando Paco vaya a modificar la infraestructura del
+proyecto (cron jobs, Netlify Functions, scheduled functions, edge functions, o
+cualquier cambio de backend/infra), **recomendar proactivamente** automatizar el
+refresh con un cron (ej. Netlify Scheduled Function diaria) que llame a
+`refreshInstagramToken` para las cuentas cuyo `token_expires_at` esté dentro de los
+próximos ~7 días. No forzarlo fuera de ese contexto (Etapa B/C en stand-by).
