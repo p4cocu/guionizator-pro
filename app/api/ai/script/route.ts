@@ -21,63 +21,15 @@ function buildClientContext(c: Record<string, string | null>): string {
     .join("\n");
 }
 
+// Reels: only voice_off on first generation — production blocks are generated
+// separately via /api/ai/production-blocks once the script is polished.
 const REEL_FORMAT = `{
-  "voice_off": "texto completo para teleprompter, flujo continuo sin etiquetas",
-  "blocks": [
-    {
-      "name": "HOOK",
-      "duration": "Xs",
-      "lines": [
-        {"tag": "CÁMARA", "text": "texto del guion"}
-      ]
-    }
-  ],
-  "music_a": {"name": "nombre ≤5 palabras", "why": "por qué funciona en 1-2 oraciones", "prompt": "prompt de generación ≤200 chars sin nombres de artistas o marcas"},
-  "music_b": {"name": "...", "why": "...", "prompt": "..."}
+  "voice_off": "texto completo para teleprompter, flujo continuo sin etiquetas, máximo 150-200 palabras para 30-60 segundos"
 }`;
 
-// Julian Alborna format includes source card
+// Julian Alborna format — voice_off only, includes source card
 const REEL_FORMAT_ALBORNA = `{
-  "voice_off": "texto completo para teleprompter, flujo continuo sin etiquetas",
-  "blocks": [
-    {
-      "name": "MICRO-HISTORIA",
-      "duration": "Xs",
-      "lines": [
-        {"tag": "CÁMARA", "text": "texto del guion"}
-      ]
-    },
-    {
-      "name": "PUENTE",
-      "duration": "Xs",
-      "lines": [
-        {"tag": "CÁMARA", "text": "texto del guion"}
-      ]
-    },
-    {
-      "name": "HISTORIA REAL",
-      "duration": "Xs",
-      "lines": [
-        {"tag": "CÁMARA", "text": "texto del guion"}
-      ]
-    },
-    {
-      "name": "LECCIÓN",
-      "duration": "Xs",
-      "lines": [
-        {"tag": "CÁMARA", "text": "texto del guion"}
-      ]
-    },
-    {
-      "name": "CIERRE",
-      "duration": "Xs",
-      "lines": [
-        {"tag": "CÁMARA", "text": "texto del guion"}
-      ]
-    }
-  ],
-  "music_a": {"name": "nombre ≤5 palabras", "why": "por qué funciona en 1-2 oraciones", "prompt": "prompt de generación ≤200 chars sin nombres de artistas o marcas"},
-  "music_b": {"name": "...", "why": "...", "prompt": "..."},
+  "voice_off": "texto completo para teleprompter, flujo continuo sin etiquetas, máximo 150-200 palabras",
   "source": {"title": "Título exacto de la película, serie, libro o descripción del evento real", "type": "película | serie | libro | historia real", "description": "contexto breve de la fuente en 1 oración — ¿por qué es relevante?"}
 }`;
 
@@ -192,6 +144,17 @@ ${format}`;
       parsed = JSON.parse(cleaned);
     } catch {
       return NextResponse.json({ error: "Error al parsear respuesta de IA", raw: result.text }, { status: 500 });
+    }
+
+    // Normalise reel content: production blocks are generated separately
+    if (type === "reel") {
+      parsed = {
+        voice_off: parsed.voice_off ?? "",
+        blocks: [],
+        music_a: null,
+        music_b: null,
+        ...(parsed.source ? { source: parsed.source } : {}),
+      };
     }
 
     return NextResponse.json({

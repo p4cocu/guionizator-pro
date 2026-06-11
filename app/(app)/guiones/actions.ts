@@ -103,15 +103,28 @@ export async function updateScriptTitle(
 ): Promise<void> {
   const { supabase, user } = await getAuthUser();
 
+  const trimmed = title.trim() || null;
+
   const { error } = await supabase
     .from("scripts")
-    .update({ title: title.trim() || null })
+    .update({ title: trimmed })
     .eq("id", scriptId)
     .eq("owner_id", user.id);
 
   if (error) throw new Error(error.message);
+
+  // Sync to any linked calendar entries
+  if (trimmed) {
+    await supabase
+      .from("content_calendar")
+      .update({ title: trimmed })
+      .eq("script_id", scriptId)
+      .eq("owner_id", user.id);
+  }
+
   revalidatePath("/guiones");
   revalidatePath(`/guiones/${scriptId}`);
+  revalidatePath("/dashboard");
 }
 
 export async function deleteScript(id: string) {
@@ -250,6 +263,7 @@ export async function saveScriptVersion(
       type: current.type,
       brief: current.brief,
       structure_name: current.structure_name,
+      title: current.title ?? null,
       content,
       brain_version_id: current.brain_version_id,
       parent_id: rootId,

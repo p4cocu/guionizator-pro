@@ -141,7 +141,26 @@ export async function updateCalendarEntry(
     .eq("owner_id", user.id);
 
   if (error) throw new Error(error.message);
+
+  // Sync title to linked script
+  if (data.title?.trim()) {
+    const { data: entry } = await supabase
+      .from("content_calendar")
+      .select("script_id")
+      .eq("id", id)
+      .eq("owner_id", user.id)
+      .single();
+    if (entry?.script_id) {
+      await supabase
+        .from("scripts")
+        .update({ title: data.title.trim() })
+        .eq("id", entry.script_id)
+        .eq("owner_id", user.id);
+    }
+  }
+
   revalidatePath("/dashboard");
+  revalidatePath("/guiones");
 }
 
 export async function deleteCalendarEntry(id: string) {

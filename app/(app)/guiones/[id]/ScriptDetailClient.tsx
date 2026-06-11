@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -69,7 +70,15 @@ function renderMarkdown(text: string) {
 
 // ── Viewers (read-only) ──────────────────────────────────────────────────────
 
-function ReelViewer({ content }: { content: ReelContent }) {
+type ReelViewerProps = {
+  content: ReelContent;
+  onRegenerate?: () => void;
+  isRegenerating?: boolean;
+};
+
+function ReelViewer({ content, onRegenerate, isRegenerating }: ReelViewerProps) {
+  const hasBlocks = (content.blocks?.length ?? 0) > 0;
+
   return (
     <div className={styles.scriptContainer}>
       <div className={styles.voiceOff}>
@@ -77,9 +86,30 @@ function ReelViewer({ content }: { content: ReelContent }) {
         <p className={styles.voiceOffText}>{renderMarkdown(content.voice_off)}</p>
       </div>
 
-      <p className={styles.sectionTitle} style={{ marginTop: 8 }}>
-        Guion de producción
-      </p>
+      <div className={styles.sectionTitleRow} style={{ marginTop: 8 }}>
+        <p className={styles.sectionTitle}>Guion de producción</p>
+        {onRegenerate && (
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: 12, padding: "4px 14px" }}
+            onClick={onRegenerate}
+            disabled={isRegenerating}
+          >
+            {isRegenerating
+              ? "Generando…"
+              : hasBlocks
+              ? "↺ Regenerar desde voz en off"
+              : "✦ Generar guión de producción"}
+          </button>
+        )}
+      </div>
+
+      {!hasBlocks && !isRegenerating && (
+        <p className={styles.emptyBlocks}>
+          El guión de producción se genera una vez que la voz en off esté pulida.
+        </p>
+      )}
+
       {content.blocks?.map((block, i) => (
         <div key={i} className={styles.scriptBlock}>
           <div className={styles.scriptBlockHeader}>
@@ -465,6 +495,8 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
   });
   const [calPending, startCalTransition] = useTransition();
   const [calSuccess, setCalSuccess] = useState(false);
+  const [isRegeneratingBlocks, setIsRegeneratingBlocks] = useState(false);
+  const [regenBlocksError, setRegenBlocksError] = useState<string | null>(null);
   const downloadRef = useRef<HTMLDivElement>(null);
 
   const isReel = script.type === "reel";
@@ -568,7 +600,7 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
       try {
         await addScriptToCalendar(script.id, {
           client_id: script.client_id ?? null,
-          title: script.structure_name,
+          title: script.title || script.structure_name,
           format: script.type === "reel" ? "reel" : "carrusel",
           month: calForm.month,
           year: calForm.year,
@@ -583,10 +615,40 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
     });
   }
 
+  async function handleGenerateBlocks() {
+    if (!isReel) return;
+    const reelContent = content as ReelContent;
+    setIsRegeneratingBlocks(true);
+    setRegenBlocksError(null);
+    try {
+      const res = await fetch("/api/ai/production-blocks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ script_id: script.id, voice_off: reelContent.voice_off }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al generar bloques");
+      const newContent: ReelContent = {
+        ...reelContent,
+        blocks: data.blocks ?? [],
+        music_a: data.music_a ?? null,
+        music_b: data.music_b ?? null,
+      };
+      const newId = await saveScriptVersion(script.id, newContent as Record<string, unknown>);
+      router.push(`/guiones/${newId}`);
+    } catch (e) {
+      setRegenBlocksError(e instanceof Error ? e.message : "Error al generar bloques");
+      setIsRegeneratingBlocks(false);
+    }
+  }
+
   // ── Fullscreen overlay (Reel editor) ─────────────────────────────────────
+  // Rendered via portal so it escapes the .inner stacking context (z-index:1)
+  // that would otherwise put the topbar (z-index:299) above the overlay.
 
   if (isFullscreen && isReel && mode === "edit-manual") {
-    return (
+    if (typeof document === "undefined") return null;
+    return createPortal(
       <FullscreenReelEditor
         content={editContent as ReelContent}
         onChange={setEditContent}
@@ -595,7 +657,8 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
         saving={isPending}
         saveError={saveError}
         title={script.structure_name}
-      />
+      />,
+      document.body
     );
   }
 
@@ -777,9 +840,17 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
           <CarouselEditor content={editContent as CarouselContent} onChange={setEditContent} />
         )
       ) : isReel ? (
-        <ReelViewer content={content as ReelContent} />
+        <ReelViewer
+          content={content as ReelContent}
+          onRegenerate={handleGenerateBlocks}
+          isRegenerating={isRegeneratingBlocks}
+        />
       ) : (
         <CarouselViewer content={content as CarouselContent} />
+      )}
+
+      {regenBlocksError && (
+        <p style={{ color: "var(--flare)", fontSize: 13, marginTop: 8 }}>{regenBlocksError}</p>
       )}
 
       {/* ── Guardar edición manual (sticky footer) ── */}

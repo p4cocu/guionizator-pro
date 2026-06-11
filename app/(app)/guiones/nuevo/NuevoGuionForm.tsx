@@ -96,13 +96,21 @@ function Steps({ current }: { current: Step }) {
 // ── Viewers ─────────────────────────────────────────────────────────────────
 
 function ReelViewer({ content }: { content: ReelContent }) {
+  const hasBlocks = (content.blocks?.length ?? 0) > 0;
   return (
     <div className={styles.scriptContainer}>
       <div className={styles.voiceOff}>
         <p className={styles.voiceOffLabel}>Voz en off (teleprompter)</p>
         <p className={styles.voiceOffText}>{content.voice_off}</p>
       </div>
-      <p className={styles.sectionTitle}>Guion de producción</p>
+      <div className={styles.sectionTitleRow} style={{ marginTop: 8 }}>
+        <p className={styles.sectionTitle}>Guion de producción</p>
+      </div>
+      {!hasBlocks && (
+        <p className={styles.emptyBlocks}>
+          El guión de producción se genera desde la vista del guion una vez pulida la voz en off.
+        </p>
+      )}
       {content.blocks?.map((block, i) => (
         <div key={i} className={styles.scriptBlock}>
           <div className={styles.scriptBlockHeader}>
