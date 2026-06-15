@@ -168,18 +168,21 @@ export default function CompetenciaClient({ clients }: Props) {
     return out;
   }, [posts]);
 
-  // ── Totales para las tarjetas ──
+  // ── Totales para las tarjetas (dinámicos: respetan los filtros activos) ──
+  // Se calculan sobre `sorted` (ya filtrado por cuenta y tipo) para que al
+  // seleccionar una competencia los recuadros muestren SUS datos, no los de todos.
   const totals = useMemo(() => {
     let likes = 0,
       comments = 0,
       views = 0;
-    for (const p of posts) {
+    for (const p of sorted) {
       likes += p.likes ?? 0;
       comments += p.comments ?? 0;
       views += p.video_views ?? 0;
     }
-    return { likes, comments, views, accounts: competitors.length, posts: posts.length };
-  }, [posts, competitors.length]);
+    const accounts = accountFilter === "all" ? competitors.length : 1;
+    return { likes, comments, views, accounts, posts: sorted.length };
+  }, [sorted, competitors.length, accountFilter]);
 
   // ── Acciones ──
   function handleAdd() {
