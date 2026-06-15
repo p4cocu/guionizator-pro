@@ -2,7 +2,13 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /** Rutas públicas que no requieren sesión. */
-const PUBLIC_PATHS = ["/login", "/auth"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/auth",
+  // Endpoint de ingesta del Shortcut: se autentica por token (Bearer), no por
+  // sesión, así que no debe redirigir a /login.
+  "/api/resources/ingest",
+];
 
 /**
  * Refresca la sesión de Supabase en cada request y protege las rutas privadas.
