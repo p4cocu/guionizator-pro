@@ -82,7 +82,15 @@ export default function CompetenciaClient({ clients }: Props) {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [accountFilter, setAccountFilter] = useState<string>("all");
 
+  const [competitorSort, setCompetitorSort] = useState<"added" | "name" | "followers">("added");
   const [adaptingPost, setAdaptingPost] = useState<CompetitorPost | null>(null);
+
+  const sortedCompetitors = useMemo(() => {
+    const list = competitors.slice();
+    if (competitorSort === "name") list.sort((a, b) => a.username.localeCompare(b.username));
+    else if (competitorSort === "followers") list.sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0));
+    return list;
+  }, [competitors, competitorSort]);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -294,7 +302,21 @@ export default function CompetenciaClient({ clients }: Props) {
       <div className={`card ${s.panel}`}>
         <div className={s.panelHead}>
           <span className="eyebrow">Cuentas de {currentClient?.nombre ?? "este cliente"}</span>
-          <span className={s.count}>{competitors.length} cuenta{competitors.length !== 1 ? "s" : ""}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {competitors.length > 1 && (
+              <select
+                className="input"
+                style={{ fontSize: 12, padding: "4px 8px" }}
+                value={competitorSort}
+                onChange={(e) => setCompetitorSort(e.target.value as "added" | "name" | "followers")}
+              >
+                <option value="added">Orden de alta</option>
+                <option value="name">Por nombre A–Z</option>
+                <option value="followers">Por seguidores</option>
+              </select>
+            )}
+            <span className={s.count}>{competitors.length} cuenta{competitors.length !== 1 ? "s" : ""}</span>
+          </div>
         </div>
 
         <div className={s.addRow}>
@@ -313,7 +335,7 @@ export default function CompetenciaClient({ clients }: Props) {
 
         {competitors.length > 0 && (
           <div className={s.chips}>
-            {competitors.map((c) => (
+            {sortedCompetitors.map((c) => (
               <span key={c.id} className={s.chip}>
                 @{c.username}
                 {c.followers != null && (

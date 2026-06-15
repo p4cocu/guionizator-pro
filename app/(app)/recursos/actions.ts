@@ -23,7 +23,7 @@ export type ResourceRow = {
   created_at: string;
   source_url: string | null;
   raw_text: string | null;
-  category: ResourceCategory;
+  category: string;
   title: string;
   summary: string | null;
   prompt_text: string | null;
@@ -147,7 +147,7 @@ export async function updateResourceClient(
 
 export async function updateResourceCategory(
   id: string,
-  category: ResourceCategory,
+  category: string,
 ): Promise<void> {
   const { supabase, user } = await getAuthUser();
   const { error } = await supabase

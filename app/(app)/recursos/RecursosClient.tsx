@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   addResourceManual,
@@ -14,15 +14,17 @@ import {
 } from "./actions";
 import s from "./recursos.module.css";
 
-const CATEGORIES = [
+const BASE_CATEGORIES = [
   "Prompt Claude",
   "Prompt Imagen",
   "Prompt Video",
   "Guía",
   "Herramienta",
+  "Claude",
   "Otro",
 ] as const;
-type Category = (typeof CATEGORIES)[number];
+
+const LS_KEY = "guionizator_custom_categories";
 
 type Props = {
   initialResources: ResourceRow[];
@@ -41,9 +43,43 @@ export default function RecursosClient({
   const [, startTransition] = useTransition();
 
   // Filtros
-  const [catFilter, setCatFilter] = useState<"all" | Category>("all");
+  const [catFilter, setCatFilter] = useState<string>("all");
   const [clientFilter, setClientFilter] = useState<string>("all"); // all | none | <id>
   const [search, setSearch] = useState("");
+
+  // Categorías personalizadas
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [newCatInput, setNewCatInput] = useState("");
+  const [addingCat, setAddingCat] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(LS_KEY);
+      if (stored) setCustomCategories(JSON.parse(stored));
+    } catch {}
+  }, []);
+
+  function saveCustomCategories(cats: string[]) {
+    setCustomCategories(cats);
+    try { localStorage.setItem(LS_KEY, JSON.stringify(cats)); } catch {}
+  }
+
+  function handleAddCat() {
+    const name = newCatInput.trim();
+    if (!name) return;
+    const all = [...(BASE_CATEGORIES as readonly string[]), ...customCategories];
+    if (all.includes(name)) return;
+    saveCustomCategories([...customCategories, name]);
+    setNewCatInput("");
+    setAddingCat(false);
+  }
+
+  function handleRemoveCat(name: string) {
+    saveCustomCategories(customCategories.filter((c) => c !== name));
+    if (catFilter === name) setCatFilter("all");
+  }
+
+  const allCategories = [...BASE_CATEGORIES, ...customCategories];
 
   // Alta manual
   const [manualInput, setManualInput] = useState("");
@@ -188,16 +224,52 @@ export default function RecursosClient({
             >
               Todas ({resources.length})
             </button>
-            {CATEGORIES.map((c) =>
-              countByCat.get(c) ? (
-                <button
-                  key={c}
-                  className={`${s.chipBtn} ${catFilter === c ? s.chipBtnActive : ""}`}
-                  onClick={() => setCatFilter(c)}
-                >
-                  {c} ({countByCat.get(c)})
-                </button>
-              ) : null,
+            {allCategories.map((c) => {
+              const count = countByCat.get(c);
+              const isCustom = customCategories.includes(c);
+              if (!count && !isCustom) return null;
+              return (
+                <span key={c} className={s.catChip}>
+                  <button
+                    className={`${s.chipBtn} ${catFilter === c ? s.chipBtnActive : ""}`}
+                    onClick={() => setCatFilter(c)}
+                  >
+                    {c}
+                    {count ? ` (${count})` : ""}
+                  </button>
+                  {isCustom && (
+                    <button
+                      className={s.catChipX}
+                      onClick={() => handleRemoveCat(c)}
+                      aria-label={`Eliminar categoría ${c}`}
+                      title="Eliminar categoría"
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              );
+            })}
+            {addingCat ? (
+              <span className={s.catAddRow}>
+                <input
+                  className={`input ${s.catAddInput}`}
+                  placeholder="Nueva categoría…"
+                  value={newCatInput}
+                  onChange={(e) => setNewCatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleAddCat();
+                    if (e.key === "Escape") { setAddingCat(false); setNewCatInput(""); }
+                  }}
+                  autoFocus
+                />
+                <button className="btn btn-secondary" onClick={handleAddCat} style={{ padding: "6px 12px" }}>✓</button>
+                <button className="btn btn-ghost" onClick={() => { setAddingCat(false); setNewCatInput(""); }} style={{ padding: "6px 12px" }}>✕</button>
+              </span>
+            ) : (
+              <button className={s.catAddBtn} onClick={() => setAddingCat(true)}>
+                + Categoría
+              </button>
             )}
           </div>
           <div className={s.filterRow}>
@@ -238,6 +310,7 @@ export default function RecursosClient({
               key={r.id}
               r={r}
               clientes={clientes}
+              allCategories={allCategories}
               onChanged={() => router.refresh()}
               copy={copy}
               copied={copied}
@@ -254,12 +327,14 @@ export default function RecursosClient({
 function ResourceCard({
   r,
   clientes,
+  allCategories,
   onChanged,
   copy,
   copied,
 }: {
   r: ResourceRow;
   clientes: ClienteLite[];
+  allCategories: readonly string[];
   onChanged: () => void;
   copy: (text: string, key: string) => void;
   copied: string | null;
@@ -282,14 +357,17 @@ function ResourceCard({
           className={s.catSelect}
           value={r.category}
           onChange={(e) =>
-            mutate(() => updateResourceCategory(r.id, e.target.value as Category))
+            mutate(() => updateResourceCategory(r.id, e.target.value))
           }
         >
-          {CATEGORIES.map((c) => (
+          {allCategories.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
           ))}
+          {!allCategories.includes(r.category) && (
+            <option value={r.category}>{r.category}</option>
+          )}
         </select>
         <button
           className={s.delBtn}
