@@ -1,0 +1,120 @@
+/**
+ * Lógica central de un run de scrape de competencia.
+ *
+ * Es agnóstica de quién la llama: recibe un cliente de Supabase ya autenticado
+ * (sesión del usuario en dev, o service-role en la background function de prod)
+ * y el id del scrape a procesar. Reúne las cuentas del cliente, corre Apify y
+ * guarda los posts. Marca el estado del scrape en cada paso.
+ */
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { scrapeCompetitorPosts } from "../apify/client";
+
+export async function runScrapeJob(
+  supabase: SupabaseClient,
+  scrapeId: string,
+  apifyToken: string,
+): Promise<{ ok: true; inserted: number } | { ok: false; error: string }> {
+  // 1. Cargar el scrape
+  const { data: scrape, error: scrapeErr } = await supabase
+    .from("competitor_scrapes")
+    .select("id, owner_id, client_id, n_posts, since_date, status")
+    .eq("id", scrapeId)
+    .single();
+
+  if (scrapeErr || !scrape) {
+    return { ok: false, error: scrapeErr?.message ?? "Scrape no encontrado." };
+  }
+
+  async function fail(message: string) {
+    await supabase
+      .from("competitor_scrapes")
+      .update({ status: "error", error: message, updated_at: new Date().toISOString() })
+      .eq("id", scrapeId);
+    return { ok: false as const, error: message };
+  }
+
+  // 2. Marcar como corriendo
+  await supabase
+    .from("competitor_scrapes")
+    .update({ status: "running", updated_at: new Date().toISOString() })
+    .eq("id", scrapeId);
+
+  // 3. Cuentas del cliente
+  const { data: competitors, error: compErr } = await supabase
+    .from("competitors")
+    .select("id, username")
+    .eq("owner_id", scrape.owner_id)
+    .eq("client_id", scrape.client_id);
+
+  if (compErr) return fail(compErr.message);
+  if (!competitors || competitors.length === 0) {
+    return fail("Este cliente no tiene cuentas de competencia cargadas.");
+  }
+
+  const idByUsername = new Map<string, string>();
+  for (const c of competitors) {
+    idByUsername.set((c.username as string).toLowerCase(), c.id as string);
+  }
+
+  // 4. Correr Apify
+  let posts;
+  try {
+    posts = await scrapeCompetitorPosts({
+      token: apifyToken,
+      usernames: competitors.map((c) => c.username as string),
+      resultsLimit: scrape.n_posts as number,
+      onlyPostsNewerThan: (scrape.since_date as string | null) ?? null,
+    });
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Falló el scraping en Apify.");
+  }
+
+  // 5. Insertar posts
+  const now = new Date().toISOString();
+  const rows = posts.map((p) => ({
+    owner_id: scrape.owner_id,
+    client_id: scrape.client_id,
+    competitor_id: idByUsername.get(p.username) ?? null,
+    scrape_id: scrapeId,
+    username: p.username,
+    shortcode: p.shortcode ?? null,
+    permalink: p.permalink ?? null,
+    type: p.type,
+    caption: p.caption ?? null,
+    likes: p.likes,
+    comments: p.comments,
+    video_views: p.videoViews ?? null,
+    followers: p.followers ?? null,
+    posted_at: p.postedAt ?? null,
+    scraped_at: now,
+  }));
+
+  if (rows.length > 0) {
+    const { error: insErr } = await supabase.from("competitor_posts").insert(rows);
+    if (insErr) return fail(insErr.message);
+  }
+
+  // 6. Actualizar followers de cada cuenta (best-effort, último valor conocido)
+  const followersByUser = new Map<string, number>();
+  for (const p of posts) {
+    if (typeof p.followers === "number") followersByUser.set(p.username, p.followers);
+  }
+  for (const [username, followers] of followersByUser) {
+    const id = idByUsername.get(username);
+    if (id) {
+      await supabase
+        .from("competitors")
+        .update({ followers, updated_at: now })
+        .eq("id", id);
+    }
+  }
+
+  // 7. Marcar done
+  await supabase
+    .from("competitor_scrapes")
+    .update({ status: "done", error: null, updated_at: now })
+    .eq("id", scrapeId);
+
+  return { ok: true, inserted: rows.length };
+}

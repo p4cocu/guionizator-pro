@@ -1,0 +1,443 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.header select {
+  min-width: 220px;
+}
+
+.error {
+  color: var(--flare);
+  font-size: 14px;
+  margin: 10px 0 0;
+}
+
+/* ── Paneles ── */
+.panel {
+  padding: 20px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.count {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.addRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.addRow .input {
+  flex: 1;
+  min-width: 220px;
+}
+
+/* ── Chips de cuentas ── */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ink-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  padding: 6px 8px 6px 14px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.chipMeta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chipX {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s ease;
+}
+
+.chipX:hover {
+  color: var(--flare);
+}
+
+/* ── Controles de búsqueda ── */
+.searchRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* ── Tarjetas de totales ── */
+.statsRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.statCard {
+  background: var(--ink-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.statValue {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--emerald);
+}
+
+.statLabel {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.scrapedAt {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 20px;
+}
+
+/* ── Filtros ── */
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filterLabel {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-right: 4px;
+  min-width: 60px;
+}
+
+.chipBtn {
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--r-pill);
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chipBtn:hover {
+  color: var(--text);
+  border-color: var(--emerald);
+}
+
+.chipBtnActive {
+  background: var(--grad-g1);
+  color: var(--ink);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+/* ── Grid de posts ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(326px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.postCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--ink-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.postTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.rank {
+  background: var(--ink);
+  color: var(--signal);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+}
+
+.user {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.user:hover {
+  color: var(--emerald);
+}
+
+.outlier {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--signal);
+  background: color-mix(in srgb, var(--signal) 15%, transparent);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+}
+
+.noEmbed {
+  padding: 40px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.postMetrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 10px 12px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.date {
+  margin-left: auto;
+}
+
+.empty,
+.scrapedAt {
+  font-size: 14px;
+}
+
+.empty {
+  margin-top: 24px;
+  opacity: 0.75;
+}
+
+/* ── Botón "Adaptar a mi marca" ── */
+.adaptBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-top: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--emerald) 12%, transparent);
+  color: var(--emerald);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.adaptBtn:hover {
+  background: color-mix(in srgb, var(--emerald) 22%, transparent);
+}
+
+/* ── Modal "Adaptar a mi marca" ── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--ink) 72%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  width: 100%;
+  max-width: 680px;
+  background: var(--ink-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 80px);
+}
+
+.modalHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.modalSub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.modalClose {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.modalClose:hover {
+  color: var(--text);
+}
+
+.modalBody {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.modalField {
+  margin-bottom: 18px;
+}
+
+.modalMeta {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.modalSlides {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modalSlide {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  background: var(--ink);
+}
+
+.modalSlideNum {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--emerald);
+}
+
+.modalLoading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 48px 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.modalError {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 32px 0;
+}
+
+.modalFoot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.modalSaved {
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--emerald);
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid color-mix(in srgb, var(--emerald) 20%, transparent);
+  border-top-color: var(--emerald);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
