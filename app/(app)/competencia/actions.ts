@@ -202,7 +202,12 @@ export type LatestResults = {
   posts: CompetitorPost[];
 };
 
-/** Devuelve los posts del scrape `done` más reciente del cliente. */
+/**
+ * Devuelve TODOS los posts acumulados del cliente (deduplicados por post vía el
+ * índice único). Así la investigación persiste entre búsquedas: al re-scrapear se
+ * actualizan las métricas de los posts repetidos y se agregan los nuevos, sin
+ * perder lo anterior. `scrapedAt` es la fecha de la última búsqueda `done`.
+ */
 export async function getLatestResults(clientId: string): Promise<LatestResults> {
   const { supabase, user } = await getAuthUser();
 
@@ -216,19 +221,17 @@ export async function getLatestResults(clientId: string): Promise<LatestResults>
     .limit(1)
     .maybeSingle();
 
-  if (!scrape) return { scrapeId: null, scrapedAt: null, posts: [] };
-
   const { data: posts } = await supabase
     .from("competitor_posts")
     .select(
       "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at",
     )
     .eq("owner_id", user.id)
-    .eq("scrape_id", scrape.id);
+    .eq("client_id", clientId);
 
   return {
-    scrapeId: scrape.id as string,
-    scrapedAt: scrape.updated_at as string,
+    scrapeId: (scrape?.id as string) ?? null,
+    scrapedAt: (scrape?.updated_at as string) ?? null,
     posts: (posts ?? []) as CompetitorPost[],
   };
 }

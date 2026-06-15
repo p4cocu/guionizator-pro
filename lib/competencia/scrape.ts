@@ -10,6 +10,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { scrapeCompetitorPosts } from "../apify/client";
 
+/** Extrae el shortcode de un permalink de Instagram (/p/, /reel/, /tv/). */
+function extractShortcode(permalink: string | null | undefined): string | null {
+  if (!permalink) return null;
+  const m = permalink.match(/\/(?:p|reel|reels|tv)\/([^/?#]+)/i);
+  return m ? m[1] : null;
+}
+
 export async function runScrapeJob(
   supabase: SupabaseClient,
   scrapeId: string,
@@ -70,7 +77,9 @@ export async function runScrapeJob(
     return fail(e instanceof Error ? e.message : "Falló el scraping en Apify.");
   }
 
-  // 5. Insertar posts
+  // 5. Guardar posts (upsert por (owner_id, client_id, shortcode)): si el post ya
+  //    existe se ACTUALIZAN sus métricas (likes, comentarios, vistas, followers) con
+  //    los datos más recientes en vez de duplicarlo; si es nuevo se inserta.
   const now = new Date().toISOString();
   const rows = posts.map((p) => ({
     owner_id: scrape.owner_id,
@@ -78,7 +87,7 @@ export async function runScrapeJob(
     competitor_id: idByUsername.get(p.username) ?? null,
     scrape_id: scrapeId,
     username: p.username,
-    shortcode: p.shortcode ?? null,
+    shortcode: p.shortcode ?? extractShortcode(p.permalink),
     permalink: p.permalink ?? null,
     type: p.type,
     caption: p.caption ?? null,
@@ -91,7 +100,9 @@ export async function runScrapeJob(
   }));
 
   if (rows.length > 0) {
-    const { error: insErr } = await supabase.from("competitor_posts").insert(rows);
+    const { error: insErr } = await supabase
+      .from("competitor_posts")
+      .upsert(rows, { onConflict: "owner_id,client_id,shortcode" });
     if (insErr) return fail(insErr.message);
   }
 

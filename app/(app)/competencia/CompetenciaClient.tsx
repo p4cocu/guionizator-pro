@@ -47,6 +47,13 @@ function eng(p: CompetitorPost): number {
   return (p.likes ?? 0) + (p.comments ?? 0);
 }
 
+function fmtAgo(hours: number): string {
+  if (hours < 1) return "hace menos de 1 hora";
+  if (hours < 24) return `hace ${Math.round(hours)} h`;
+  const d = Math.round(hours / 24);
+  return `hace ${d} día${d !== 1 ? "s" : ""}`;
+}
+
 declare global {
   interface Window {
     instgrm?: { Embeds: { process: () => void } };
@@ -65,6 +72,9 @@ export default function CompetenciaClient({ clients }: Props) {
 
   const [posts, setPosts] = useState<CompetitorPost[]>([]);
   const [scrapedAt, setScrapedAt] = useState<string | null>(null);
+  // Horas desde la última búsqueda; se calcula al setear scrapedAt (Date.now no
+  // puede vivir en render/useMemo por la regla react-hooks/purity).
+  const [hoursSinceScrape, setHoursSinceScrape] = useState<number | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
@@ -91,6 +101,13 @@ export default function CompetenciaClient({ clients }: Props) {
       setScrapedAt(results.scrapedAt);
       setAccountFilter("all");
       setTypeFilter("all");
+      const hrs = results.scrapedAt
+        ? (Date.now() - new Date(results.scrapedAt).getTime()) / 3_600_000
+        : null;
+      setHoursSinceScrape(hrs);
+      // Si la base se actualizó hace <72h, recomendamos un re-scrape ligero (5 posts)
+      // que refresca métricas de los posts repetidos sin gastar créditos de más.
+      if (hrs != null && hrs < 72) setNPosts(5);
     })();
     return () => {
       cancelled = true;
@@ -202,6 +219,11 @@ export default function CompetenciaClient({ clients }: Props) {
       const results = await getLatestResults(clientId);
       setPosts(results.posts);
       setScrapedAt(results.scrapedAt);
+      setHoursSinceScrape(
+        results.scrapedAt
+          ? (Date.now() - new Date(results.scrapedAt).getTime()) / 3_600_000
+          : null,
+      );
       setRunning(false);
       return;
     }
@@ -215,6 +237,11 @@ export default function CompetenciaClient({ clients }: Props) {
         const results = await getLatestResults(clientId);
         setPosts(results.posts);
         setScrapedAt(results.scrapedAt);
+        setHoursSinceScrape(
+          results.scrapedAt
+            ? (Date.now() - new Date(results.scrapedAt).getTime()) / 3_600_000
+            : null,
+        );
         setRunning(false);
       } else if (st.status === "error") {
         if (pollRef.current) clearInterval(pollRef.current);
@@ -223,6 +250,8 @@ export default function CompetenciaClient({ clients }: Props) {
       }
     }, 4000);
   }
+
+  const isFresh = hoursSinceScrape != null && hoursSinceScrape < 72;
 
   const currentClient = clients.find((c) => c.id === clientId);
 
@@ -302,6 +331,14 @@ export default function CompetenciaClient({ clients }: Props) {
 
       {/* ── Controles de búsqueda ── */}
       <div className={`card ${s.panel}`}>
+        {isFresh && hoursSinceScrape != null && (
+          <p className={s.freshWarn}>
+            ⚠️ La base de datos está algo actualizada (última búsqueda{" "}
+            {fmtAgo(hoursSinceScrape)}). Para refrescar las métricas sin gastar de más,
+            te recomendamos traer solo los <strong>últimos 5</strong> posts: se
+            actualizarán los datos de los posts repetidos y se agregarán los nuevos.
+          </p>
+        )}
         <div className={s.searchRow}>
           <label className={s.field}>
             <span className="field-label">Posts por cuenta</span>
@@ -313,6 +350,7 @@ export default function CompetenciaClient({ clients }: Props) {
               {N_OPTIONS.map((n) => (
                 <option key={n} value={n}>
                   Últimos {n}
+                  {isFresh && n === 5 ? " (recomendado)" : ""}
                 </option>
               ))}
             </select>
