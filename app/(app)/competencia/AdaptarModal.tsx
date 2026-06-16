@@ -1,13 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { saveScriptWithNewIdea } from "../guiones/actions";
 import type { CompetitorPost } from "./actions";
 import s from "./competencia.module.css";
 
+type AdaptType = "completa" | "ligera";
+
 type CarouselSlide = {
   number: number;
   text: string;
+  body?: string;
   visual: string;
   micro_anchor: string | null;
 };
@@ -44,49 +48,93 @@ function buildBrief(post: CompetitorPost): string {
   return `Adaptación del post de @${post.username}${excerpt ? `: "${excerpt}"` : ""}`;
 }
 
+function buildCompletaBrief(post: CompetitorPost): string {
+  const caption = (post.caption ?? "").trim().replace(/\s+/g, " ");
+  const excerpt = caption.length > 300 ? caption.slice(0, 300) + "…" : caption;
+
+  const metrics = [
+    post.video_views != null && `${post.video_views} vistas`,
+    post.likes != null && `${post.likes} likes`,
+    post.comments != null && `${post.comments} comentarios`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return [
+    `Adaptar idea de la competencia (@${post.username}):`,
+    excerpt ? `"${excerpt}"` : null,
+    metrics ? `\nMétricas del post original: ${metrics}` : null,
+    `\nObjetivo: tomar el ángulo y gancho ganadores de este post y reescribirlos 100% con el estilo, productos y tono del cliente. No es una copia: apropiarse del patrón que funcionó.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export default function AdaptarModal({ post, clientId, onClose }: Props) {
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  // Paso 1: picker
+  const [phase, setPhase] = useState<"pick" | "loading" | "result">("pick");
+  const [adaptType, setAdaptType] = useState<AdaptType>("completa");
+  const [adaptContext, setAdaptContext] = useState("");
+
+  // Paso 2: resultado
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AdaptResponse | null>(null);
   const [title, setTitle] = useState("");
   const [savedId, setSavedId] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
 
-  // No setState síncrono antes del primer await (regla react-hooks/set-state-in-effect):
-  // `loading` arranca en true y el botón Regenerar repone el estado de carga.
-  const generate = useCallback(async () => {
-    try {
-      const res = await fetch("/api/ai/adapt-competitor", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client_id: clientId, post }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Error al adaptar el post");
-      setData(json as AdaptResponse);
-      setTitle((json.title as string | null) ?? "");
-      setSavedId(null);
+  const generate = useCallback(
+    async (type: AdaptType, context: string) => {
+      setPhase("loading");
       setError(null);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [clientId, post]);
+      try {
+        const res = await fetch("/api/ai/adapt-competitor", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            client_id: clientId,
+            post,
+            adapt_type: type,
+            context: context.trim() || undefined,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? "Error al adaptar el post");
+        setData(json as AdaptResponse);
+        setTitle((json.title as string | null) ?? "");
+        setSavedId(null);
+        setPhase("result");
+      } catch (e) {
+        setError((e as Error).message);
+        setPhase("result");
+      }
+    },
+    [clientId, post]
+  );
 
-  function regenerate() {
-    setLoading(true);
-    setError(null);
-    setSavedId(null);
-    generate();
+  function handleContinuar() {
+    if (adaptType === "completa") {
+      const brief = buildCompletaBrief(post);
+      const type = post.type === "carousel" ? "carousel" : "reel";
+      const params = new URLSearchParams({
+        client_id: clientId,
+        type,
+        brief,
+      });
+      router.push(`/guiones/nuevo?${params.toString()}`);
+      onClose();
+    } else {
+      generate("ligera", adaptContext);
+    }
   }
 
-  useEffect(() => {
-    // Fetch-on-mount: los setState de generate() ocurren tras el await, no causan
-    // renders en cascada.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    generate();
-  }, [generate]);
+  function regenerate() {
+    setData(null);
+    setSavedId(null);
+    generate(adaptType, adaptContext);
+  }
 
   // Cerrar con Escape
   useEffect(() => {
@@ -102,7 +150,7 @@ export default function AdaptarModal({ post, clientId, onClose }: Props) {
     setData({ ...data, content: { ...data.content, voice_off: value } });
   }
 
-  function updateSlide(idx: number, field: "text" | "visual", value: string) {
+  function updateSlide(idx: number, field: "text" | "body" | "visual", value: string) {
     if (!data || isReel(data.content)) return;
     const slides = data.content.slides.map((sl, i) =>
       i === idx ? { ...sl, [field]: value } : sl
@@ -133,6 +181,8 @@ export default function AdaptarModal({ post, clientId, onClose }: Props) {
   return (
     <div className={s.modalOverlay} onClick={onClose}>
       <div className={s.modal} onClick={(e) => e.stopPropagation()}>
+
+        {/* ── Cabecera ── */}
         <div className={s.modalHead}>
           <div>
             <span className="eyebrow">Adaptar a mi marca</span>
@@ -147,14 +197,69 @@ export default function AdaptarModal({ post, clientId, onClose }: Props) {
         </div>
 
         <div className={s.modalBody}>
-          {loading && (
-            <div className={s.modalLoading}>
-              <div className={s.spinner} />
-              <p>Adaptando a la voz de tu marca…</p>
+
+          {/* ── Paso 1: Picker ── */}
+          {phase === "pick" && (
+            <div className={s.adaptPicker}>
+              <p className={s.adaptPickerLabel}>¿Cómo quieres adaptar este contenido?</p>
+
+              <div className={s.adaptOptions}>
+                <button
+                  className={`${s.adaptOption} ${adaptType === "completa" ? s.adaptOptionActive : ""}`}
+                  onClick={() => setAdaptType("completa")}
+                  type="button"
+                >
+                  <span className={s.adaptOptionIcon}>✦</span>
+                  <div className={s.adaptOptionContent}>
+                    <span className={s.adaptOptionTitle}>Adaptación completa</span>
+                    <span className={s.adaptOptionDesc}>
+                      Tomo el ángulo y gancho ganadores y los reescribo 100% con tu marca,
+                      productos y tono de voz. Te lleva al flujo de generación con control total.
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  className={`${s.adaptOption} ${adaptType === "ligera" ? s.adaptOptionActive : ""}`}
+                  onClick={() => setAdaptType("ligera")}
+                  type="button"
+                >
+                  <span className={s.adaptOptionIcon}>◎</span>
+                  <div className={s.adaptOptionContent}>
+                    <span className={s.adaptOptionTitle}>Adaptación ligera</span>
+                    <span className={s.adaptOptionDesc}>
+                      Conservo la misma idea y estructura, solo adapto el tono de voz al
+                      estilo de tu marca. Resultado directo aquí.
+                    </span>
+                  </div>
+                </button>
+              </div>
+
+              {adaptType === "ligera" && (
+                <div className={s.adaptContextField}>
+                  <label className="field-label">Contexto adicional (opcional)</label>
+                  <textarea
+                    className="textarea"
+                    rows={3}
+                    placeholder="Ej: quiero que el tono sea más cercano y tutee al lector, evita tecnicismos, enfoca en el beneficio emocional…"
+                    value={adaptContext}
+                    onChange={(e) => setAdaptContext(e.target.value)}
+                  />
+                </div>
+              )}
             </div>
           )}
 
-          {!loading && error && (
+          {/* ── Paso 2a: Cargando ── */}
+          {phase === "loading" && (
+            <div className={s.modalLoading}>
+              <div className={s.spinner} />
+              <p>Adaptando con tono ligero…</p>
+            </div>
+          )}
+
+          {/* ── Paso 2b: Error ── */}
+          {phase === "result" && error && (
             <div className={s.modalError}>
               <p className={s.error}>{error}</p>
               <button className="btn btn-secondary" onClick={regenerate}>
@@ -163,7 +268,8 @@ export default function AdaptarModal({ post, clientId, onClose }: Props) {
             </div>
           )}
 
-          {!loading && !error && data && (
+          {/* ── Paso 2c: Resultado ── */}
+          {phase === "result" && !error && data && (
             <>
               <div className={s.modalField}>
                 <label className="field-label">Título de publicación</label>
@@ -193,22 +299,39 @@ export default function AdaptarModal({ post, clientId, onClose }: Props) {
                   {data.content.slides.map((sl, i) => (
                     <div key={sl.number ?? i} className={s.modalSlide}>
                       <span className={s.modalSlideNum}>Slide {sl.number ?? i + 1}</span>
-                      <textarea
-                        className="textarea"
-                        rows={2}
-                        value={sl.text}
-                        onChange={(e) => updateSlide(i, "text", e.target.value)}
-                        disabled={!!savedId}
-                        placeholder="Texto del slide"
-                      />
-                      <textarea
-                        className="textarea"
-                        rows={2}
-                        value={sl.visual}
-                        onChange={(e) => updateSlide(i, "visual", e.target.value)}
-                        disabled={!!savedId}
-                        placeholder="Diseño visual"
-                      />
+                      <div className={s.modalSlideField}>
+                        <label className={s.modalSlideLabel}>Titular</label>
+                        <textarea
+                          className="textarea"
+                          rows={2}
+                          value={sl.text}
+                          onChange={(e) => updateSlide(i, "text", e.target.value)}
+                          disabled={!!savedId}
+                          placeholder="Titular del slide"
+                        />
+                      </div>
+                      <div className={s.modalSlideField}>
+                        <label className={s.modalSlideLabel}>Cuerpo del slide</label>
+                        <textarea
+                          className="textarea"
+                          rows={3}
+                          value={sl.body ?? ""}
+                          onChange={(e) => updateSlide(i, "body", e.target.value)}
+                          disabled={!!savedId}
+                          placeholder="Párrafo de desarrollo (1-2 oraciones)"
+                        />
+                      </div>
+                      <div className={s.modalSlideField}>
+                        <label className={s.modalSlideLabel}>Diseño visual</label>
+                        <textarea
+                          className="textarea"
+                          rows={2}
+                          value={sl.visual}
+                          onChange={(e) => updateSlide(i, "visual", e.target.value)}
+                          disabled={!!savedId}
+                          placeholder="Notas de diseño visual"
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -217,35 +340,64 @@ export default function AdaptarModal({ post, clientId, onClose }: Props) {
           )}
         </div>
 
-        {!loading && !error && data && (
-          <div className={s.modalFoot}>
-            {savedId ? (
-              <>
-                <span className={s.modalSaved}>✓ Guion guardado e idea creada en el dashboard</span>
-                <a className="btn btn-primary" href={`/guiones/${savedId}`}>
-                  Ver guion →
-                </a>
-              </>
-            ) : (
-              <>
-                <button
-                  className="btn btn-secondary"
-                  onClick={regenerate}
-                  disabled={saving}
-                >
-                  Regenerar
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleSave}
-                  disabled={saving}
-                >
-                  {saving ? "Guardando…" : "Guardar guion"}
-                </button>
-              </>
-            )}
-          </div>
-        )}
+        {/* ── Footer ── */}
+        <div className={s.modalFoot}>
+          {phase === "pick" && (
+            <>
+              <button className="btn btn-secondary" onClick={onClose}>
+                Cancelar
+              </button>
+              <button className="btn btn-primary" onClick={handleContinuar}>
+                {adaptType === "completa" ? "Ir a generación →" : "Generar →"}
+              </button>
+            </>
+          )}
+
+          {phase === "loading" && (
+            <button className="btn btn-secondary" onClick={onClose}>
+              Cancelar
+            </button>
+          )}
+
+          {phase === "result" && (
+            <>
+              {savedId ? (
+                <>
+                  <span className={s.modalSaved}>✓ Guion guardado e idea creada en el dashboard</span>
+                  <a className="btn btn-primary" href={`/guiones/${savedId}`}>
+                    Ver guion →
+                  </a>
+                </>
+              ) : (
+                <>
+                  {error ? (
+                    <button className="btn btn-secondary" onClick={() => setPhase("pick")}>
+                      ← Volver
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={regenerate}
+                        disabled={saving}
+                      >
+                        Regenerar
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        onClick={handleSave}
+                        disabled={saving}
+                      >
+                        {saving ? "Guardando…" : "Guardar guion"}
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </div>
+
       </div>
     </div>
   );

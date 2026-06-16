@@ -33,6 +33,7 @@ export type ReelContent = {
 export type CarouselSlide = {
   number: number;
   text: string;
+  body?: string;
   visual: string;
   micro_anchor: string | null;
 };
@@ -168,6 +169,9 @@ function CarouselViewer({ content }: { content: CarouselContent }) {
           <div key={slide.number} className={styles.slide}>
             <span className={styles.slideNum}>Slide {slide.number}</span>
             <p className={styles.slideText}>{slide.text}</p>
+            {slide.body && (
+              <p className={styles.slideBody}>{slide.body}</p>
+            )}
             {slide.micro_anchor && (
               <p className={styles.slideAnchor}>↳ {slide.micro_anchor}</p>
             )}

@@ -168,7 +168,7 @@ type CarouselEditorProps = {
 export function CarouselEditor({ content, onChange }: CarouselEditorProps) {
   function setSlide(
     idx: number,
-    field: "text" | "visual" | "micro_anchor",
+    field: "text" | "body" | "visual" | "micro_anchor",
     value: string
   ) {
     const slides = content.slides.map((s, i) =>
@@ -184,14 +184,25 @@ export function CarouselEditor({ content, onChange }: CarouselEditorProps) {
           <div key={i} className={styles.editorSlideCard}>
             <span className={styles.slideNum}>Slide {slide.number}</span>
             <div className={styles.editorField}>
-              <label className={styles.editorLabel}>Texto</label>
+              <label className={styles.editorLabel}>Titular</label>
               <textarea
                 className="textarea"
                 value={slide.text}
                 onChange={(e) => setSlide(i, "text", e.target.value)}
-                rows={3}
+                rows={2}
               />
             </div>
+            {slide.body != null && (
+              <div className={styles.editorField}>
+                <label className={styles.editorLabel}>Cuerpo del slide</label>
+                <textarea
+                  className="textarea"
+                  value={slide.body ?? ""}
+                  onChange={(e) => setSlide(i, "body", e.target.value)}
+                  rows={3}
+                />
+              </div>
+            )}
             <div className={styles.editorField}>
               <label className={styles.editorLabel}>Visual</label>
               <textarea

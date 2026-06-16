@@ -22,8 +22,6 @@ function buildClientContext(c: Record<string, string | null>): string {
     .join("\n");
 }
 
-// Reel: solo voz en off en la primera generación — los bloques de producción se
-// generan aparte vía /api/ai/production-blocks una vez pulida la voz en off.
 const REEL_FORMAT = `{
   "structure_name": "nombre de la estructura del cerebro que mejor encaja con esta adaptación",
   "title": "título de publicación corto y atractivo",
@@ -36,9 +34,10 @@ const CAROUSEL_FORMAT = `{
   "slides": [
     {
       "number": 1,
-      "text": "texto del slide ≤15 palabras",
+      "text": "titular o headline del slide ≤12 palabras",
+      "body": "párrafo de desarrollo del slide: 1-2 oraciones con el argumento o valor de ese slide (máximo 40 palabras)",
       "visual": "descripción del diseño visual: jerarquía tipográfica, elemento visual, color/contraste",
-      "micro_anchor": "elemento de retención o null si no aplica"
+      "micro_anchor": "elemento de retención al final del slide o null si no aplica"
     }
   ]
 }`;
@@ -58,62 +57,16 @@ function fmtMetric(n: number | null | undefined): string {
   return n == null ? "—" : String(n);
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+function buildCompletePrompt(post: SourcePost, type: "reel" | "carousel", format: string): string {
+  const sourceMetrics = [
+    post.video_views != null && `Vistas: ${fmtMetric(post.video_views)}`,
+    `Likes: ${fmtMetric(post.likes)}`,
+    `Comentarios: ${fmtMetric(post.comments)}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
-    const { client_id, post, type: typeOverride } = (await req.json()) as {
-      client_id: string;
-      post: SourcePost;
-      type?: "reel" | "carousel";
-    };
-
-    if (!client_id || !post) {
-      return NextResponse.json({ error: "client_id y post son requeridos" }, { status: 400 });
-    }
-
-    // Tipo destino: respeta el override; si no, deriva del tipo del post fuente.
-    const type: "reel" | "carousel" =
-      typeOverride ?? (post.type === "carousel" ? "carousel" : "reel");
-
-    const { data: client } = await supabase
-      .from("clients")
-      .select("*")
-      .eq("id", client_id)
-      .eq("owner_id", user.id)
-      .single();
-
-    if (!client) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
-
-    const { data: activeBrain } = await supabase
-      .from("brain_versions")
-      .select("id, content")
-      .eq("owner_id", user.id)
-      .eq("is_active", true)
-      .single();
-
-    // Contexto del cliente: perfil + conocimiento de marca por carpeta (si existe).
-    let clientContext = buildClientContext(client);
-    const knowledge = loadClientKnowledge(client.nombre as string);
-    if (knowledge) {
-      clientContext += `\n\n## Conocimiento de marca de ${client.nombre}\n${knowledge}`;
-    }
-
-    const format = type === "carousel" ? CAROUSEL_FORMAT : REEL_FORMAT;
-
-    const sourceMetrics = [
-      post.video_views != null && `Vistas: ${fmtMetric(post.video_views)}`,
-      `Likes: ${fmtMetric(post.likes)}`,
-      `Comentarios: ${fmtMetric(post.comments)}`,
-    ]
-      .filter(Boolean)
-      .join(" · ");
-
-    const userMessage = `Tarea: ADAPTAR a la marca del cliente una idea que YA funcionó en la competencia. NO es una copia: toma el ÁNGULO, el HOOK y la ESTRUCTURA ganadora del post fuente y reescríbelos por completo con la voz, el qué-vende, el dolor y el deseo del cliente. El resultado debe sonar 100% del cliente, no del competidor.
+  return `Tarea: ADAPTAR a la marca del cliente una idea que YA funcionó en la competencia. NO es una copia: toma el ÁNGULO, el HOOK y la ESTRUCTURA ganadora del post fuente y reescríbelos por completo con la voz, el qué-vende, el dolor y el deseo del cliente. El resultado debe sonar 100% del cliente, no del competidor.
 
 Tipo de contenido a generar: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (8–10 slides)"}
 
@@ -134,9 +87,95 @@ Instrucciones:
 
 Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
 ${format}`;
+}
+
+function buildLightPrompt(post: SourcePost, type: "reel" | "carousel", format: string, context?: string): string {
+  const sourceMetrics = [
+    post.video_views != null && `Vistas: ${fmtMetric(post.video_views)}`,
+    `Likes: ${fmtMetric(post.likes)}`,
+    `Comentarios: ${fmtMetric(post.comments)}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return `Tarea: ADAPTAR LIGERAMENTE el tono de voz de un post de la competencia. Conserva exactamente el mismo ángulo, la misma idea central, la misma estructura y el mismo gancho del post fuente. SOLO cambia el tono de voz para que suene al cliente, sin alterar la esencia del contenido.${context ? `\n\nContexto adicional del creador: ${context}` : ""}
+
+Tipo de contenido a generar: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (8–10 slides)"}
+
+── Post fuente (competencia) ──
+Autor: @${post.username ?? "desconocido"}
+Tipo original: ${post.type ?? "—"}
+Métricas: ${sourceMetrics}
+Caption:
+"""
+${(post.caption ?? "(sin caption)").trim()}
+"""
+
+Instrucciones:
+1. Mantén el mismo tema, ángulo, estructura de información y gancho del post fuente.
+2. Adapta SOLO el tono de voz al perfil del cliente (su forma de hablar, vocabulario, registro).
+3. Usa los productos/servicios del cliente solo si encajan naturalmente — no fuerces el pitch.
+4. Elige del cerebro la estructura narrativa más similar a la del post fuente.
+5. Propón un "title" de publicación.
+
+Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
+${format}`;
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { client_id, post, type: typeOverride, adapt_type, context } = (await req.json()) as {
+      client_id: string;
+      post: SourcePost;
+      type?: "reel" | "carousel";
+      adapt_type?: "completa" | "ligera";
+      context?: string;
+    };
+
+    if (!client_id || !post) {
+      return NextResponse.json({ error: "client_id y post son requeridos" }, { status: 400 });
+    }
+
+    const type: "reel" | "carousel" =
+      typeOverride ?? (post.type === "carousel" ? "carousel" : "reel");
+
+    const { data: client } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("id", client_id)
+      .eq("owner_id", user.id)
+      .single();
+
+    if (!client) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+
+    const { data: activeBrain } = await supabase
+      .from("brain_versions")
+      .select("id, content")
+      .eq("owner_id", user.id)
+      .eq("is_active", true)
+      .single();
+
+    let clientContext = buildClientContext(client);
+    const knowledge = loadClientKnowledge(client.nombre as string);
+    if (knowledge) {
+      clientContext += `\n\n## Conocimiento de marca de ${client.nombre}\n${knowledge}`;
+    }
+
+    const format = type === "carousel" ? CAROUSEL_FORMAT : REEL_FORMAT;
+    const isLight = adapt_type === "ligera";
+
+    const userMessage = isLight
+      ? buildLightPrompt(post, type, format, context)
+      : buildCompletePrompt(post, type, format);
 
     const model = type === "carousel" ? MODEL_FAST : MODEL_DEFAULT;
-    const maxTokens = type === "carousel" ? 2048 : 4096;
+    const maxTokens = type === "carousel" ? 3000 : 4096;
 
     const result = await generateWithBrain({
       userMessage,

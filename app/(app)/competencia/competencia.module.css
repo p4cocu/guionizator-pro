@@ -313,6 +313,81 @@
   background: color-mix(in srgb, var(--emerald) 22%, transparent);
 }
 
+/* ── Picker "Adaptar a mi marca" ── */
+.adaptPicker {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.adaptPickerLabel {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.adaptOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adaptOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px;
+  background: var(--ink);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  width: 100%;
+}
+
+.adaptOption:hover {
+  border-color: color-mix(in srgb, var(--emerald) 50%, transparent);
+}
+
+.adaptOptionActive {
+  border-color: var(--emerald);
+  background: color-mix(in srgb, var(--emerald) 8%, var(--ink));
+}
+
+.adaptOptionIcon {
+  font-size: 18px;
+  color: var(--emerald);
+  line-height: 1;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.adaptOptionContent {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.adaptOptionTitle {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.adaptOptionDesc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.adaptContextField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 /* ── Modal "Adaptar a mi marca" ── */
 .modalOverlay {
   position: fixed;
@@ -403,6 +478,20 @@
   font-weight: 700;
   font-size: 12px;
   color: var(--emerald);
+}
+
+.modalSlideField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modalSlideLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .modalLoading {
