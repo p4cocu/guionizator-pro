@@ -194,6 +194,7 @@ export type CompetitorPost = {
   video_views: number | null;
   followers: number | null;
   posted_at: string | null;
+  transcription: string | null;
 };
 
 export type LatestResults = {
@@ -224,7 +225,7 @@ export async function getLatestResults(clientId: string): Promise<LatestResults>
   const { data: posts } = await supabase
     .from("competitor_posts")
     .select(
-      "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at",
+      "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription",
     )
     .eq("owner_id", user.id)
     .eq("client_id", clientId);

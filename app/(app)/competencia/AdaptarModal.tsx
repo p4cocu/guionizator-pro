@@ -45,7 +45,8 @@ function isReel(c: Content): c is ReelContent {
 function buildBrief(post: CompetitorPost): string {
   const caption = (post.caption ?? "").trim().replace(/\s+/g, " ");
   const excerpt = caption.length > 240 ? caption.slice(0, 240) + "…" : caption;
-  return `Adaptación del post de @${post.username}${excerpt ? `: "${excerpt}"` : ""}`;
+  const source = post.transcription ? "transcripción" : "caption";
+  return `Adaptación del post de @${post.username} (vía ${source})${excerpt ? `: "${excerpt}"` : ""}`;
 }
 
 function buildCompletaBrief(post: CompetitorPost): string {
@@ -60,10 +61,15 @@ function buildCompletaBrief(post: CompetitorPost): string {
     .filter(Boolean)
     .join(" · ");
 
+  const transcriptSection = post.transcription
+    ? `\nTranscripción del audio:\n"${post.transcription}"`
+    : "";
+
   return [
     `Adaptar idea de la competencia (@${post.username}):`,
     excerpt ? `"${excerpt}"` : null,
     metrics ? `\nMétricas del post original: ${metrics}` : null,
+    transcriptSection || null,
     `\nObjetivo: tomar el ángulo y gancho ganadores de este post y reescribirlos 100% con el estilo, productos y tono del cliente. No es una copia: apropiarse del patrón que funcionó.`,
   ]
     .filter(Boolean)
@@ -201,6 +207,12 @@ export default function AdaptarModal({ post, clientId, onClose }: Props) {
           {/* ── Paso 1: Picker ── */}
           {phase === "pick" && (
             <div className={s.adaptPicker}>
+              {post.transcription && (
+                <p className={s.adaptPickerLabel} style={{ color: "var(--emerald)", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--emerald)", display: "inline-block", flexShrink: 0 }} />
+                  Transcripción disponible — Claude usará el audio, no solo el caption
+                </p>
+              )}
               <p className={s.adaptPickerLabel}>¿Cómo quieres adaptar este contenido?</p>
 
               <div className={s.adaptOptions}>

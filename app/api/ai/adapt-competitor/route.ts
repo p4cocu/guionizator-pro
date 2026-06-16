@@ -51,10 +51,29 @@ type SourcePost = {
   video_views?: number | null;
   permalink?: string | null;
   posted_at?: string | null;
+  transcription?: string | null;
 };
 
 function fmtMetric(n: number | null | undefined): string {
   return n == null ? "—" : String(n);
+}
+
+function buildContentSection(post: SourcePost): string {
+  const caption = (post.caption ?? "(sin caption)").trim();
+  if (post.transcription) {
+    return `Transcripción del audio (fuente primaria):
+"""
+${post.transcription.trim()}
+"""
+Caption (referencia):
+"""
+${caption}
+"""`;
+  }
+  return `Caption:
+"""
+${caption}
+"""`;
 }
 
 function buildCompletePrompt(post: SourcePost, type: "reel" | "carousel", format: string): string {
@@ -74,10 +93,7 @@ Tipo de contenido a generar: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (
 Autor: @${post.username ?? "desconocido"}
 Tipo original: ${post.type ?? "—"}
 Métricas: ${sourceMetrics}
-Caption:
-"""
-${(post.caption ?? "(sin caption)").trim()}
-"""
+${buildContentSection(post)}
 
 Instrucciones:
 1. Identifica POR QUÉ este contenido funcionó (el gancho, la promesa, la estructura) y reusa ESE patrón, no el tema ni las palabras del competidor.
@@ -106,10 +122,7 @@ Tipo de contenido a generar: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (
 Autor: @${post.username ?? "desconocido"}
 Tipo original: ${post.type ?? "—"}
 Métricas: ${sourceMetrics}
-Caption:
-"""
-${(post.caption ?? "(sin caption)").trim()}
-"""
+${buildContentSection(post)}
 
 Instrucciones:
 1. Mantén el mismo tema, ángulo, estructura de información y gancho del post fuente.

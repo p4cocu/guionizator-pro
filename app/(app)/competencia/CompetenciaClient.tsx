@@ -17,6 +17,8 @@ import s from "./competencia.module.css";
 type Client = { id: string; nombre: string; marca: string | null };
 type Props = { clients: Client[] };
 
+const transcribeEnabled = process.env.NEXT_PUBLIC_TRANSCRIBE_ENABLED === "true";
+
 type SortKey = "views" | "likes" | "comments" | "engagement" | "recent";
 type TypeFilter = "all" | "video" | "carousel" | "image";
 
@@ -84,6 +86,7 @@ export default function CompetenciaClient({ clients }: Props) {
 
   const [competitorSort, setCompetitorSort] = useState<"added" | "name" | "followers">("added");
   const [adaptingPost, setAdaptingPost] = useState<CompetitorPost | null>(null);
+  const [transcribingId, setTranscribingId] = useState<string | null>(null);
 
   const sortedCompetitors = useMemo(() => {
     const list = competitors.slice();
@@ -260,6 +263,31 @@ export default function CompetenciaClient({ clients }: Props) {
         setRunning(false);
       }
     }, 4000);
+  }
+
+  async function handleTranscribe(post: CompetitorPost) {
+    setTranscribingId(post.id);
+    try {
+      const res = await fetch("/api/transcribe-reel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_id: post.id }),
+      });
+      const json = (await res.json()) as { transcription?: string; error?: string };
+      if (!res.ok) {
+        alert(json.error ?? "Error al transcribir");
+        return;
+      }
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === post.id ? { ...p, transcription: json.transcription ?? null } : p
+        )
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Error al transcribir");
+    } finally {
+      setTranscribingId(null);
+    }
   }
 
   const isFresh = hoursSinceScrape != null && hoursSinceScrape < 72;
@@ -514,6 +542,28 @@ export default function CompetenciaClient({ clients }: Props) {
                       </span>
                     )}
                   </div>
+
+                  {transcribeEnabled && p.type !== "image" && (
+                    <div className={s.transcribeRow}>
+                      {p.transcription ? (
+                        <span className={s.transcribedBadge}>
+                          <span className={s.transcribedDot} />
+                          Transcripción lista
+                        </span>
+                      ) : (
+                        <span className={s.transcribedBadge} style={{ opacity: 0.5 }}>
+                          Sin transcripción
+                        </span>
+                      )}
+                      <button
+                        className={s.transcribeBtn}
+                        disabled={transcribingId === p.id}
+                        onClick={() => handleTranscribe(p)}
+                      >
+                        {transcribingId === p.id ? "Transcribiendo…" : p.transcription ? "Re-transcribir" : "🎤 Transcribir"}
+                      </button>
+                    </div>
+                  )}
 
                   <button
                     className={s.adaptBtn}
