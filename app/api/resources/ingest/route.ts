@@ -29,16 +29,11 @@ export async function POST(req: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const { data: tokenRow } = await supabase
-      .from("ingest_tokens")
-      .select("owner_id")
-      .eq("token", token)
-      .maybeSingle();
+    const { data: ownerId } = await supabase.rpc("lookup_ingest_token", { p_token: token });
 
-    if (!tokenRow) {
+    if (!ownerId) {
       return NextResponse.json({ error: "Token inválido." }, { status: 401 });
     }
-    const ownerId = tokenRow.owner_id as string;
 
     const body = (await req.json().catch(() => ({}))) as { url?: string; text?: string; source_name?: string };
     const url = body.url?.trim() || null;
