@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getScripts, getClientOptions, type ScriptRow, type RecordingType } from "./actions";
+import { getScripts, getClientOptions, type ScriptRow, type ScriptType, type RecordingType } from "./actions";
 import styles from "./guiones.module.css";
 import ScriptIdChip from "./ScriptIdChip";
 import ClientFilter from "./ClientFilter";
@@ -93,15 +93,17 @@ function ScriptCard({ script, hideClient }: { script: ScriptRow; hideClient: boo
 export default async function GuionesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cliente?: string }>;
+  searchParams: Promise<{ cliente?: string; tipo?: string }>;
 }) {
-  const { cliente } = await searchParams;
+  const { cliente, tipo } = await searchParams;
+  const scriptType = (tipo === "reel" || tipo === "carousel") ? (tipo as ScriptType) : undefined;
   const [scripts, clients] = await Promise.all([
-    getScripts(cliente),
+    getScripts(cliente, scriptType),
     getClientOptions(),
   ]);
 
   const selectedClient = clients.find((c) => c.id === cliente);
+  const typeLabel = scriptType === "reel" ? "Reels" : scriptType === "carousel" ? "Carruseles" : null;
 
   return (
     <div>
@@ -112,6 +114,7 @@ export default async function GuionesPage({
           <p className={styles.subtitle}>
             {scripts.length} guion{scripts.length !== 1 ? "es" : ""}{" "}
             {selectedClient ? `de ${selectedClient.nombre}` : "en total"}
+            {typeLabel ? ` · ${typeLabel}` : ""}
           </p>
         </div>
         <div className={styles.headerActions}>

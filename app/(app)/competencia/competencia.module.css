@@ -362,6 +362,123 @@
   background: color-mix(in srgb, var(--emerald) 22%, transparent);
 }
 
+/* ── Botón "Adaptar para otra marca" ── */
+.otherBrandBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-top: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.otherBrandBtn:hover {
+  background: color-mix(in srgb, var(--signal) 8%, transparent);
+  color: var(--signal);
+}
+
+/* ── Picker inline de "otra marca" ── */
+.otherBrandPicker {
+  border-top: 1px solid var(--glass-border);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.otherBrandPickerLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+}
+
+.otherBrandOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.otherBrandOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.otherBrandOption:hover {
+  border-color: rgba(255, 210, 58, 0.4);
+  background: rgba(255, 210, 58, 0.06);
+  color: var(--signal);
+}
+
+.otherBrandMarca {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.otherBrandCancel {
+  align-self: flex-start;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.12s;
+}
+
+.otherBrandCancel:hover {
+  color: var(--text-muted);
+}
+
+/* ── Botón "Descargar" ── */
+.downloadBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-top: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.downloadBtn:hover {
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  color: var(--text-primary);
+}
+
 /* ── Picker "Adaptar a mi marca" ── */
 .adaptPicker {
   display: flex;

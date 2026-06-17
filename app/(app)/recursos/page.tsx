@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getClientesLite, getIngestToken, getResources } from "./actions";
+import { getClientesLite, getIngestToken, getOwnResources, getResources, getScriptsLite } from "./actions";
 import RecursosClient from "./RecursosClient";
 
 export const metadata = { title: "Recursos — Guionizator Pro" };
@@ -12,9 +12,11 @@ export default async function RecursosPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [resources, clientes, ingestToken] = await Promise.all([
+  const [resources, ownResources, clientes, scripts, ingestToken] = await Promise.all([
     getResources(),
+    getOwnResources(),
     getClientesLite(),
+    getScriptsLite(),
     getIngestToken(),
   ]);
 
@@ -24,7 +26,9 @@ export default async function RecursosPage() {
   return (
     <RecursosClient
       initialResources={resources}
+      initialOwnResources={ownResources}
       clientes={clientes}
+      scripts={scripts}
       ingestToken={ingestToken}
       ingestUrl={ingestUrl}
     />

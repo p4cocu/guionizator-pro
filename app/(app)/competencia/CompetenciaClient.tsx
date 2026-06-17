@@ -86,6 +86,8 @@ export default function CompetenciaClient({ clients }: Props) {
 
   const [competitorSort, setCompetitorSort] = useState<"added" | "name" | "followers">("added");
   const [adaptingPost, setAdaptingPost] = useState<CompetitorPost | null>(null);
+  const [adaptTargetClientId, setAdaptTargetClientId] = useState<string | null>(null);
+  const [otherBrandPickerPostId, setOtherBrandPickerPostId] = useState<string | null>(null);
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
 
   const sortedCompetitors = useMemo(() => {
@@ -265,34 +267,42 @@ export default function CompetenciaClient({ clients }: Props) {
     }, 4000);
   }
 
-  async function handleTranscribe(post: CompetitorPost) {
-    setTranscribingId(post.id);
-    try {
-      const res = await fetch("/api/transcribe-reel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ post_id: post.id }),
-      });
-      const json = (await res.json()) as { transcription?: string; error?: string };
-      if (!res.ok) {
-        alert(json.error ?? "Error al transcribir");
-        return;
+  function handleTranscribeClick(post: CompetitorPost) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "video/*,audio/*,.mp4,.mov,.m4a,.mp3";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setTranscribingId(post.id);
+      try {
+        const form = new FormData();
+        form.append("post_id", post.id);
+        form.append("file", file);
+        const res = await fetch("/api/transcribe-reel", { method: "POST", body: form });
+        const json = (await res.json()) as { transcription?: string; error?: string };
+        if (!res.ok) {
+          alert(json.error ?? "Error al transcribir");
+          return;
+        }
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === post.id ? { ...p, transcription: json.transcription ?? null } : p
+          )
+        );
+      } catch (e) {
+        alert(e instanceof Error ? e.message : "Error al transcribir");
+      } finally {
+        setTranscribingId(null);
       }
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === post.id ? { ...p, transcription: json.transcription ?? null } : p
-        )
-      );
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Error al transcribir");
-    } finally {
-      setTranscribingId(null);
-    }
+    };
+    input.click();
   }
 
   const isFresh = hoursSinceScrape != null && hoursSinceScrape < 72;
 
   const currentClient = clients.find((c) => c.id === clientId);
+  const otherClients = clients.filter((c) => c.id !== clientId);
 
   if (clients.length === 0) {
     return (
@@ -558,7 +568,7 @@ export default function CompetenciaClient({ clients }: Props) {
                       <button
                         className={s.transcribeBtn}
                         disabled={transcribingId === p.id}
-                        onClick={() => handleTranscribe(p)}
+                        onClick={() => handleTranscribeClick(p)}
                       >
                         {transcribingId === p.id ? "Transcribiendo…" : p.transcription ? "Re-transcribir" : "🎤 Transcribir"}
                       </button>
@@ -567,10 +577,63 @@ export default function CompetenciaClient({ clients }: Props) {
 
                   <button
                     className={s.adaptBtn}
-                    onClick={() => setAdaptingPost(p)}
+                    onClick={() => {
+                      setAdaptTargetClientId(null);
+                      setOtherBrandPickerPostId(null);
+                      setAdaptingPost(p);
+                    }}
                   >
                     ✦ Adaptar a mi marca
                   </button>
+
+                  {otherClients.length > 0 && (
+                    otherBrandPickerPostId === p.id ? (
+                      <div className={s.otherBrandPicker}>
+                        <span className={s.otherBrandPickerLabel}>¿Para qué marca?</span>
+                        <div className={s.otherBrandOptions}>
+                          {otherClients.map((c) => (
+                            <button
+                              key={c.id}
+                              className={s.otherBrandOption}
+                              onClick={() => {
+                                setAdaptTargetClientId(c.id);
+                                setOtherBrandPickerPostId(null);
+                                setAdaptingPost(p);
+                              }}
+                            >
+                              {c.nombre}
+                              {c.marca ? <span className={s.otherBrandMarca}>{c.marca}</span> : null}
+                            </button>
+                          ))}
+                          <button
+                            className={s.otherBrandCancel}
+                            onClick={() => setOtherBrandPickerPostId(null)}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        className={s.otherBrandBtn}
+                        onClick={() => setOtherBrandPickerPostId(p.id)}
+                      >
+                        ↗ Adaptar para otra marca
+                      </button>
+                    )
+                  )}
+
+                  {p.permalink && (
+                    <button
+                      className={s.downloadBtn}
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(p.permalink!);
+                        window.open("https://snapinsta.to/es", "_blank", "noopener,noreferrer");
+                      }}
+                    >
+                      ↓ Descargar
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -581,8 +644,16 @@ export default function CompetenciaClient({ clients }: Props) {
       {adaptingPost && (
         <AdaptarModal
           post={adaptingPost}
-          clientId={clientId}
-          onClose={() => setAdaptingPost(null)}
+          clientId={adaptTargetClientId ?? clientId}
+          clientName={
+            adaptTargetClientId
+              ? clients.find((c) => c.id === adaptTargetClientId)?.nombre
+              : undefined
+          }
+          onClose={() => {
+            setAdaptingPost(null);
+            setAdaptTargetClientId(null);
+          }}
         />
       )}
 

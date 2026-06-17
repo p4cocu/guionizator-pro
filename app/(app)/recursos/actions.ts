@@ -31,10 +31,28 @@ export type ResourceRow = {
   client_auto: boolean;
   tags: string[];
   ingest_source: string;
+  source_name: string | null;
+  script_id: string | null;
   clients: { nombre: string } | null;
 };
 
+export type OwnResourceRow = {
+  id: string;
+  created_at: string;
+  title: string;
+  drive_url: string;
+  source_resource_id: string | null;
+  script_id: string | null;
+  keyword_trigger: string | null;
+  tags: string[];
+  resources: { title: string } | null;
+  scripts: { title: string | null; structure_name: string } | null;
+};
+
 export type ClienteLite = { id: string; nombre: string; marca: string | null };
+export type ScriptLite = { id: string; title: string | null; structure_name: string };
+
+// ── Resources capturados ────────────────────────────────────────────────────
 
 export async function getResources(): Promise<ResourceRow[]> {
   const { supabase, user } = await getAuthUser();
@@ -55,6 +73,18 @@ export async function getClientesLite(): Promise<ClienteLite[]> {
     .eq("owner_id", user.id)
     .order("nombre", { ascending: true });
   return (data ?? []) as ClienteLite[];
+}
+
+export async function getScriptsLite(): Promise<ScriptLite[]> {
+  const { supabase, user } = await getAuthUser();
+  const { data } = await supabase
+    .from("scripts")
+    .select("id, title, structure_name")
+    .eq("owner_id", user.id)
+    .eq("is_latest", true)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  return (data ?? []) as ScriptLite[];
 }
 
 /** Devuelve el token de ingesta del usuario; lo crea si no existe. */
@@ -93,11 +123,13 @@ export async function regenerateIngestToken(): Promise<string> {
 export async function addResourceManual(input: {
   url?: string;
   text?: string;
+  source_name?: string | null;
 }): Promise<string> {
   const { supabase, user } = await getAuthUser();
 
   const url = input.url?.trim() || null;
   const text = input.text?.trim() || null;
+  const sourceName = input.source_name?.trim() || null;
   if (!url && !text) throw new Error("Pega un link o un texto.");
 
   const { data: clientsData } = await supabase
@@ -122,6 +154,7 @@ export async function addResourceManual(input: {
       client_auto: classified.client_auto,
       tags: classified.tags,
       ingest_source: "manual",
+      source_name: sourceName,
     })
     .select("id")
     .single();
@@ -129,6 +162,20 @@ export async function addResourceManual(input: {
   if (error) throw new Error(error.message);
   revalidatePath("/recursos");
   return inserted.id as string;
+}
+
+export async function updateResourceSourceName(
+  id: string,
+  sourceName: string | null,
+): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+  const { error } = await supabase
+    .from("resources")
+    .update({ source_name: sourceName?.trim() || null, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/recursos");
 }
 
 export async function updateResourceClient(
@@ -171,10 +218,103 @@ export async function updateResourceTags(id: string, tags: string[]): Promise<vo
   revalidatePath("/recursos");
 }
 
+export async function updateResourceScriptId(
+  id: string,
+  scriptId: string | null,
+): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+  const { error } = await supabase
+    .from("resources")
+    .update({ script_id: scriptId, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/recursos");
+}
+
 export async function deleteResource(id: string): Promise<void> {
   const { supabase, user } = await getAuthUser();
   const { error } = await supabase
     .from("resources")
+    .delete()
+    .eq("id", id)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/recursos");
+}
+
+// ── Recursos propios ────────────────────────────────────────────────────────
+
+export async function getOwnResources(): Promise<OwnResourceRow[]> {
+  const { supabase, user } = await getAuthUser();
+  const { data, error } = await supabase
+    .from("own_resources")
+    .select("*, resources(title), scripts(title, structure_name)")
+    .eq("owner_id", user.id)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as OwnResourceRow[];
+}
+
+export async function createOwnResource(input: {
+  title: string;
+  drive_url: string;
+  source_resource_id?: string | null;
+  script_id?: string | null;
+  keyword_trigger?: string | null;
+  tags?: string[];
+}): Promise<string> {
+  const { supabase, user } = await getAuthUser();
+  const { data, error } = await supabase
+    .from("own_resources")
+    .insert({
+      owner_id: user.id,
+      title: input.title.trim(),
+      drive_url: input.drive_url.trim(),
+      source_resource_id: input.source_resource_id || null,
+      script_id: input.script_id || null,
+      keyword_trigger: input.keyword_trigger?.trim() || null,
+      tags: (input.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean),
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  revalidatePath("/recursos");
+  return data.id as string;
+}
+
+export async function updateOwnResource(
+  id: string,
+  input: Partial<{
+    title: string;
+    drive_url: string;
+    source_resource_id: string | null;
+    script_id: string | null;
+    keyword_trigger: string | null;
+    tags: string[];
+  }>,
+): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.title !== undefined) patch.title = input.title.trim();
+  if (input.drive_url !== undefined) patch.drive_url = input.drive_url.trim();
+  if ("source_resource_id" in input) patch.source_resource_id = input.source_resource_id || null;
+  if ("script_id" in input) patch.script_id = input.script_id || null;
+  if ("keyword_trigger" in input) patch.keyword_trigger = input.keyword_trigger?.trim() || null;
+  if (input.tags !== undefined) patch.tags = input.tags.map((t) => t.trim().toLowerCase()).filter(Boolean);
+  const { error } = await supabase
+    .from("own_resources")
+    .update(patch)
+    .eq("id", id)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/recursos");
+}
+
+export async function deleteOwnResource(id: string): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+  const { error } = await supabase
+    .from("own_resources")
     .delete()
     .eq("id", id)
     .eq("owner_id", user.id);

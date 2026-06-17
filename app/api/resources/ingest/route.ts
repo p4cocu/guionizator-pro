@@ -40,9 +40,10 @@ export async function POST(req: NextRequest) {
     }
     const ownerId = tokenRow.owner_id as string;
 
-    const body = (await req.json().catch(() => ({}))) as { url?: string; text?: string };
+    const body = (await req.json().catch(() => ({}))) as { url?: string; text?: string; source_name?: string };
     const url = body.url?.trim() || null;
     const text = body.text?.trim() || null;
+    const sourceName = body.source_name?.trim() || null;
     if (!url && !text) {
       return NextResponse.json({ error: "Envía al menos un 'url' o 'text'." }, { status: 400 });
     }
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest) {
         client_auto: classified.client_auto,
         tags: classified.tags,
         ingest_source: "shortcut",
+        source_name: sourceName,
       })
       .select("id, title, category, summary, client_id")
       .single();

@@ -335,3 +335,290 @@
   font-size: 14px;
   opacity: 0.75;
 }
+
+/* ── Tabs ── */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 20px;
+  border-bottom: 1px solid var(--glass-border);
+  padding-bottom: 0;
+}
+
+.tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.15s ease;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tabActive {
+  color: var(--emerald);
+  border-bottom-color: var(--emerald);
+}
+
+.tabCount {
+  background: var(--ink);
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  color: var(--text-muted);
+}
+
+/* ── Source badge en tarjeta ── */
+.cardTopRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sourceBadge {
+  background: color-mix(in srgb, var(--signal) 15%, transparent);
+  color: var(--signal);
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.sourceBadge:hover {
+  opacity: 0.75;
+}
+
+/* ── Edición inline de source_name ── */
+.sourceAddBtn {
+  background: transparent;
+  border: 1px dashed var(--glass-border);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: all 0.15s ease;
+}
+
+.sourceAddBtn:hover {
+  color: var(--signal);
+  border-color: var(--signal);
+}
+
+.sourceEditRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sourceEditInput {
+  background: var(--ink);
+  border: 1px solid var(--emerald);
+  border-radius: var(--r-md);
+  color: var(--text);
+  font-size: 11px;
+  padding: 3px 6px;
+  width: 110px;
+  outline: none;
+}
+
+.sourceEditSave {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.sourceEditSave:hover {
+  color: var(--text);
+}
+
+/* ── Vínculo guión en tarjeta ── */
+.scriptLink {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 10px;
+  margin-top: 2px;
+}
+
+.scriptLinkLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.scriptLinkRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scriptLinked {
+  font-size: 12px;
+  color: var(--emerald);
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scriptEmpty {
+  font-size: 12px;
+  color: var(--text-dim);
+  flex: 1;
+}
+
+/* ── Recursos Propios tab ── */
+.ownHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ownTitle {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  margin: 0 0 4px;
+}
+
+.ownSubtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+  max-width: 480px;
+}
+
+.ownForm {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 16px;
+}
+
+.ownField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.ownRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.ownActions {
+  margin-top: 8px;
+}
+
+/* ── Tarjeta recurso propio ── */
+.ownCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: color-mix(in srgb, var(--emerald) 5%, var(--ink-card));
+  border: 1px solid color-mix(in srgb, var(--emerald) 20%, var(--glass-border));
+  border-radius: var(--r-md);
+  padding: 16px;
+}
+
+.ownBadge {
+  background: color-mix(in srgb, var(--emerald) 15%, transparent);
+  color: var(--emerald);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+}
+
+.keywordRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.keywordLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.keywordValue {
+  background: color-mix(in srgb, var(--signal) 15%, transparent);
+  color: var(--signal);
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  letter-spacing: 0.04em;
+}
+
+.ownLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ownLinkChip {
+  background: var(--ink);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 3px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.ownEditBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 10px;
+}
+
+.ownEditActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}

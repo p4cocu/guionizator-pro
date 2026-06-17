@@ -19,10 +19,18 @@ from pathlib import Path
 
 SUPPORTED_FORMATS = {".ogg", ".mp3", ".wav", ".m4a", ".mp4", ".mov", ".mkv", ".flac", ".aac"}
 DEFAULT_MODEL = "small"
+COOKIES_FILE = Path.home() / ".instagram-cookies.txt"
 
 
 def download_audio(url: str, tmpdir: str) -> str:
     import yt_dlp
+
+    if not COOKIES_FILE.exists():
+        raise FileNotFoundError(
+            f"Archivo de cookies no encontrado en {COOKIES_FILE}. "
+            "Exporta las cookies de instagram.com con la extensión 'Get cookies.txt LOCALLY' "
+            "en Chrome y guárdalas en ~/.instagram-cookies.txt"
+        )
 
     out_path = str(Path(tmpdir) / "audio.%(ext)s")
     ydl_opts = {
@@ -35,6 +43,7 @@ def download_audio(url: str, tmpdir: str) -> str:
                 "preferredquality": "128",
             }
         ],
+        "cookiefile": str(COOKIES_FILE),
         "quiet": True,
         "no_warnings": True,
     }

@@ -21,6 +21,10 @@ const NAV: NavItem[] = [
   { href: "/cerebro", label: "Cerebro", phase: "F1" },
 ];
 
+const NAV_LOCAL: NavItem[] = [
+  { href: "/publicar", label: "Publicar" },
+];
+
 type Props = {
   isOpen?: boolean;
   onClose?: () => void;
@@ -69,6 +73,28 @@ export default function Sidebar({ isOpen, onClose }: Props) {
             </Link>
           );
         })}
+
+        {process.env.NODE_ENV === "development" && (
+          <>
+            <span className="eyebrow" style={{ paddingLeft: 14, opacity: 0.5, marginTop: 8 }}>
+              Local
+            </span>
+            {NAV_LOCAL.map((item) => {
+              const active =
+                pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`${styles.link} ${active ? styles.active : ""}`}
+                  onClick={onClose}
+                >
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </>
+        )}
       </nav>
 
       <div className={styles.footer}>

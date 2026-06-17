@@ -574,9 +574,25 @@ export default function DashboardClient({
                       </button>
                     )}
                     {entry.script_id ? (
-                      <Link href={`/guiones/${entry.script_id}`} className={s.viewGuionBtn}>
-                        Ver guion →
-                      </Link>
+                      <div className={s.guionRow}>
+                        <Link href={`/guiones/${entry.script_id}`} className={s.viewGuionBtn}>
+                          Ver guion →
+                        </Link>
+                        <button
+                          className={s.idChip}
+                          title={entry.script_id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(entry.script_id!);
+                            (e.currentTarget as HTMLButtonElement).textContent = "✓ copiado";
+                            setTimeout(() => {
+                              (e.currentTarget as HTMLButtonElement).textContent = `ID: ${entry.script_id!.slice(0, 8)}…`;
+                            }, 1500);
+                          }}
+                        >
+                          {`ID: ${entry.script_id.slice(0, 8)}…`}
+                        </button>
+                      </div>
                     ) : entry.status !== "publicado" ? (
                       <button
                         className={s.produceBtn}

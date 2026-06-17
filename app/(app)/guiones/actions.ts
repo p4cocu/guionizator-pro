@@ -223,7 +223,7 @@ export async function deleteScript(id: string) {
   redirect("/guiones");
 }
 
-export async function getScripts(clientId?: string): Promise<ScriptRow[]> {
+export async function getScripts(clientId?: string, type?: ScriptType): Promise<ScriptRow[]> {
   const { supabase, user } = await getAuthUser();
 
   let query = supabase
@@ -234,6 +234,7 @@ export async function getScripts(clientId?: string): Promise<ScriptRow[]> {
     .order("created_at", { ascending: false });
 
   if (clientId) query = query.eq("client_id", clientId);
+  if (type) query = query.eq("type", type);
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);

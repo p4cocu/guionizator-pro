@@ -399,6 +399,13 @@
   cursor: default;
 }
 
+.guionRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
 .viewGuionBtn {
   display: block;
   text-align: center;
@@ -413,13 +420,32 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   text-decoration: none;
-  margin-top: 4px;
   transition: background 0.15s, border-color 0.15s;
 }
 
 .viewGuionBtn:hover {
   background: rgba(0, 159, 125, 0.18);
   border-color: rgba(0, 159, 125, 0.55);
+}
+
+.idChip {
+  display: block;
+  text-align: center;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-family: monospace;
+  background: rgba(0, 159, 125, 0.05);
+  border: 1px solid rgba(0, 159, 125, 0.15);
+  border-radius: 6px;
+  color: var(--emerald);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.idChip:hover {
+  opacity: 1;
+  background: rgba(0, 159, 125, 0.12);
 }
 
 /* ── Modal ── */

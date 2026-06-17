@@ -120,40 +120,86 @@ export async function refreshToken(token: string): Promise<{
   });
 }
 
-// ─── Publicación (Etapa B — requiere media en URL pública) ───────────────────
+// ─── Publicación (requiere media en URL pública accesible por Instagram) ──────
 
-/**
- * Paso 1 de publicar: crea un "media container" con la URL pública del archivo.
- * Para REELS usar media_type=REELS + video_url. Para imagen, image_url.
- */
-export async function createMediaContainer(
-  igUserId: string,
-  token: string,
-  opts: {
-    caption?: string;
-    imageUrl?: string;
-    videoUrl?: string;
-    mediaType?: "REELS" | "IMAGE";
-  },
-): Promise<{ id: string }> {
-  const params: Record<string, string> = { access_token: token };
-  if (opts.caption) params.caption = opts.caption;
-  if (opts.videoUrl) {
-    params.media_type = "REELS";
-    params.video_url = opts.videoUrl;
-  } else if (opts.imageUrl) {
-    params.image_url = opts.imageUrl;
+async function igPost<T>(path: string, params: Record<string, string>): Promise<T> {
+  const url = new URL(`${GRAPH}/${path}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+
+  const res = await fetch(url.toString(), { method: "POST", cache: "no-store" });
+  const json = await res.json();
+
+  if (!res.ok || json.error) {
+    const msg = json?.error?.message || `Instagram API ${res.status}`;
+    throw new InstagramApiError(msg, res.status, json?.error);
   }
-  return igFetch(`${igUserId}/media`, params);
+  return json as T;
 }
 
-/** Paso 2 de publicar: publica el container ya procesado. */
-export async function publishMediaContainer(
+/** Crea un item individual para un carrusel (is_carousel_item=true). */
+export async function createCarouselItem(
+  igUserId: string,
+  token: string,
+  imageUrl: string,
+): Promise<{ id: string }> {
+  return igPost(`${igUserId}/media`, {
+    access_token: token,
+    image_url: imageUrl,
+    is_carousel_item: "true",
+  });
+}
+
+/** Crea el container de carrusel agrupando los IDs de los items. */
+export async function createCarouselContainer(
+  igUserId: string,
+  token: string,
+  childrenIds: string[],
+  caption: string,
+): Promise<{ id: string }> {
+  return igPost(`${igUserId}/media`, {
+    access_token: token,
+    media_type: "CAROUSEL",
+    children: childrenIds.join(","),
+    caption,
+  });
+}
+
+/** Crea un container de Reel con video y portada opcionales. */
+export async function createReelContainer(
+  igUserId: string,
+  token: string,
+  videoUrl: string,
+  caption: string,
+  coverUrl?: string,
+): Promise<{ id: string }> {
+  const params: Record<string, string> = {
+    access_token: token,
+    media_type: "REELS",
+    video_url: videoUrl,
+    caption,
+  };
+  if (coverUrl) params.cover_url = coverUrl;
+  return igPost(`${igUserId}/media`, params);
+}
+
+/** Consulta el estado de un container (para polling en Reels). */
+export async function checkContainerStatus(
+  containerId: string,
+  token: string,
+): Promise<{ id: string; status_code: "IN_PROGRESS" | "FINISHED" | "ERROR" | "EXPIRED" | "PUBLISHED" }> {
+  return igFetch(containerId, {
+    fields: "status_code",
+    access_token: token,
+  });
+}
+
+/** Publica un container ya procesado. */
+export async function publishContainer(
   igUserId: string,
   containerId: string,
   token: string,
 ): Promise<{ id: string }> {
-  return igFetch(`${igUserId}/media_publish`, {
+  return igPost(`${igUserId}/media_publish`, {
     creation_id: containerId,
     access_token: token,
   });

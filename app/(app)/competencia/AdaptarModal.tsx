@@ -35,6 +35,7 @@ type AdaptResponse = {
 type Props = {
   post: CompetitorPost;
   clientId: string;
+  clientName?: string;
   onClose: () => void;
 };
 
@@ -76,7 +77,7 @@ function buildCompletaBrief(post: CompetitorPost): string {
     .join("\n");
 }
 
-export default function AdaptarModal({ post, clientId, onClose }: Props) {
+export default function AdaptarModal({ post, clientId, clientName, onClose }: Props) {
   const router = useRouter();
 
   // Paso 1: picker
@@ -191,7 +192,9 @@ export default function AdaptarModal({ post, clientId, onClose }: Props) {
         {/* ── Cabecera ── */}
         <div className={s.modalHead}>
           <div>
-            <span className="eyebrow">Adaptar a mi marca</span>
+            <span className="eyebrow">
+              {clientName ? `Adaptar para ${clientName}` : "Adaptar a mi marca"}
+            </span>
             <p className={s.modalSub}>
               Idea-fuente: @{post.username}
               {data ? ` · ${data.type === "carousel" ? "Carrusel" : "Reel"}` : ""}
