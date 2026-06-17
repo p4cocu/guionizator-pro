@@ -8,13 +8,16 @@ import {
   ScriptRow,
   ScriptVersion,
   ScriptStatus,
+  RecordingType,
   ScriptCopy,
   saveScriptVersion,
   deleteScript,
   updateScriptStatus,
   updateScriptTitle,
+  updateScriptRecordingType,
   addScriptToCalendar,
 } from "../actions";
+import { RECORDING_TYPE_LABELS } from "../page";
 import { ReelEditor, CarouselEditor } from "./ScriptEditors";
 import CopyExpertPanel from "./CopyExpertPanel";
 import styles from "../guiones.module.css";
@@ -500,6 +503,8 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
   const [calPending, startCalTransition] = useTransition();
   const [calSuccess, setCalSuccess] = useState(false);
   const [isRegeneratingBlocks, setIsRegeneratingBlocks] = useState(false);
+  const [currentRecordingType, setCurrentRecordingType] = useState<RecordingType | null>(script.recording_type ?? null);
+  const [, startRecordingTypeTransition] = useTransition();
   const [regenBlocksError, setRegenBlocksError] = useState<string | null>(null);
   const downloadRef = useRef<HTMLDivElement>(null);
 
@@ -595,6 +600,14 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
       await updateScriptTitle(script.id, titleDraft);
       setEditingTitle(false);
       router.refresh();
+    });
+  }
+
+  function handleRecordingTypeChange(newType: RecordingType | "") {
+    const val = newType === "" ? null : newType;
+    setCurrentRecordingType(val);
+    startRecordingTypeTransition(async () => {
+      await updateScriptRecordingType(script.id, val);
     });
   }
 
@@ -736,10 +749,25 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
               </button>
             ))}
           </div>
-          <Link href="/guiones/nuevo" className="btn btn-primary">+ Nuevo guion</Link>
-          <button onClick={handleDelete} disabled={isDeleting} className="btn btn-ghost" style={{ color: "var(--flare)" }}>
-            {isDeleting ? "Eliminando…" : "Eliminar"}
-          </button>
+          <div className={styles.recordingTypeRow}>
+            <label className={styles.recordingTypeLabel}>Grabación</label>
+            <select
+              className={`select ${styles.recordingTypeSelect} ${currentRecordingType ? styles[`rt_${currentRecordingType}`] : ""}`}
+              value={currentRecordingType ?? ""}
+              onChange={(e) => handleRecordingTypeChange(e.target.value as RecordingType | "")}
+            >
+              <option value="">Sin definir</option>
+              {(Object.entries(RECORDING_TYPE_LABELS) as [RecordingType, string][]).map(([val, label]) => (
+                <option key={val} value={val}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Link href="/guiones/nuevo" className="btn btn-primary" style={{ whiteSpace: "nowrap" }}>+ Nuevo guion</Link>
+            <button onClick={handleDelete} disabled={isDeleting} className="btn btn-ghost" style={{ color: "var(--flare)" }}>
+              {isDeleting ? "Eliminando…" : "Eliminar"}
+            </button>
+          </div>
         </div>
       </div>
 

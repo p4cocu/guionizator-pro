@@ -8,6 +8,14 @@ export type ScriptType = "reel" | "carousel";
 
 export type ScriptStatus = "idea" | "produccion" | "publicado";
 
+export type RecordingType =
+  | "voz_off"
+  | "actuacion"
+  | "actuacion_compu"
+  | "actuacion_cel"
+  | "compu"
+  | "cel";
+
 export type ScriptRow = {
   id: string;
   client_id: string;
@@ -22,6 +30,7 @@ export type ScriptRow = {
   parent_id: string | null;
   is_latest: boolean;
   status: ScriptStatus;
+  recording_type: RecordingType | null;
   clients: { nombre: string; marca: string | null } | null;
 };
 
@@ -214,18 +223,33 @@ export async function deleteScript(id: string) {
   redirect("/guiones");
 }
 
-export async function getScripts(): Promise<ScriptRow[]> {
+export async function getScripts(clientId?: string): Promise<ScriptRow[]> {
   const { supabase, user } = await getAuthUser();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("scripts")
     .select("*, clients(nombre, marca)")
     .eq("owner_id", user.id)
     .eq("is_latest", true)
     .order("created_at", { ascending: false });
 
+  if (clientId) query = query.eq("client_id", clientId);
+
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as ScriptRow[];
+}
+
+export type ClientOption = { id: string; nombre: string };
+
+export async function getClientOptions(): Promise<ClientOption[]> {
+  const { supabase, user } = await getAuthUser();
+  const { data } = await supabase
+    .from("clients")
+    .select("id, nombre")
+    .eq("owner_id", user.id)
+    .order("nombre", { ascending: true });
+  return (data ?? []) as ClientOption[];
 }
 
 export async function getScript(id: string): Promise<ScriptRow | null> {
@@ -414,6 +438,23 @@ export async function linkScriptToCalendar(
 
   if (error) throw new Error(error.message);
   revalidatePath("/dashboard");
+}
+
+export async function updateScriptRecordingType(
+  scriptId: string,
+  recordingType: RecordingType | null
+): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+
+  const { error } = await supabase
+    .from("scripts")
+    .update({ recording_type: recordingType })
+    .eq("id", scriptId)
+    .eq("owner_id", user.id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/guiones");
+  revalidatePath(`/guiones/${scriptId}`);
 }
 
 export async function addScriptToCalendar(

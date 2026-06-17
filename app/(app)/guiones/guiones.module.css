@@ -20,11 +20,32 @@
   margin: 6px 0 0;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.clientSelect {
+  min-width: 180px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
 @media (max-width: 640px) {
   .header {
     flex-direction: column;
     align-items: flex-start;
     margin-bottom: 20px;
+  }
+  .headerActions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .clientSelect {
+    flex: 1;
+    min-width: 0;
   }
   .title {
     font-size: 22px;
@@ -126,6 +147,25 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* ── ID chip ── */
+.idChip {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-family: monospace;
+  background: rgba(0, 159, 125, 0.08);
+  border: 1px solid rgba(0, 159, 125, 0.2);
+  border-radius: 6px;
+  color: var(--emerald);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.idChip:hover {
+  background: rgba(0, 159, 125, 0.18);
 }
 
 /* ── Estado vacío ── */
@@ -731,7 +771,9 @@
 
 .detailActions {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
   flex-shrink: 0;
 }
 
@@ -1723,6 +1765,37 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* ── Recording type selector ── */
+.recordingTypeRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recordingTypeLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.recordingTypeSelect {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  min-width: 160px;
+  border-radius: var(--r-md);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.rt_voz_off         { color: #63b3ed; border-color: rgba(99,179,237,0.5) !important; background: rgba(99,179,237,0.08) !important; }
+.rt_actuacion       { color: var(--signal); border-color: rgba(255,210,58,0.5) !important; background: rgba(255,210,58,0.08) !important; }
+.rt_actuacion_compu { color: var(--flare); border-color: rgba(255,111,97,0.5) !important; background: rgba(255,111,97,0.08) !important; }
+.rt_actuacion_cel   { color: #b794f4; border-color: rgba(183,148,244,0.5) !important; background: rgba(183,148,244,0.08) !important; }
+.rt_compu           { color: var(--emerald); border-color: rgba(0,159,125,0.5) !important; background: rgba(0,159,125,0.08) !important; }
+.rt_cel             { color: var(--emerald); border-color: rgba(0,159,125,0.35) !important; background: rgba(0,159,125,0.06) !important; }
 
 /* ── Big Idea (paso 2) ── */
 .bigIdeaCard {
