@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { PromptStyle, RecentReel, SceneIdea, GeneratedPrompt, SavedScriptPrompts } from "./actions";
 import { savePromptStyle, deletePromptStyle, getScriptPrompts, saveScriptPrompts } from "./actions";
 import s from "./prompts.module.css";
@@ -302,12 +303,17 @@ export default function PromptsClient({ customStyles, recentReels, preloadedScri
   return (
     <div className={s.page}>
       {/* ── Header ── */}
-      <div className={s.header}>
-        <p className="eyebrow">Prompting</p>
-        <h2 className={s.title}>Generador de prompts de imagen</h2>
-        <p className={s.subtitle}>
-          Selecciona uno de tus guiones recientes, analiza las escenas y genera prompts profesionales para Flux, Midjourney o GPT-Image.
-        </p>
+      <div className={s.headerRow}>
+        <div className={s.header}>
+          <p className="eyebrow">Prompting</p>
+          <h2 className={s.title}>Generador de prompts de imagen</h2>
+          <p className={s.subtitle}>
+            Selecciona uno de tus guiones recientes, analiza las escenas y genera prompts profesionales para Flux, Midjourney o GPT-Image.
+          </p>
+        </div>
+        <Link href="/prompts/libre" className="btn btn-ghost" style={{ flexShrink: 0, marginTop: 8 }}>
+          → Generación libre
+        </Link>
       </div>
 
       {/* ── Style selector (top, compact) ── */}
