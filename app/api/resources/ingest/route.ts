@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
+      title: inserted.title,
       resource: {
         id: inserted.id,
         title: inserted.title,
