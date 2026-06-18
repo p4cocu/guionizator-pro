@@ -20,6 +20,8 @@ import {
 import { RECORDING_TYPE_LABELS } from "../page";
 import { ReelEditor, CarouselEditor } from "./ScriptEditors";
 import CopyExpertPanel from "./CopyExpertPanel";
+import ImagePromptsPanel from "./ImagePromptsPanel";
+import type { PromptStyle } from "../../prompts/actions";
 import styles from "../guiones.module.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -462,6 +464,7 @@ type Props = {
   script: ScriptRow;
   versions: ScriptVersion[];
   initialCopies: ScriptCopy[];
+  customStyles: PromptStyle[];
 };
 
 function formatDate(iso: string) {
@@ -474,7 +477,7 @@ function formatDate(iso: string) {
 
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
-export default function ScriptDetailClient({ script, versions, initialCopies }: Props) {
+export default function ScriptDetailClient({ script, versions, initialCopies, customStyles }: Props) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("view");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -488,6 +491,7 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
   const [saveError, setSaveError] = useState<string | null>(null);
   const [currentStatus, setCurrentStatus] = useState<ScriptStatus>(script.status ?? "idea");
   const [showCopyPanel, setShowCopyPanel] = useState(false);
+  const [showImagePanel, setShowImagePanel] = useState(false);
   const [showCalModal, setShowCalModal] = useState(false);
 
   // Title editing
@@ -818,6 +822,15 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
             ✦ Prompting
           </Link>
 
+          {!isReel && (
+            <button
+              className={`btn btn-ghost ${showImagePanel ? "btn-secondary" : ""}`}
+              onClick={() => setShowImagePanel((v) => !v)}
+            >
+              ✦ Imágenes
+            </button>
+          )}
+
           <button
             className={`btn btn-ghost ${showCopyPanel ? "btn-secondary" : ""}`}
             onClick={() => setShowCopyPanel((v) => !v)}
@@ -896,6 +909,15 @@ export default function ScriptDetailClient({ script, versions, initialCopies }: 
             {isPending ? "Guardando…" : "Guardar cambios"}
           </button>
         </div>
+      )}
+
+      {/* ── Image Prompts Panel ── */}
+      {showImagePanel && !isReel && (
+        <ImagePromptsPanel
+          slides={(content as CarouselContent).slides ?? []}
+          customStyles={customStyles}
+          onClose={() => setShowImagePanel(false)}
+        />
       )}
 
       {/* ── Copy Expert Panel ── */}

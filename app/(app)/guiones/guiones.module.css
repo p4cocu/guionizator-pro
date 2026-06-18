@@ -2004,3 +2004,133 @@
   line-height: 1.5;
   margin: 2px 0 0;
 }
+
+/* ── Image Prompts Panel ── */
+.imagePanel {
+  margin-top: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  padding: 24px;
+}
+
+.imagePanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.imagePanelTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.styleSelector {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.stylePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.stylePill:hover {
+  border-color: var(--emerald);
+  color: var(--emerald);
+}
+
+.stylePillActive {
+  border-color: var(--emerald);
+  background: rgba(0, 159, 125, 0.12);
+  color: var(--emerald);
+  font-weight: 600;
+}
+
+.slidePromptRow {
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+
+.slidePromptRow:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.slidePromptMeta {
+  margin-bottom: 8px;
+}
+
+.slidePromptNum {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.slidePromptTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 2px 0 4px;
+}
+
+.slidePromptVisual {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 0 0 10px;
+}
+
+.promptBox {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm, 8px);
+  padding: 12px 14px;
+  margin: 10px 0 6px;
+}
+
+.promptEn {
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  margin: 0 0 10px;
+  user-select: all;
+  word-break: break-word;
+}
+
+.promptDesc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.promptActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.promptError {
+  font-size: 13px;
+  color: var(--flare);
+  margin: 8px 0 0;
+}
