@@ -877,6 +877,21 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
         <p className={styles.briefText}>{script.brief}</p>
       </div>
 
+      {/* ── Post original (solo si es adaptación) ── */}
+      {script.source_post_permalink && (
+        <div className={styles.sourcePostBox}>
+          <span className={styles.sourcePostLabel}>Post original</span>
+          <a
+            href={script.source_post_permalink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.sourcePostLink}
+          >
+            Ver en Instagram →
+          </a>
+        </div>
+      )}
+
       {/* ── Contenido ── */}
       {mode === "edit-manual" ? (
         isReel ? (

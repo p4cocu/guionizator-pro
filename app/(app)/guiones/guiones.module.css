@@ -2134,3 +2134,33 @@
   color: var(--flare);
   margin: 8px 0 0;
 }
+
+/* ── Link de post original (adaptaciones) ── */
+.sourcePostBox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--surface-raised);
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+.sourcePostLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.sourcePostLink {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.sourcePostLink:hover {
+  color: var(--emerald);
+  text-decoration: underline;
+}
