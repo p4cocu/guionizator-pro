@@ -31,6 +31,7 @@ export type ScriptRow = {
   is_latest: boolean;
   status: ScriptStatus;
   recording_type: RecordingType | null;
+  source_post_permalink: string | null;
   clients: { nombre: string; marca: string | null } | null;
 };
 
@@ -83,6 +84,7 @@ export async function saveScriptSilent(data: {
   title?: string | null;
   content: Record<string, unknown>;
   brain_version_id: string | null;
+  source_post_permalink?: string | null;
 }): Promise<string> {
   const { supabase, user } = await getAuthUser();
 
@@ -97,6 +99,7 @@ export async function saveScriptSilent(data: {
       title: data.title ?? null,
       content: data.content,
       brain_version_id: data.brain_version_id,
+      source_post_permalink: data.source_post_permalink ?? null,
     })
     .select("id")
     .single();
@@ -120,6 +123,7 @@ export async function saveScriptWithNewIdea(data: {
   title?: string | null;
   content: Record<string, unknown>;
   brain_version_id: string | null;
+  source_post_permalink?: string | null;
 }): Promise<string> {
   const { supabase, user } = await getAuthUser();
 
@@ -134,6 +138,7 @@ export async function saveScriptWithNewIdea(data: {
       title: data.title ?? null,
       content: data.content,
       brain_version_id: data.brain_version_id,
+      source_post_permalink: data.source_post_permalink ?? null,
     })
     .select("id")
     .single();
@@ -223,7 +228,11 @@ export async function deleteScript(id: string) {
   redirect("/guiones");
 }
 
-export async function getScripts(clientId?: string, type?: ScriptType): Promise<ScriptRow[]> {
+export async function getScripts(
+  clientId?: string,
+  type?: ScriptType,
+  estado?: string,
+): Promise<ScriptRow[]> {
   const { supabase, user } = await getAuthUser();
 
   let query = supabase
@@ -235,6 +244,11 @@ export async function getScripts(clientId?: string, type?: ScriptType): Promise<
 
   if (clientId) query = query.eq("client_id", clientId);
   if (type) query = query.eq("type", type);
+  if (estado === "activos") {
+    query = query.in("status", ["idea", "produccion"]);
+  } else if (estado === "idea" || estado === "produccion" || estado === "publicado") {
+    query = query.eq("status", estado);
+  }
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -366,6 +380,7 @@ export async function saveScriptVersion(
       parent_id: rootId,
       version_number: nextVersion,
       is_latest: true,
+      source_post_permalink: (current as ScriptRow).source_post_permalink ?? null,
     })
     .select("id")
     .single();
