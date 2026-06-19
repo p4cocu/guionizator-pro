@@ -80,10 +80,8 @@ function ScriptCard({ script, hideClient }: { script: ScriptRow; hideClient: boo
         </div>
       )}
       {!hideClient && <p className={styles.cardClient}>{clientName}</p>}
-      <p className={styles.cardStructure}>{script.title || script.structure_name}</p>
-      {script.title && (
-        <p style={{ fontSize: 11, color: "var(--text-dim)", margin: 0 }}>{script.structure_name}</p>
-      )}
+      <p className={styles.cardStructure}>{script.title || <span style={{ opacity: 0.45 }}>Sin título</span>}</p>
+      <p style={{ fontSize: 11, color: "var(--text-dim)", margin: 0 }}>{script.structure_name}</p>
       <p className={styles.cardBrief}>{script.brief}</p>
       <ScriptIdChip id={script.id} />
     </Link>
@@ -93,12 +91,12 @@ function ScriptCard({ script, hideClient }: { script: ScriptRow; hideClient: boo
 export default async function GuionesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cliente?: string; tipo?: string }>;
+  searchParams: Promise<{ cliente?: string; tipo?: string; estado?: string }>;
 }) {
-  const { cliente, tipo } = await searchParams;
+  const { cliente, tipo, estado } = await searchParams;
   const scriptType = (tipo === "reel" || tipo === "carousel") ? (tipo as ScriptType) : undefined;
   const [scripts, clients] = await Promise.all([
-    getScripts(cliente, scriptType),
+    getScripts(cliente, scriptType, estado),
     getClientOptions(),
   ]);
 
