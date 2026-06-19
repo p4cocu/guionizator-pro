@@ -737,3 +737,32 @@
 .iconBtnDelete:hover {
   color: var(--flare);
 }
+
+.iconBtnDisliked {
+  opacity: 1;
+  color: var(--flare);
+}
+
+/* ── Badge "Manual" en tarjeta ── */
+.manualBadge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--signal);
+  background: color-mix(in srgb, var(--signal) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--signal) 35%, transparent);
+  border-radius: var(--r-pill);
+  padding: 1px 7px;
+}
+
+/* ── Panel de agregar manual ── */
+.manualPanel {
+  margin-bottom: 20px;
+}
+
+.manualForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}

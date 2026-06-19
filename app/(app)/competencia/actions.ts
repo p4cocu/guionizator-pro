@@ -196,6 +196,8 @@ export type CompetitorPost = {
   posted_at: string | null;
   transcription: string | null;
   is_favorite: boolean;
+  is_disliked: boolean;
+  is_manual: boolean;
 };
 
 export type LatestResults = {
@@ -226,7 +228,7 @@ export async function getLatestResults(clientId: string): Promise<LatestResults>
   const { data: posts } = await supabase
     .from("competitor_posts")
     .select(
-      "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite",
+      "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual",
     )
     .eq("owner_id", user.id)
     .eq("client_id", clientId);
@@ -256,4 +258,60 @@ export async function toggleFavoritePost(postId: string, value: boolean): Promis
     .eq("id", postId)
     .eq("owner_id", user.id);
   if (error) throw new Error(error.message);
+}
+
+export async function toggleDislikePost(postId: string, value: boolean): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+  const { error } = await supabase
+    .from("competitor_posts")
+    .update({ is_disliked: value })
+    .eq("id", postId)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+}
+
+export type AddManualPostInput = {
+  clientId: string;
+  permalink: string;
+  username: string;
+  type: "video" | "carousel" | "image";
+  caption: string;
+};
+
+export type AddManualPostResult =
+  | { ok: true; post: CompetitorPost }
+  | { ok: false; error: string };
+
+export async function addManualPost(input: AddManualPostInput): Promise<AddManualPostResult> {
+  const { supabase, user } = await getAuthUser();
+
+  const permalink = input.permalink.trim() || null;
+  const username = input.username.trim().replace(/^@/, "").toLowerCase();
+  if (!username) return { ok: false, error: "El usuario es requerido." };
+
+  const { data, error } = await supabase
+    .from("competitor_posts")
+    .insert({
+      owner_id: user.id,
+      client_id: input.clientId,
+      username,
+      permalink,
+      type: input.type,
+      caption: input.caption.trim() || null,
+      likes: 0,
+      comments: 0,
+      video_views: null,
+      followers: null,
+      posted_at: new Date().toISOString(),
+      is_manual: true,
+      is_favorite: false,
+      is_disliked: false,
+    })
+    .select(
+      "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual",
+    )
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, post: data as CompetitorPost };
 }

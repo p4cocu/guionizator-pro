@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   addCompetitor,
+  addManualPost,
   deleteCompetitorPost,
   getLatestResults,
   getScrapeStatus,
   listCompetitors,
   removeCompetitor,
   startScrape,
+  toggleDislikePost,
   toggleFavoritePost,
   type Competitor,
   type CompetitorPost,
@@ -21,10 +23,11 @@ type Props = { clients: Client[] };
 
 const transcribeEnabled = process.env.NEXT_PUBLIC_TRANSCRIBE_ENABLED === "true";
 
-type SortKey = "views" | "likes" | "comments" | "engagement" | "recent";
+type SortKey = "views" | "likes" | "comments" | "engagement" | "recent" | "manual";
 type TypeFilter = "all" | "video" | "carousel" | "image";
 
 const SORT_LABELS: Record<SortKey, string> = {
+  manual: "Agregados manualmente",
   views: "Más vistos",
   engagement: "Mejor engagement",
   likes: "Más likes",
@@ -93,6 +96,15 @@ export default function CompetenciaClient({ clients }: Props) {
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
 
+  // ── Formulario agregar manual ──
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualUrl, setManualUrl] = useState("");
+  const [manualUser, setManualUser] = useState("");
+  const [manualType, setManualType] = useState<"video" | "carousel" | "image">("video");
+  const [manualCaption, setManualCaption] = useState("");
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [isAddingManual, startAddManual] = useTransition();
+
   const sortedCompetitors = useMemo(() => {
     const list = competitors.slice();
     if (competitorSort === "name") list.sort((a, b) => a.username.localeCompare(b.username));
@@ -149,6 +161,9 @@ export default function CompetenciaClient({ clients }: Props) {
     if (accountFilter !== "all") list = list.filter((p) => p.username === accountFilter);
     list.sort((a, b) => {
       switch (sortBy) {
+        case "manual":
+          if (a.is_manual === b.is_manual) return 0;
+          return a.is_manual ? -1 : 1;
         case "views":
           return (b.video_views ?? 0) - (a.video_views ?? 0);
         case "likes":
@@ -315,6 +330,43 @@ export default function CompetenciaClient({ clients }: Props) {
       prev.map((p) => (p.id === post.id ? { ...p, is_favorite: newValue } : p))
     );
     await toggleFavoritePost(post.id, newValue);
+  }
+
+  async function handleToggleDislike(post: CompetitorPost) {
+    const newValue = !post.is_disliked;
+    setPosts((prev) =>
+      prev.map((p) => (p.id === post.id ? { ...p, is_disliked: newValue } : p))
+    );
+    await toggleDislikePost(post.id, newValue);
+  }
+
+  function handleAddManual() {
+    setManualError(null);
+    const url = manualUrl.trim();
+    const user = manualUser.trim().replace(/^@/, "").toLowerCase();
+    if (!user) {
+      setManualError("Escribe el @usuario.");
+      return;
+    }
+    startAddManual(async () => {
+      const res = await addManualPost({
+        clientId,
+        permalink: url,
+        username: user,
+        type: manualType,
+        caption: manualCaption,
+      });
+      if (!res.ok) {
+        setManualError(res.error);
+        return;
+      }
+      setPosts((prev) => [res.post, ...prev]);
+      setManualUrl("");
+      setManualUser("");
+      setManualCaption("");
+      setManualType("video");
+      setShowManualForm(false);
+    });
   }
 
   const isFresh = hoursSinceScrape != null && hoursSinceScrape < 72;
@@ -533,6 +585,77 @@ export default function CompetenciaClient({ clients }: Props) {
             )}
           </div>
 
+          {/* ── Agregar contenido manualmente ── */}
+          <div className={`card ${s.panel} ${s.manualPanel}`}>
+            <div className={s.panelHead}>
+              <span className="eyebrow">Agregar contenido manualmente</span>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: 12, padding: "5px 12px" }}
+                onClick={() => { setShowManualForm((v) => !v); setManualError(null); }}
+              >
+                {showManualForm ? "Cancelar" : "+ Agregar"}
+              </button>
+            </div>
+            {!showManualForm && (
+              <p className={s.hint}>
+                ¿Encontraste un video que te encanta pero no está en la base? Agrégalo aquí y úsalo con "Adaptar a mi marca".
+              </p>
+            )}
+            {showManualForm && (
+              <div className={s.manualForm}>
+                <label className={s.field}>
+                  <span className="field-label">URL de Instagram *</span>
+                  <input
+                    className="input"
+                    placeholder="https://www.instagram.com/p/..."
+                    value={manualUrl}
+                    onChange={(e) => setManualUrl(e.target.value)}
+                  />
+                </label>
+                <label className={s.field}>
+                  <span className="field-label">@usuario *</span>
+                  <input
+                    className="input"
+                    placeholder="@usuario"
+                    value={manualUser}
+                    onChange={(e) => setManualUser(e.target.value)}
+                  />
+                </label>
+                <label className={s.field}>
+                  <span className="field-label">Tipo</span>
+                  <select
+                    className="input"
+                    value={manualType}
+                    onChange={(e) => setManualType(e.target.value as "video" | "carousel" | "image")}
+                  >
+                    <option value="video">Reel / Video</option>
+                    <option value="carousel">Carrusel</option>
+                    <option value="image">Imagen</option>
+                  </select>
+                </label>
+                <label className={s.field}>
+                  <span className="field-label">Descripción / notas (opcional)</span>
+                  <textarea
+                    className="textarea"
+                    rows={3}
+                    placeholder="¿Por qué te gustó? ¿Qué quieres adaptar?"
+                    value={manualCaption}
+                    onChange={(e) => setManualCaption(e.target.value)}
+                  />
+                </label>
+                {manualError && <p className={s.error}>{manualError}</p>}
+                <button
+                  className="btn btn-primary"
+                  onClick={handleAddManual}
+                  disabled={isAddingManual}
+                >
+                  {isAddingManual ? "Guardando…" : "Guardar post"}
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className={s.grid}>
             {sorted.map((p, i) => {
               const avg = avgByUser.get(p.username) ?? 0;
@@ -550,6 +673,9 @@ export default function CompetenciaClient({ clients }: Props) {
                     >
                       @{p.username}
                     </a>
+                    {p.is_manual && (
+                      <span className={s.manualBadge}>Manual</span>
+                    )}
                     {isOutlier && (
                       <span className={s.outlier} title="Engagement vs su promedio">
                         🔥 {mult.toFixed(1)}×
@@ -558,10 +684,17 @@ export default function CompetenciaClient({ clients }: Props) {
                     <span className={s.postActions}>
                       <button
                         className={s.iconBtn}
-                        title={p.is_favorite ? "Quitar de favoritos" : "Marcar como favorito (transcribir luego)"}
+                        title={p.is_favorite ? "Quitar de favoritos" : "Marcar como favorito"}
                         onClick={() => handleToggleFavorite(p)}
                       >
                         {p.is_favorite ? "♥" : "♡"}
+                      </button>
+                      <button
+                        className={`${s.iconBtn} ${p.is_disliked ? s.iconBtnDisliked : ""}`}
+                        title={p.is_disliked ? "Quitar dislike" : "Ya lo vi, no me gustó"}
+                        onClick={() => handleToggleDislike(p)}
+                      >
+                        👎
                       </button>
                       <button
                         className={`${s.iconBtn} ${s.iconBtnDelete}`}
