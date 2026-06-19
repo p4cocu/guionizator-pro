@@ -707,3 +707,33 @@
     transform: rotate(360deg);
   }
 }
+
+/* ── Íconos de post (corazón + bote) ── */
+.postActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.iconBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 3px 4px;
+  border-radius: 4px;
+  color: var(--text-dim);
+  transition: color 0.15s, background 0.15s;
+}
+
+.iconBtn:hover {
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.iconBtnDelete:hover {
+  color: var(--flare);
+}

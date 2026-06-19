@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   addCompetitor,
+  deleteCompetitorPost,
   getLatestResults,
   getScrapeStatus,
   listCompetitors,
   removeCompetitor,
   startScrape,
+  toggleFavoritePost,
   type Competitor,
   type CompetitorPost,
 } from "./actions";
@@ -89,6 +91,7 @@ export default function CompetenciaClient({ clients }: Props) {
   const [adaptTargetClientId, setAdaptTargetClientId] = useState<string | null>(null);
   const [otherBrandPickerPostId, setOtherBrandPickerPostId] = useState<string | null>(null);
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
 
   const sortedCompetitors = useMemo(() => {
     const list = competitors.slice();
@@ -141,6 +144,7 @@ export default function CompetenciaClient({ clients }: Props) {
   // ── Procesar embeds cada vez que cambia la lista visible ──
   const sorted = useMemo(() => {
     let list = posts.slice();
+    if (onlyFavorites) list = list.filter((p) => p.is_favorite);
     if (typeFilter !== "all") list = list.filter((p) => p.type === typeFilter);
     if (accountFilter !== "all") list = list.filter((p) => p.username === accountFilter);
     list.sort((a, b) => {
@@ -160,7 +164,7 @@ export default function CompetenciaClient({ clients }: Props) {
       }
     });
     return list;
-  }, [posts, sortBy, typeFilter, accountFilter]);
+  }, [posts, sortBy, typeFilter, accountFilter, onlyFavorites]);
 
   useEffect(() => {
     const t = setTimeout(() => window.instgrm?.Embeds.process(), 300);
@@ -297,6 +301,20 @@ export default function CompetenciaClient({ clients }: Props) {
       }
     };
     input.click();
+  }
+
+  async function handleDeletePost(post: CompetitorPost) {
+    if (!window.confirm("¿Eliminar este post de competencia? Esta acción no se puede deshacer.")) return;
+    setPosts((prev) => prev.filter((p) => p.id !== post.id));
+    await deleteCompetitorPost(post.id);
+  }
+
+  async function handleToggleFavorite(post: CompetitorPost) {
+    const newValue = !post.is_favorite;
+    setPosts((prev) =>
+      prev.map((p) => (p.id === post.id ? { ...p, is_favorite: newValue } : p))
+    );
+    await toggleFavoritePost(post.id, newValue);
   }
 
   const isFresh = hoursSinceScrape != null && hoursSinceScrape < 72;
@@ -462,6 +480,14 @@ export default function CompetenciaClient({ clients }: Props) {
 
           <div className={s.filters}>
             <div className={s.filterGroup}>
+              <button
+                className={`${s.chipBtn} ${onlyFavorites ? s.chipBtnActive : ""}`}
+                onClick={() => setOnlyFavorites((v) => !v)}
+              >
+                {onlyFavorites ? "♥ Favoritos" : "♡ Solo favoritos"}
+              </button>
+            </div>
+            <div className={s.filterGroup}>
               <span className={s.filterLabel}>Ordenar:</span>
               {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
                 <button
@@ -529,6 +555,22 @@ export default function CompetenciaClient({ clients }: Props) {
                         🔥 {mult.toFixed(1)}×
                       </span>
                     )}
+                    <span className={s.postActions}>
+                      <button
+                        className={s.iconBtn}
+                        title={p.is_favorite ? "Quitar de favoritos" : "Marcar como favorito (transcribir luego)"}
+                        onClick={() => handleToggleFavorite(p)}
+                      >
+                        {p.is_favorite ? "♥" : "♡"}
+                      </button>
+                      <button
+                        className={`${s.iconBtn} ${s.iconBtnDelete}`}
+                        title="Eliminar este post"
+                        onClick={() => handleDeletePost(p)}
+                      >
+                        🗑
+                      </button>
+                    </span>
                   </div>
 
                   {p.permalink ? (
