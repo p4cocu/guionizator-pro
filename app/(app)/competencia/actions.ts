@@ -195,6 +195,7 @@ export type CompetitorPost = {
   followers: number | null;
   posted_at: string | null;
   transcription: string | null;
+  is_favorite: boolean;
 };
 
 export type LatestResults = {
@@ -225,7 +226,7 @@ export async function getLatestResults(clientId: string): Promise<LatestResults>
   const { data: posts } = await supabase
     .from("competitor_posts")
     .select(
-      "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription",
+      "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite",
     )
     .eq("owner_id", user.id)
     .eq("client_id", clientId);
@@ -235,4 +236,24 @@ export async function getLatestResults(clientId: string): Promise<LatestResults>
     scrapedAt: (scrape?.updated_at as string) ?? null,
     posts: (posts ?? []) as CompetitorPost[],
   };
+}
+
+export async function deleteCompetitorPost(postId: string): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+  const { error } = await supabase
+    .from("competitor_posts")
+    .delete()
+    .eq("id", postId)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+}
+
+export async function toggleFavoritePost(postId: string, value: boolean): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+  const { error } = await supabase
+    .from("competitor_posts")
+    .update({ is_favorite: value })
+    .eq("id", postId)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
 }
