@@ -106,6 +106,19 @@ export async function runScrapeJob(
     if (insErr) return fail(insErr.message);
   }
 
+  // 5b. Limpiar posts con más de 30 días de publicados
+  // Posts sin posted_at se ignoran (datos incompletos podrían ser recientes)
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  await supabase
+    .from("competitor_posts")
+    .delete()
+    .eq("owner_id", scrape.owner_id)
+    .eq("client_id", scrape.client_id)
+    .lt("posted_at", cutoff.toISOString())
+    .not("posted_at", "is", null);
+  // Error ignorado (best-effort): no fallamos el scrape por esto
+
   // 6. Actualizar followers de cada cuenta (best-effort, último valor conocido)
   const followersByUser = new Map<string, number>();
   for (const p of posts) {
