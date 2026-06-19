@@ -269,12 +269,14 @@ export default function NuevoGuionForm({
   initialClientId,
   initialCalendarId,
   initialType,
+  initialSourcePostPermalink,
 }: {
   clientes: Cliente[];
   initialBrief?: string;
   initialClientId?: string;
   initialCalendarId?: string;
   initialType?: "reel" | "carousel";
+  initialSourcePostPermalink?: string;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
@@ -579,6 +581,7 @@ export default function NuevoGuionForm({
           title: g.customTitle.trim() || null,
           content: g.content as Record<string, unknown>,
           brain_version_id: g.brainVersionId,
+          source_post_permalink: initialSourcePostPermalink ?? null,
         };
         let id: string;
         if (initialCalendarId) {

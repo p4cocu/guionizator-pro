@@ -129,6 +129,7 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
         client_id: clientId,
         type,
         brief,
+        ...(post.permalink ? { source_post_permalink: post.permalink } : {}),
       });
       router.push(`/guiones/nuevo?${params.toString()}`);
       onClose();
@@ -177,6 +178,7 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
           title: title.trim() || null,
           content: data.content as Record<string, unknown>,
           brain_version_id: data.brain_version_id,
+          source_post_permalink: post.permalink ?? null,
         });
         setSavedId(id);
       } catch (e) {

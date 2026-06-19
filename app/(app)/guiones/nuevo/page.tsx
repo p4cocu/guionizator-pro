@@ -6,9 +6,9 @@ import styles from "../guiones.module.css";
 export default async function NuevoGuionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ brief?: string; client_id?: string; calendar_id?: string; type?: string }>;
+  searchParams: Promise<{ brief?: string; client_id?: string; calendar_id?: string; type?: string; source_post_permalink?: string }>;
 }) {
-  const { brief, client_id, calendar_id, type } = await searchParams;
+  const { brief, client_id, calendar_id, type, source_post_permalink } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -45,6 +45,7 @@ export default async function NuevoGuionPage({
           initialClientId={client_id}
           initialCalendarId={calendar_id}
           initialType={type === "carousel" ? "carousel" : type === "reel" ? "reel" : undefined}
+          initialSourcePostPermalink={source_post_permalink}
         />
       )}
     </div>
