@@ -16,6 +16,7 @@ import {
   type CompetitorPost,
 } from "./actions";
 import AdaptarModal from "./AdaptarModal";
+import GanchoModal from "./GanchoModal";
 import s from "./competencia.module.css";
 
 type Client = { id: string; nombre: string; marca: string | null };
@@ -92,9 +93,13 @@ export default function CompetenciaClient({ clients }: Props) {
   const [competitorSort, setCompetitorSort] = useState<"added" | "name" | "followers">("added");
   const [adaptingPost, setAdaptingPost] = useState<CompetitorPost | null>(null);
   const [adaptTargetClientId, setAdaptTargetClientId] = useState<string | null>(null);
+  const [ganchoPost, setGanchoPost] = useState<CompetitorPost | null>(null);
   const [otherBrandPickerPostId, setOtherBrandPickerPostId] = useState<string | null>(null);
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(15);
+
+  const PAGE_SIZE = 15;
 
   // ── Formulario agregar manual ──
   const [showManualForm, setShowManualForm] = useState(false);
@@ -129,6 +134,7 @@ export default function CompetenciaClient({ clients }: Props) {
       setScrapedAt(results.scrapedAt);
       setAccountFilter("all");
       setTypeFilter("all");
+      setVisibleCount(15);
       const hrs = results.scrapedAt
         ? (Date.now() - new Date(results.scrapedAt).getTime()) / 3_600_000
         : null;
@@ -155,6 +161,7 @@ export default function CompetenciaClient({ clients }: Props) {
 
   // ── Procesar embeds cada vez que cambia la lista visible ──
   const sorted = useMemo(() => {
+    setVisibleCount(15);
     let list = posts.slice();
     if (onlyFavorites) list = list.filter((p) => p.is_favorite);
     if (typeFilter !== "all") list = list.filter((p) => p.type === typeFilter);
@@ -366,6 +373,9 @@ export default function CompetenciaClient({ clients }: Props) {
       setManualCaption("");
       setManualType("video");
       setShowManualForm(false);
+      // El embed necesita que el DOM esté actualizado; useTransition puede diferir
+      // el render, así que forzamos un process() con suficiente margen.
+      setTimeout(() => window.instgrm?.Embeds.process(), 800);
     });
   }
 
@@ -657,7 +667,7 @@ export default function CompetenciaClient({ clients }: Props) {
           </div>
 
           <div className={s.grid}>
-            {sorted.map((p, i) => {
+            {sorted.slice(0, visibleCount).map((p, i) => {
               const avg = avgByUser.get(p.username) ?? 0;
               const mult = avg > 0 ? eng(p) / avg : 0;
               const isOutlier = mult >= 1.5;
@@ -750,6 +760,15 @@ export default function CompetenciaClient({ clients }: Props) {
                     </div>
                   )}
 
+                  {p.transcription && (
+                    <button
+                      className={s.ganchoBtn}
+                      onClick={() => setGanchoPost(p)}
+                    >
+                      ⚡ Extraer gancho
+                    </button>
+                  )}
+
                   <button
                     className={s.adaptBtn}
                     onClick={() => {
@@ -813,6 +832,20 @@ export default function CompetenciaClient({ clients }: Props) {
               );
             })}
           </div>
+
+          {visibleCount < sorted.length && (
+            <div className={s.loadMore}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
+              >
+                Cargar {Math.min(PAGE_SIZE, sorted.length - visibleCount)} más
+                <span className={s.loadMoreCount}>
+                  ({visibleCount} de {sorted.length})
+                </span>
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -829,6 +862,13 @@ export default function CompetenciaClient({ clients }: Props) {
             setAdaptingPost(null);
             setAdaptTargetClientId(null);
           }}
+        />
+      )}
+
+      {ganchoPost && (
+        <GanchoModal
+          post={ganchoPost}
+          onClose={() => setGanchoPost(null)}
         />
       )}
 
