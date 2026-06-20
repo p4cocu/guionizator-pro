@@ -191,7 +191,7 @@ export default function CompetenciaClient({ clients }: Props) {
   useEffect(() => {
     const t = setTimeout(() => window.instgrm?.Embeds.process(), 300);
     return () => clearTimeout(t);
-  }, [sorted]);
+  }, [sorted, visibleCount]);
 
   // ── Promedio de engagement por cuenta (para el badge de outlier) ──
   const avgByUser = useMemo(() => {
