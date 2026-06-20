@@ -293,36 +293,34 @@ export default function CompetenciaClient({ clients }: Props) {
     }, 4000);
   }
 
-  function handleTranscribeClick(post: CompetitorPost) {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "video/*,audio/*,.mp4,.mov,.m4a,.mp3";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      setTranscribingId(post.id);
-      try {
-        const form = new FormData();
-        form.append("post_id", post.id);
-        form.append("file", file);
-        const res = await fetch("/api/transcribe-reel", { method: "POST", body: form });
-        const json = (await res.json()) as { transcription?: string; error?: string };
-        if (!res.ok) {
-          alert(json.error ?? "Error al transcribir");
-          return;
-        }
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === post.id ? { ...p, transcription: json.transcription ?? null } : p
-          )
-        );
-      } catch (e) {
-        alert(e instanceof Error ? e.message : "Error al transcribir");
-      } finally {
-        setTranscribingId(null);
+  async function handleTranscribeClick(post: CompetitorPost) {
+    const filePath = window.prompt(
+      "📁 Pega la ruta local del video descargado:\nEj: /Users/paco/Downloads/reel.mp4"
+    );
+    if (!filePath?.trim()) return;
+
+    setTranscribingId(post.id);
+    try {
+      const res = await fetch("/api/transcribe-reel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_id: post.id, file_path: filePath.trim() }),
+      });
+      const json = (await res.json()) as { transcription?: string; error?: string };
+      if (!res.ok) {
+        alert(json.error ?? "Error al transcribir");
+        return;
       }
-    };
-    input.click();
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === post.id ? { ...p, transcription: json.transcription ?? null } : p
+        )
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Error al transcribir");
+    } finally {
+      setTranscribingId(null);
+    }
   }
 
   async function handleDeletePost(post: CompetitorPost) {

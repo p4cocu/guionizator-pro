@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "child_process";
-import { writeFile, unlink } from "fs/promises";
-import { tmpdir } from "os";
+import { stat } from "fs/promises";
 import path from "path";
-import busboy from "busboy";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -37,48 +35,6 @@ function runPythonScript(scriptPath: string, args: string[]): Promise<string> {
   });
 }
 
-function parseMultipart(req: NextRequest): Promise<{ fields: Record<string, string>; file: { buffer: Buffer; filename: string } | null }> {
-  return new Promise((resolve, reject) => {
-    const contentType = req.headers.get("content-type") ?? "";
-    const bb = busboy({ headers: { "content-type": contentType }, limits: { fileSize: 500 * 1024 * 1024 } });
-
-    const fields: Record<string, string> = {};
-    let fileResult: { buffer: Buffer; filename: string } | null = null;
-
-    bb.on("field", (name, val) => { fields[name] = val; });
-
-    bb.on("file", (name, stream, info) => {
-      if (name !== "file") { stream.resume(); return; }
-      const chunks: Buffer[] = [];
-      stream.on("data", (chunk: Buffer) => chunks.push(chunk));
-      stream.on("end", () => { fileResult = { buffer: Buffer.concat(chunks), filename: info.filename }; });
-    });
-
-    bb.on("finish", () => resolve({ fields, file: fileResult }));
-    bb.on("error", reject);
-
-    const body = req.body;
-    if (!body) { reject(new Error("Request body vacío")); return; }
-
-    // Leer el web ReadableStream chunk a chunk y escribir directamente a busboy
-    const reader = body.getReader();
-    (async () => {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) { bb.end(); break; }
-          if (!bb.write(Buffer.from(value))) {
-            await new Promise<void>((res) => bb.once("drain", res));
-          }
-        }
-      } catch (e) {
-        bb.destroy(e as Error);
-        reject(e);
-      }
-    })();
-  });
-}
-
 export async function POST(req: NextRequest) {
   if (!isLocalDev()) {
     return NextResponse.json(
@@ -92,11 +48,18 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { fields, file } = await parseMultipart(req);
-    const post_id = fields["post_id"] ?? null;
+    const body = await req.json() as { post_id?: string; file_path?: string };
+    const { post_id, file_path } = body;
 
     if (!post_id) return NextResponse.json({ error: "post_id es requerido" }, { status: 400 });
-    if (!file) return NextResponse.json({ error: "archivo de video es requerido" }, { status: 400 });
+    if (!file_path?.trim()) return NextResponse.json({ error: "file_path es requerido" }, { status: 400 });
+
+    if (!path.isAbsolute(file_path)) {
+      return NextResponse.json(
+        { error: "Usa una ruta absoluta. Ej: /Users/paco/Downloads/video.mp4" },
+        { status: 400 }
+      );
+    }
 
     const { data: post } = await supabase
       .from("competitor_posts")
@@ -107,18 +70,27 @@ export async function POST(req: NextRequest) {
 
     if (!post) return NextResponse.json({ error: "Post no encontrado" }, { status: 404 });
 
-    const ext = file.filename.split(".").pop() ?? "mp4";
-    const tmpPath = path.join(tmpdir(), `reel_${Date.now()}.${ext}`);
-    await writeFile(tmpPath, file.buffer);
+    try {
+      await stat(file_path);
+    } catch {
+      return NextResponse.json(
+        { error: `Archivo no encontrado en: ${file_path}` },
+        { status: 400 }
+      );
+    }
 
-    console.log(`[transcribe-reel] Archivo recibido: ${file.filename} (${(file.buffer.length / 1024 / 1024).toFixed(1)} MB) → ${tmpPath}`);
+    const fileSizeMB = (await stat(file_path)).size / 1024 / 1024;
+    console.log(`[transcribe-reel] Archivo: ${file_path} (${fileSizeMB.toFixed(1)} MB)`);
 
     const scriptPath = path.join(process.cwd(), "scripts", "transcribe_reel.py");
     let raw: string;
     try {
-      raw = await runPythonScript(scriptPath, [tmpPath]);
-    } finally {
-      await unlink(tmpPath).catch(() => {});
+      raw = await runPythonScript(scriptPath, [file_path]);
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "Error en el script de transcripción" },
+        { status: 500 }
+      );
     }
 
     let transcription: string;
