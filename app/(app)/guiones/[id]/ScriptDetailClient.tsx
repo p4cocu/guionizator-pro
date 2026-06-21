@@ -49,6 +49,7 @@ type Mode = "view" | "edit-manual";
 const STATUS_OPTIONS: { value: ScriptStatus; label: string; color: string }[] = [
   { value: "idea", label: "Idea", color: "var(--text-dim)" },
   { value: "produccion", label: "En producción", color: "var(--signal)" },
+  { value: "listo", label: "Listo", color: "#63b3ed" },
   { value: "publicado", label: "Publicado", color: "var(--emerald)" },
 ];
 

@@ -15,6 +15,7 @@ function formatDate(iso: string) {
 const STATUS_LABELS: Record<string, string> = {
   idea: "Idea",
   produccion: "En producción",
+  listo: "Listo",
   publicado: "Publicado",
 };
 

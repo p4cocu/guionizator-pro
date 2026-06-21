@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export type ScriptType = "reel" | "carousel";
 
-export type ScriptStatus = "idea" | "produccion" | "publicado";
+export type ScriptStatus = "idea" | "produccion" | "listo" | "publicado";
 
 export type RecordingType =
   | "voz_off"
@@ -246,7 +246,11 @@ export async function getScripts(
   if (type) query = query.eq("type", type);
   if (estado === "activos") {
     query = query.in("status", ["idea", "produccion"]);
-  } else if (estado === "idea" || estado === "produccion" || estado === "publicado") {
+  } else if (estado === "ideas_listo") {
+    query = query.in("status", ["idea", "listo"]);
+  } else if (estado === "ideas_listo_produccion") {
+    query = query.in("status", ["idea", "listo", "produccion"]);
+  } else if (estado === "idea" || estado === "produccion" || estado === "listo" || estado === "publicado") {
     query = query.eq("status", estado);
   }
 

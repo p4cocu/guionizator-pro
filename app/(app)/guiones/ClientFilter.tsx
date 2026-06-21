@@ -55,6 +55,9 @@ export default function ClientFilter({ clients }: { clients: ClientOption[] }) {
         <option value="">Todos los estados</option>
         <option value="idea">Solo ideas</option>
         <option value="produccion">En producción</option>
+        <option value="listo">Listo</option>
+        <option value="ideas_listo">Ideas + Listo</option>
+        <option value="ideas_listo_produccion">Ideas + Listo + En producción</option>
         <option value="activos">Ideas + En producción</option>
         <option value="publicado">Publicados</option>
       </select>

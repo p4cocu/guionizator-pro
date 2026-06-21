@@ -1242,6 +1242,12 @@
   border: 1px solid rgba(255, 210, 58, 0.25);
 }
 
+.status_listo {
+  background: rgba(99, 179, 237, 0.12);
+  color: #63b3ed;
+  border: 1px solid rgba(99, 179, 237, 0.25);
+}
+
 .status_publicado {
   background: rgba(0, 159, 125, 0.12);
   color: var(--emerald);
