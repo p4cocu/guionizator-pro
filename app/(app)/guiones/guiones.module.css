@@ -2177,32 +2177,86 @@
   text-decoration: underline;
 }
 
-/* ── Status pills (filtro multi-estado) ── */
-.statusPills {
+/* ── Estado filter dropdown ── */
+.estadoFilterBtn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.statusPill {
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 13px;
-  border-radius: var(--r-pill);
-  font-size: 12px;
-  font-weight: 600;
-  background: transparent;
-  color: var(--text-dim);
-  border: 1px solid var(--glass-border);
+  justify-content: space-between;
+  gap: 8px;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-  white-space: nowrap;
+  text-align: left;
+  background: transparent;
+  font-family: inherit;
+  transition: border-color 0.15s, color 0.15s;
 }
 
-.statusPill:hover {
+.estadoFilterLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.estadoFilterCaret {
+  font-size: 10px;
+  opacity: 0.5;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.estadoDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 200;
+  min-width: 180px;
+  background: var(--glass-base);
+  background-image: var(--glass-overlay);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.estadoDropdownList {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  gap: 2px;
+}
+
+.estadoOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  user-select: none;
+}
+
+.estadoOption:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text);
+}
+
+.estadoOption input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.estadoDropdownFooter {
+  padding: 8px;
+  border-top: 1px solid var(--glass-border);
 }
 
 /* ── Recurso propio vinculado (ficha de guión) ── */
