@@ -12,14 +12,15 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/calendario", label: "Calendario" },
   { href: "/clientes", label: "Clientes", phase: "F2" },
   { href: "/guiones", label: "Guiones", phase: "F3" },
   { href: "/prompts", label: "Prompts", phase: "F4" },
   { href: "/instagram", label: "Instagram", phase: "F5" },
-  { href: "/competencia", label: "Competencia", phase: "F5" },
-  { href: "/tendencias", label: "Tendencias", phase: "F5" },
-  { href: "/ganchos", label: "Baúl de Ganchos", phase: "F5" },
-  { href: "/recursos", label: "Recursos", phase: "F5" },
+  { href: "/competencia", label: "Competencia", phase: "F6" },
+  { href: "/tendencias", label: "Tendencias", phase: "F7" },
+  { href: "/ganchos", label: "Baúl de Ganchos", phase: "F8" },
+  { href: "/recursos", label: "Recursos", phase: "F9" },
   { href: "/cerebro", label: "Cerebro", phase: "F1" },
 ];
 

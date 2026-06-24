@@ -10,6 +10,7 @@ import {
   ScriptStatus,
   RecordingType,
   ScriptCopy,
+  OwnResourceForScript,
   saveScriptVersion,
   deleteScript,
   updateScriptStatus,
@@ -21,7 +22,10 @@ import { RECORDING_TYPE_LABELS } from "../page";
 import { ReelEditor, CarouselEditor } from "./ScriptEditors";
 import CopyExpertPanel from "./CopyExpertPanel";
 import ImagePromptsPanel from "./ImagePromptsPanel";
+import HooksPanel from "./HooksPanel";
 import type { PromptStyle } from "../../prompts/actions";
+import type { ScriptHook } from "./hooksActions";
+import type { Hook } from "../../ganchos/actions";
 import styles from "../guiones.module.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -48,6 +52,7 @@ type Mode = "view" | "edit-manual";
 
 const STATUS_OPTIONS: { value: ScriptStatus; label: string; color: string }[] = [
   { value: "idea", label: "Idea", color: "var(--text-dim)" },
+  { value: "preproduccion", label: "Preproducción", color: "#52b788" },
   { value: "produccion", label: "En producción", color: "var(--signal)" },
   { value: "listo", label: "Listo", color: "#63b3ed" },
   { value: "publicado", label: "Publicado", color: "var(--emerald)" },
@@ -466,6 +471,9 @@ type Props = {
   versions: ScriptVersion[];
   initialCopies: ScriptCopy[];
   customStyles: PromptStyle[];
+  ownResources: OwnResourceForScript[];
+  initialHooks: ScriptHook[];
+  vaultHooks: Pick<Hook, "id" | "hook_template" | "category">[];
 };
 
 function formatDate(iso: string) {
@@ -478,7 +486,7 @@ function formatDate(iso: string) {
 
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
-export default function ScriptDetailClient({ script, versions, initialCopies, customStyles }: Props) {
+export default function ScriptDetailClient({ script, versions, initialCopies, customStyles, ownResources, initialHooks, vaultHooks }: Props) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("view");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -878,6 +886,20 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
         <p className={styles.briefText}>{script.brief}</p>
       </div>
 
+      {/* ── Ganchos ── */}
+      <HooksPanel
+        scriptId={script.id}
+        scriptContent={
+          isReel
+            ? ((content as ReelContent).voice_off ?? "")
+            : ((content as CarouselContent).slides ?? [])
+                .map((s) => `Slide ${s.number}: ${s.text}`)
+                .join("\n")
+        }
+        initialHooks={initialHooks}
+        vaultHooks={vaultHooks}
+      />
+
       {/* ── Post original (solo si es adaptación) ── */}
       {script.source_post_permalink && (
         <div className={styles.sourcePostBox}>
@@ -890,6 +912,35 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
           >
             Ver en Instagram →
           </a>
+        </div>
+      )}
+
+      {/* ── Recurso propio vinculado ── */}
+      {ownResources.length > 0 ? (
+        <div className={styles.ownResourceBox}>
+          <span className={styles.ownResourceLabel}>Recurso propio</span>
+          {ownResources.map((r) => (
+            <div key={r.id} className={styles.ownResourceItem}>
+              <a
+                href={r.drive_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.ownResourceLink}
+              >
+                {r.title} →
+              </a>
+              {r.keyword_trigger && (
+                <span className={styles.ownResourceKeyword}>{r.keyword_trigger}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className={styles.ownResourceBox}>
+          <span className={styles.ownResourceLabel}>Recurso propio</span>
+          <Link href="/recursos?tab=propios" className={styles.ownResourceEmpty}>
+            + Vincular recurso propio →
+          </Link>
         </div>
       )}
 

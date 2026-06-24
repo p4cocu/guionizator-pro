@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
 import type { CalendarEntry, CalendarEntryInput } from "./actions";
 import {
@@ -12,8 +12,9 @@ import {
   updateCalendarMetrics,
   postponeCalendarEntry,
   sendToProduction,
+  updateCalendarDate,
 } from "./actions";
-import s from "./dashboard.module.css";
+import s from "./calendario.module.css";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -64,7 +65,22 @@ const EMPTY_FORM: CalendarEntryInput = {
   notes: "",
   cta_type: "",
   weekly_theme: "",
+  publish_date: null,
 };
+
+function getCalendarDays(month: number, year: number): (number | null)[] {
+  const firstDow = (new Date(year, month - 1, 1).getDay() + 6) % 7; // 0=Lun
+  const totalDays = new Date(year, month, 0).getDate();
+  const days: (number | null)[] = [];
+  for (let i = 0; i < firstDow; i++) days.push(null);
+  for (let d = 1; d <= totalDays; d++) days.push(d);
+  while (days.length % 7 !== 0) days.push(null);
+  return days;
+}
+
+function toDateStr(y: number, m: number, d: number) {
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
 
 type Client = { id: string; nombre: string; marca: string | null };
 
@@ -141,6 +157,26 @@ export default function DashboardClient({
   // Postpone menu state
   const [postponeMenuId, setPostponeMenuId] = useState<string | null>(null);
 
+  // Metrics panel state
+  const [metricsEntryId, setMetricsEntryId] = useState<string | null>(null);
+  const [metricsForm, setMetricsForm] = useState<MetricsForm>(EMPTY_METRICS);
+  const [metricsPending, startMetricsTransition] = useTransition();
+  const [metricsSaved, setMetricsSaved] = useState(false);
+
+  // View mode
+  const [viewMode, setViewMode] = useState<"semanas" | "calendario">("semanas");
+
+  // Local entries state for optimistic drag-and-drop updates
+  const [entries, setEntries] = useState<CalendarEntry[]>(initialEntries);
+  useEffect(() => { setEntries(initialEntries); }, [initialEntries]);
+
+  // Drag and drop
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+
+  const now = new Date();
+  const todayStr = toDateStr(now.getFullYear(), now.getMonth() + 1, now.getDate());
+
   function handlePostpone(id: string, to: "week" | "month") {
     setPostponeMenuId(null);
     startTransition(async () => {
@@ -148,12 +184,6 @@ export default function DashboardClient({
       router.refresh();
     });
   }
-
-  // Metrics panel state
-  const [metricsEntryId, setMetricsEntryId] = useState<string | null>(null);
-  const [metricsForm, setMetricsForm] = useState<MetricsForm>(EMPTY_METRICS);
-  const [metricsPending, startMetricsTransition] = useTransition();
-  const [metricsSaved, setMetricsSaved] = useState(false);
 
   function navigate(clientId: string | null, m: number, y: number) {
     const params = new URLSearchParams();
@@ -173,7 +203,7 @@ export default function DashboardClient({
     navigate(selectedClientId, d.getMonth() + 1, d.getFullYear());
   }
 
-  function openNew(weekNumber: number) {
+  function openNew(weekNumber: number, date?: string) {
     setEditingEntry(null);
     setForm({
       ...EMPTY_FORM,
@@ -181,6 +211,7 @@ export default function DashboardClient({
       year,
       week_number: weekNumber,
       client_id: selectedClientId,
+      publish_date: date ?? null,
     });
     setError(null);
     setShowModal(true);
@@ -202,6 +233,7 @@ export default function DashboardClient({
       notes: entry.notes ?? "",
       cta_type: entry.cta_type ?? "",
       weekly_theme: entry.weekly_theme ?? "",
+      publish_date: entry.publish_date ?? null,
     });
     setError(null);
     setShowModal(true);
@@ -248,6 +280,18 @@ export default function DashboardClient({
         ? prev.platforms.filter((x) => x !== p)
         : [...prev.platforms, p],
     }));
+  }
+
+  function handleDropOnDay(dateStr: string | null) {
+    if (!draggedId) return;
+    const id = draggedId;
+    setDraggedId(null);
+    setDragOverDate(null);
+    setEntries((prev) => prev.map((e) => e.id === id ? { ...e, publish_date: dateStr } : e));
+    startTransition(async () => {
+      await updateCalendarDate(id, dateStr);
+      router.refresh();
+    });
   }
 
   // AI generation handlers
@@ -386,27 +430,38 @@ export default function DashboardClient({
     });
   }
 
-  // Stats
+  // Computed values
   const stats = {
-    idea: initialEntries.filter((e) => e.status === "idea").length,
-    etapa0: initialEntries.filter((e) => e.status === "etapa0").length,
-    produccion: initialEntries.filter((e) => e.status === "produccion").length,
-    publicado: initialEntries.filter((e) => e.status === "publicado").length,
+    idea: entries.filter((e) => e.status === "idea").length,
+    etapa0: entries.filter((e) => e.status === "etapa0").length,
+    produccion: entries.filter((e) => e.status === "produccion").length,
+    publicado: entries.filter((e) => e.status === "publicado").length,
   };
 
-  // Group by week
   const byWeek: Record<number, CalendarEntry[]> = { 1: [], 2: [], 3: [], 4: [] };
-  for (const e of initialEntries) {
+  for (const e of entries) {
     const w = e.week_number ?? 1;
     if (w >= 1 && w <= 4) byWeek[w].push(e);
   }
 
   const weekThemes: Record<number, string> = {};
-  for (const e of initialEntries) {
+  for (const e of entries) {
     if (e.weekly_theme && e.week_number) {
       weekThemes[e.week_number] = e.weekly_theme;
     }
   }
+
+  const byDate: Record<string, CalendarEntry[]> = {};
+  const noDate: CalendarEntry[] = [];
+  for (const e of entries) {
+    if (e.publish_date) {
+      (byDate[e.publish_date] ??= []).push(e);
+    } else {
+      noDate.push(e);
+    }
+  }
+
+  const calendarDays = getCalendarDays(month, year);
 
   return (
     <div className={s.page}>
@@ -414,7 +469,7 @@ export default function DashboardClient({
       <div className={s.header}>
         <div>
           <p className="eyebrow">Publicaciones</p>
-          <h2 className={s.title}>Dashboard de publicaciones</h2>
+          <h2 className={s.title}>Calendario de contenido</h2>
         </div>
         <div className={s.headerControls}>
           <select
@@ -437,7 +492,14 @@ export default function DashboardClient({
           <button
             className="btn btn-primary"
             style={{ padding: "10px 18px", fontSize: 13 }}
-            onClick={() => { setGenClientId(selectedClientId); setGenWeeklyTheme(""); setShowGenModal(true); setGenStep("pick"); setGeneratedWeeks([]); setGenError(null); }}
+            onClick={() => {
+              setGenClientId(selectedClientId);
+              setGenWeeklyTheme("");
+              setShowGenModal(true);
+              setGenStep("pick");
+              setGeneratedWeeks([]);
+              setGenError(null);
+            }}
           >
             ✦ Generar contenido
           </button>
@@ -459,9 +521,25 @@ export default function DashboardClient({
         ))}
       </div>
 
-      {/* Weeks */}
-      {[1, 2, 3, 4].map((week) => {
-        const entries = byWeek[week];
+      {/* View Toggle */}
+      <div className={s.viewToggle}>
+        <button
+          className={`${s.viewBtn} ${viewMode === "semanas" ? s.viewBtnActive : ""}`}
+          onClick={() => setViewMode("semanas")}
+        >
+          Vista semanas
+        </button>
+        <button
+          className={`${s.viewBtn} ${viewMode === "calendario" ? s.viewBtnActive : ""}`}
+          onClick={() => setViewMode("calendario")}
+        >
+          Vista calendario
+        </button>
+      </div>
+
+      {/* ── Vista semanas ── */}
+      {viewMode === "semanas" && [1, 2, 3, 4].map((week) => {
+        const weekEntries = byWeek[week];
         const theme = weekThemes[week] ?? "";
         return (
           <div key={week} className={s.week}>
@@ -478,7 +556,7 @@ export default function DashboardClient({
               </button>
             </div>
 
-            {entries.length === 0 ? (
+            {weekEntries.length === 0 ? (
               <div className={s.emptyWeek}>
                 <span>Sin contenido planeado</span>
                 <button className={s.emptyAddLink} onClick={() => openNew(week)}>
@@ -487,7 +565,7 @@ export default function DashboardClient({
               </div>
             ) : (
               <div className={s.entries}>
-                {entries.map((entry, idx) => (
+                {weekEntries.map((entry, idx) => (
                   <div key={entry.id} className={`card ${s.entryCard}`}>
                     <div className={s.entryTop}>
                       <div className={s.entryBadges}>
@@ -516,7 +594,7 @@ export default function DashboardClient({
                         <button
                           className={s.reorderBtn}
                           onClick={() => handleReorder(entry.id, "down")}
-                          disabled={isPending || idx === entries.length - 1}
+                          disabled={isPending || idx === weekEntries.length - 1}
                           title="Bajar"
                         >↓</button>
                         <div className={s.postponeWrap}>
@@ -609,6 +687,101 @@ export default function DashboardClient({
           </div>
         );
       })}
+
+      {/* ── Vista calendario ── */}
+      {viewMode === "calendario" && (
+        <div className={s.calendarWrap}>
+          <div className={s.calGridScroll}>
+            <div className={s.calGrid}>
+              {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => (
+                <div key={d} className={s.calDayHeader}>{d}</div>
+              ))}
+              {calendarDays.map((day, i) => {
+                if (!day) return <div key={`pad-${i}`} className={s.calDayPad} />;
+                const dateStr = toDateStr(year, month, day);
+                const dayEntries = byDate[dateStr] ?? [];
+                const isToday = dateStr === todayStr;
+                const isDragOver = dragOverDate === dateStr;
+                return (
+                  <div
+                    key={dateStr}
+                    className={`${s.calDay} ${isToday ? s.calDayToday : ""} ${isDragOver ? s.calDayDragOver : ""}`}
+                    onDragOver={(e) => { e.preventDefault(); setDragOverDate(dateStr); }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setDragOverDate(null);
+                      }
+                    }}
+                    onDrop={(e) => { e.preventDefault(); handleDropOnDay(dateStr); }}
+                  >
+                    <div className={s.calDayTop}>
+                      <span className={`${s.calDayNum} ${isToday ? s.calDayNumToday : ""}`}>{day}</span>
+                      <button
+                        className={s.calAddDay}
+                        onClick={() => openNew(Math.min(4, Math.ceil(day / 7)), dateStr)}
+                        title="Agregar"
+                      >+</button>
+                    </div>
+                    {dayEntries.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className={`${s.calChip} ${draggedId === entry.id ? s.calChipDragging : ""}`}
+                        draggable
+                        onDragStart={(e) => { e.stopPropagation(); setDraggedId(entry.id); }}
+                        onDragEnd={() => { setDraggedId(null); setDragOverDate(null); }}
+                        onClick={() => openEdit(entry)}
+                        title={entry.title}
+                      >
+                        <span
+                          className={s.calChipFormat}
+                          style={{ color: STATUS_COLORS[entry.status] ?? "var(--text-dim)" }}
+                        >
+                          {FORMAT_LABELS[entry.format]?.charAt(0) ?? "R"}
+                        </span>
+                        <span className={s.calChipTitle}>{entry.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Sin fecha */}
+          <div
+            className={`${s.noDateZone} ${dragOverDate === "__none__" ? s.calDayDragOver : ""}`}
+            onDragOver={(e) => { e.preventDefault(); setDragOverDate("__none__"); }}
+            onDragLeave={() => setDragOverDate(null)}
+            onDrop={(e) => { e.preventDefault(); handleDropOnDay(null); }}
+          >
+            <span className={s.noDateLabel}>Sin fecha programada</span>
+            <div className={s.noDateEntries}>
+              {noDate.map((entry) => (
+                <div
+                  key={entry.id}
+                  className={`${s.calChip} ${draggedId === entry.id ? s.calChipDragging : ""}`}
+                  draggable
+                  onDragStart={(e) => { e.stopPropagation(); setDraggedId(entry.id); }}
+                  onDragEnd={() => { setDraggedId(null); setDragOverDate(null); }}
+                  onClick={() => openEdit(entry)}
+                  title={entry.title}
+                >
+                  <span
+                    className={s.calChipFormat}
+                    style={{ color: STATUS_COLORS[entry.status] ?? "var(--text-dim)" }}
+                  >
+                    {FORMAT_LABELS[entry.format]?.charAt(0) ?? "R"}
+                  </span>
+                  <span className={s.calChipTitle}>{entry.title}</span>
+                </div>
+              ))}
+              {noDate.length === 0 && (
+                <span className={s.noDateEmpty}>Arrastra aquí para quitar la fecha programada</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Overlay para cerrar el menú de posponer */}
       {postponeMenuId && (
@@ -857,7 +1030,7 @@ export default function DashboardClient({
         </div>
       )}
 
-      {/* Modal */}
+      {/* ── Modal: Nueva / editar pieza ── */}
       {showModal && (
         <div className={s.modalOverlay} onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
           <div className={s.modal}>

@@ -1051,13 +1051,13 @@ export default function NuevoGuionForm({
               {fromIdea
                 ? "Guion guardado y vinculado a la idea del dashboard"
                 : allSaved
-                ? `${generatedScripts.length} guion${generatedScripts.length > 1 ? "es guardados" : " guardado"} · ${generatedScripts.length > 1 ? "ideas creadas" : "idea creada"} en el dashboard`
-                : `${generatedScripts.filter((g) => g.savedId).length} de ${generatedScripts.length} guardados · ideas creadas en el dashboard`}
+                ? `${generatedScripts.length} guion${generatedScripts.length > 1 ? "es guardados" : " guardado"} · ${generatedScripts.length > 1 ? "ideas creadas" : "idea creada"} en el calendario`
+                : `${generatedScripts.filter((g) => g.savedId).length} de ${generatedScripts.length} guardados · ideas creadas en el calendario`}
               <button
                 className="btn btn-ghost"
-                onClick={() => router.push(fromIdea ? "/dashboard" : "/guiones")}
+                onClick={() => router.push(fromIdea ? "/calendario" : "/guiones")}
               >
-                {fromIdea ? "Volver al dashboard →" : "Ver en biblioteca →"}
+                {fromIdea ? "Volver al calendario →" : "Ver en biblioteca →"}
               </button>
             </div>
           )}

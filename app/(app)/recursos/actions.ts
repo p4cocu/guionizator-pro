@@ -81,9 +81,8 @@ export async function getScriptsLite(): Promise<ScriptLite[]> {
     .from("scripts")
     .select("id, title, structure_name")
     .eq("owner_id", user.id)
-    .eq("is_latest", true)
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(500);
   return (data ?? []) as ScriptLite[];
 }
 

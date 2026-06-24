@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export type ScriptType = "reel" | "carousel";
 
-export type ScriptStatus = "idea" | "produccion" | "listo" | "publicado";
+export type ScriptStatus = "idea" | "preproduccion" | "produccion" | "listo" | "publicado";
 
 export type RecordingType =
   | "voz_off"
@@ -33,6 +33,7 @@ export type ScriptRow = {
   recording_type: RecordingType | null;
   source_post_permalink: string | null;
   clients: { nombre: string; marca: string | null } | null;
+  has_resource?: boolean;
 };
 
 async function getAuthUser() {
@@ -179,7 +180,7 @@ export async function saveScriptWithNewIdea(data: {
   if (calError) throw new Error(calError.message);
 
   revalidatePath("/guiones");
-  revalidatePath("/dashboard");
+  revalidatePath("/calendario");
   return script.id;
 }
 
@@ -210,7 +211,7 @@ export async function updateScriptTitle(
 
   revalidatePath("/guiones");
   revalidatePath(`/guiones/${scriptId}`);
-  revalidatePath("/dashboard");
+  revalidatePath("/calendario");
 }
 
 export async function deleteScript(id: string) {
@@ -231,7 +232,7 @@ export async function deleteScript(id: string) {
 export async function getScripts(
   clientId?: string,
   type?: ScriptType,
-  estado?: string,
+  estados?: string[],
 ): Promise<ScriptRow[]> {
   const { supabase, user } = await getAuthUser();
 
@@ -244,19 +245,46 @@ export async function getScripts(
 
   if (clientId) query = query.eq("client_id", clientId);
   if (type) query = query.eq("type", type);
-  if (estado === "activos") {
-    query = query.in("status", ["idea", "produccion"]);
-  } else if (estado === "ideas_listo") {
-    query = query.in("status", ["idea", "listo"]);
-  } else if (estado === "ideas_listo_produccion") {
-    query = query.in("status", ["idea", "listo", "produccion"]);
-  } else if (estado === "idea" || estado === "produccion" || estado === "listo" || estado === "publicado") {
-    query = query.eq("status", estado);
+  if (estados && estados.length > 0) {
+    query = query.in("status", estados);
   }
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return (data ?? []) as ScriptRow[];
+
+  const scripts = (data ?? []) as ScriptRow[];
+  if (scripts.length === 0) return scripts;
+
+  const scriptIds = scripts.map((s) => s.id);
+  const [{ data: rIds }, { data: orIds }] = await Promise.all([
+    supabase.from("resources").select("script_id").eq("owner_id", user.id).in("script_id", scriptIds),
+    supabase.from("own_resources").select("script_id").eq("owner_id", user.id).in("script_id", scriptIds),
+  ]);
+
+  const withResource = new Set([
+    ...(rIds ?? []).map((r) => r.script_id as string),
+    ...(orIds ?? []).map((r) => r.script_id as string),
+  ]);
+
+  return scripts.map((s) => ({ ...s, has_resource: withResource.has(s.id) }));
+}
+
+export type OwnResourceForScript = {
+  id: string;
+  title: string;
+  drive_url: string;
+  keyword_trigger: string | null;
+};
+
+export async function getOwnResourcesForScript(scriptId: string): Promise<OwnResourceForScript[]> {
+  const { supabase, user } = await getAuthUser();
+  const { data } = await supabase
+    .from("own_resources")
+    .select("id, title, drive_url, keyword_trigger")
+    .eq("owner_id", user.id)
+    .eq("script_id", scriptId)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as OwnResourceForScript[];
 }
 
 export type ClientOption = { id: string; nombre: string };
@@ -457,7 +485,7 @@ export async function linkScriptToCalendar(
     .eq("owner_id", user.id);
 
   if (error) throw new Error(error.message);
-  revalidatePath("/dashboard");
+  revalidatePath("/calendario");
 }
 
 export async function updateScriptRecordingType(
@@ -522,6 +550,6 @@ export async function addScriptToCalendar(
   });
 
   if (error) throw new Error(error.message);
-  revalidatePath("/dashboard");
+  revalidatePath("/calendario");
   revalidatePath(`/guiones/${scriptId}`);
 }

@@ -1236,6 +1236,12 @@
   border: 1px solid var(--glass-border);
 }
 
+.status_preproduccion {
+  background: rgba(134, 220, 174, 0.12);
+  color: #52b788;
+  border: 1px solid rgba(134, 220, 174, 0.3);
+}
+
 .status_produccion {
   background: rgba(255, 210, 58, 0.12);
   color: var(--signal);
@@ -2169,4 +2175,94 @@
 .sourcePostLink:hover {
   color: var(--emerald);
   text-decoration: underline;
+}
+
+/* ── Status pills (filtro multi-estado) ── */
+.statusPills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 13px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.statusPill:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+/* ── Recurso propio vinculado (ficha de guión) ── */
+.ownResourceBox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--surface-raised);
+  border-radius: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.ownResourceLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 215, 0, 0.75);
+  flex-shrink: 0;
+}
+
+.ownResourceItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ownResourceLink {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.ownResourceLink:hover {
+  color: rgba(255, 215, 0, 0.9);
+  text-decoration: underline;
+}
+
+.ownResourceKeyword {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 215, 0, 0.12);
+  color: rgba(255, 215, 0, 0.8);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+}
+
+.ownResourceEmpty {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-decoration: none;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.ownResourceEmpty:hover {
+  opacity: 1;
+  color: var(--text-muted);
 }

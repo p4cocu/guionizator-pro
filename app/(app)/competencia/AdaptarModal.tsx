@@ -380,7 +380,7 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
             <>
               {savedId ? (
                 <>
-                  <span className={s.modalSaved}>✓ Guion guardado e idea creada en el dashboard</span>
+                  <span className={s.modalSaved}>✓ Guion guardado e idea creada en el calendario</span>
                   <a className="btn btn-primary" href={`/guiones/${savedId}`}>
                     Ver guion →
                   </a>

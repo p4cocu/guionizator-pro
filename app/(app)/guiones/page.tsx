@@ -14,9 +14,18 @@ function formatDate(iso: string) {
 
 const STATUS_LABELS: Record<string, string> = {
   idea: "Idea",
+  preproduccion: "Preproducción",
   produccion: "En producción",
   listo: "Listo",
   publicado: "Publicado",
+};
+
+const CARD_BORDER_BY_STATUS: Record<string, string> = {
+  idea: "var(--glass-border)",
+  preproduccion: "rgba(134, 220, 174, 0.45)",
+  produccion: "rgba(255, 210, 58, 0.45)",
+  listo: "rgba(255, 235, 150, 0.5)",
+  publicado: "rgba(0, 159, 125, 0.5)",
 };
 
 export const RECORDING_TYPE_LABELS: Record<RecordingType, string> = {
@@ -63,9 +72,12 @@ function RecordingTypeBadge({ type }: { type: RecordingType }) {
 function ScriptCard({ script, hideClient }: { script: ScriptRow; hideClient: boolean }) {
   const clientName = script.clients?.nombre ?? "—";
   const status = script.status ?? "idea";
+  const borderColor = script.has_resource
+    ? "rgba(255, 215, 0, 0.55)"
+    : (CARD_BORDER_BY_STATUS[status] ?? "var(--glass-border)");
 
   return (
-    <Link href={`/guiones/${script.id}`} className={`card ${styles.card}`}>
+    <Link href={`/guiones/${script.id}`} className={`card ${styles.card}`} style={{ borderColor }}>
       <div className={styles.cardMeta}>
         <span className={`${styles.typeBadge} ${styles[script.type]}`}>
           {script.type === "reel" ? "Reel" : "Carrusel"}
@@ -92,17 +104,20 @@ function ScriptCard({ script, hideClient }: { script: ScriptRow; hideClient: boo
 export default async function GuionesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cliente?: string; tipo?: string; estado?: string }>;
+  searchParams: Promise<{ cliente?: string; tipo?: string; estado?: string | string[] }>;
 }) {
   const { cliente, tipo, estado } = await searchParams;
   const scriptType = (tipo === "reel" || tipo === "carousel") ? (tipo as ScriptType) : undefined;
+  const estadoRaw = estado ?? [];
+  const estados = Array.isArray(estadoRaw) ? estadoRaw : [estadoRaw];
   const [scripts, clients] = await Promise.all([
-    getScripts(cliente, scriptType, estado),
+    getScripts(cliente, scriptType, estados),
     getClientOptions(),
   ]);
 
   const selectedClient = clients.find((c) => c.id === cliente);
   const typeLabel = scriptType === "reel" ? "Reels" : scriptType === "carousel" ? "Carruseles" : null;
+  const estadosLabel = estados.length > 0 ? ` · ${estados.map((e) => STATUS_LABELS[e] ?? e).join(", ")}` : "";
 
   return (
     <div>
@@ -114,6 +129,7 @@ export default async function GuionesPage({
             {scripts.length} guion{scripts.length !== 1 ? "es" : ""}{" "}
             {selectedClient ? `de ${selectedClient.nombre}` : "en total"}
             {typeLabel ? ` · ${typeLabel}` : ""}
+            {estadosLabel}
           </p>
         </div>
         <div className={styles.headerActions}>

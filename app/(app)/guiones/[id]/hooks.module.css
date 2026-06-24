@@ -1,0 +1,276 @@
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panelTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0;
+}
+
+.panelCount {
+  font-size: 12px;
+  background: var(--border);
+  color: var(--text-dim);
+  border-radius: 20px;
+  padding: 1px 8px;
+  font-weight: 600;
+}
+
+/* ── Hook list ── */
+
+.hookList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hookItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  cursor: grab;
+  transition: opacity 0.15s, box-shadow 0.15s;
+}
+
+.hookItem:active {
+  cursor: grabbing;
+}
+
+.hookItemDragging {
+  opacity: 0.45;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.hookDragHandle {
+  font-size: 16px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  line-height: 1.4;
+  cursor: grab;
+}
+
+.hookText {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.hookRemoveBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.hookRemoveBtn:hover {
+  color: var(--flare);
+  background: rgba(255, 80, 80, 0.08);
+}
+
+.hookEmpty {
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 8px 0 4px;
+  margin: 0;
+}
+
+/* ── Actions row ── */
+
+.hookActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Vault panel ── */
+
+.vaultPanel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 320px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.vaultSearch {
+  font-size: 13px;
+}
+
+.vaultList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.vaultItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.vaultItemMeta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.vaultCategory {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  opacity: 0.7;
+}
+
+.vaultText {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.vaultEmpty {
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 8px 0;
+  margin: 0;
+}
+
+.vaultLink {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.vaultLink:hover {
+  text-decoration: underline;
+}
+
+/* ── Suggestions ── */
+
+.suggestionsPanel {
+  border: 1px solid rgba(0, 159, 125, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(0, 159, 125, 0.04);
+}
+
+.suggestionsTitle {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--emerald);
+  margin: 0 0 10px;
+}
+
+.suggestionsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.suggestionItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.suggestionContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.suggestionText {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.suggestionRazon {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.suggestError {
+  font-size: 13px;
+  color: var(--flare);
+  margin: 0;
+}
+
+.suggestEmpty {
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: center;
+  margin: 0;
+}
+
+/* ── Free input ── */
+
+.freeInputRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.freeInput {
+  flex: 1;
+  font-size: 13px;
+}
