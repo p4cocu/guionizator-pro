@@ -192,6 +192,43 @@
   transition: border-color 0.15s;
 }
 
+.entryCard.publicado {
+  background-image: var(--grad-g1);
+  border-color: transparent;
+  box-shadow: var(--glow-g1);
+  color: var(--ink);
+  --text: var(--ink);
+  --text-muted: rgba(0, 44, 43, 0.62);
+  --text-dim: rgba(0, 44, 43, 0.38);
+}
+
+.entryCard.publicado .formatBadge {
+  background: rgba(0, 44, 43, 0.14);
+  color: var(--ink);
+  border-color: rgba(0, 44, 43, 0.28);
+}
+
+.entryCard.publicado .viewGuionBtn {
+  background: rgba(0, 44, 43, 0.12);
+  color: var(--ink);
+  border-color: rgba(0, 44, 43, 0.35);
+}
+
+.entryCard.publicado .viewGuionBtn:hover {
+  background: rgba(0, 44, 43, 0.2);
+  border-color: rgba(0, 44, 43, 0.5);
+}
+
+.entryCard.publicado .idChip {
+  background: rgba(0, 44, 43, 0.08);
+  border-color: rgba(0, 44, 43, 0.2);
+  color: var(--ink);
+}
+
+.entryCard.publicado .idChip:hover {
+  background: rgba(0, 44, 43, 0.16);
+}
+
 .entryTop {
   display: flex;
   align-items: flex-start;
@@ -927,9 +964,9 @@
 
 .noDateEntries {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px;
+  align-items: stretch;
 }
 
 .noDateEmpty {
@@ -939,5 +976,12 @@
 }
 
 .noDateZone .calChip {
-  max-width: 180px;
+  max-width: none;
+  overflow: visible;
+}
+
+.noDateZone .calChipTitle {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }

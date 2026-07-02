@@ -25,7 +25,7 @@ const CARD_BORDER_BY_STATUS: Record<string, string> = {
   preproduccion: "rgba(134, 220, 174, 0.45)",
   produccion: "rgba(255, 210, 58, 0.45)",
   listo: "rgba(255, 235, 150, 0.5)",
-  publicado: "rgba(0, 159, 125, 0.5)",
+  publicado: "transparent",
 };
 
 export const RECORDING_TYPE_LABELS: Record<RecordingType, string> = {
@@ -77,7 +77,7 @@ function ScriptCard({ script, hideClient }: { script: ScriptRow; hideClient: boo
     : (CARD_BORDER_BY_STATUS[status] ?? "var(--glass-border)");
 
   return (
-    <Link href={`/guiones/${script.id}`} className={`card ${styles.card}`} style={{ borderColor }}>
+    <Link href={`/guiones/${script.id}`} className={`card ${styles.card} ${status === "publicado" ? styles.publicado : ""}`} style={{ borderColor }}>
       <div className={styles.cardMeta}>
         <span className={`${styles.typeBadge} ${styles[script.type]}`}>
           {script.type === "reel" ? "Reel" : "Carrusel"}

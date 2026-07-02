@@ -87,6 +87,42 @@
   transform: translateY(-1px);
 }
 
+.card.publicado {
+  background-image: var(--grad-g1);
+  border-color: transparent;
+  box-shadow: var(--glow-g1);
+  color: var(--ink);
+  --text: var(--ink);
+  --text-muted: rgba(0, 44, 43, 0.62);
+  --text-dim: rgba(0, 44, 43, 0.38);
+}
+
+.card.publicado .typeBadge {
+  background: rgba(0, 44, 43, 0.14);
+  color: var(--ink);
+  border-color: rgba(0, 44, 43, 0.28);
+}
+
+.card.publicado .status_publicado {
+  background: rgba(0, 44, 43, 0.14);
+  color: var(--ink);
+  border-color: rgba(0, 44, 43, 0.28);
+}
+
+.card.publicado .cardClient {
+  color: var(--ink);
+}
+
+.card.publicado .idChip {
+  background: rgba(0, 44, 43, 0.1);
+  border-color: rgba(0, 44, 43, 0.25);
+  color: var(--ink);
+}
+
+.card.publicado .idChip:hover {
+  background: rgba(0, 44, 43, 0.2);
+}
+
 .cardMeta {
   display: flex;
   align-items: center;

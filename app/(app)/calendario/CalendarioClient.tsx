@@ -39,7 +39,7 @@ const STATUS_COLORS: Record<string, string> = {
   idea: "var(--text-dim)",
   etapa0: "var(--signal)",
   produccion: "var(--emerald)",
-  publicado: "rgba(0,159,125,0.5)",
+  publicado: "var(--ink)",
 };
 
 const PILLARS = [
@@ -566,7 +566,7 @@ export default function DashboardClient({
             ) : (
               <div className={s.entries}>
                 {weekEntries.map((entry, idx) => (
-                  <div key={entry.id} className={`card ${s.entryCard}`}>
+                  <div key={entry.id} className={`card ${s.entryCard} ${entry.status === "publicado" ? s.publicado : ""}`}>
                     <div className={s.entryTop}>
                       <div className={s.entryBadges}>
                         <span className={`badge ${s.formatBadge}`}>
