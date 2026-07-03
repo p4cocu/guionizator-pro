@@ -53,10 +53,22 @@ Cuando toques un valor de estos, dilo explícitamente y entrega el SQL a Paco.
 | `scripts.status` | `idea`, `preproduccion`, `produccion`, `listo`, `publicado`, `baul` |
 | `scripts.recording_type` | `voz_off`, `actuacion`, `actuacion_compu`, `actuacion_cel`, `compu`, `cel` |
 | `content_calendar.status` | `idea`, `etapa0`, `produccion`, `publicado` |
+| `resources.kind` | `capturado`, `universal` |
 
 `baul` = ideas buenas pero congeladas (falta pulir herramientas para producirlas).
 **Se oculta por defecto** en la lista de Guiones (`getScripts` filtra `neq baul` si no hay
 filtro de estado); solo aparece al elegir "Baúl" en el filtro. No estorba en la vista principal.
+
+`resources.kind` separa los tres tabs de `/recursos` que comparten tabla `resources`:
+`capturado` (ideas para reels/carruseles, con cliente/guión) vs `universal` (uso personal,
+sin cliente ni guión — no pensados para contenido). `getResources`/`getUniversalResources`
+filtran por `kind`; `updateResourceKind` mueve entre ambos. Los **Recursos Propios** son
+otra tabla (`own_resources`), no un `kind`.
+
+Columnas booleanas nuevas (sin `CHECK`, pero también requieren `ALTER TABLE` a mano):
+`scripts.featured` (`default false`) — guiones destacados para desarrollar pronto; se
+ordenan primero en `getScripts` y llevan borde amarillo. Toggle vía `toggleScriptFeatured`
++ `StarButton` (client, `stopPropagation` porque la tarjeta es un `<Link>`).
 
 Además: los handlers de estos cambios (en `ScriptDetailClient.tsx`) capturan el error,
 revierten la UI optimista y muestran el mensaje en línea — **nunca** dejar un server
