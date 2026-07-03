@@ -499,6 +499,10 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [currentStatus, setCurrentStatus] = useState<ScriptStatus>(script.status ?? "idea");
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const [recordingTypeError, setRecordingTypeError] = useState<string | null>(null);
   const [showCopyPanel, setShowCopyPanel] = useState(false);
   const [showImagePanel, setShowImagePanel] = useState(false);
   const [showCalModal, setShowCalModal] = useState(false);
@@ -600,27 +604,59 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
 
   function handleDelete() {
     if (!confirm("¿Eliminar este guion y todas sus versiones? Esta acción no se puede deshacer.")) return;
-    startDeleteTransition(async () => { await deleteScript(script.id); });
+    setDeleteError(null);
+    startDeleteTransition(async () => {
+      try {
+        // En éxito, deleteScript hace redirect server-side; el error de
+        // redirect no llega al cliente, así que solo capturamos fallos reales.
+        await deleteScript(script.id);
+      } catch (e) {
+        setDeleteError(e instanceof Error ? e.message : "No se pudo eliminar el guion");
+      }
+    });
   }
 
   function handleStatusChange(newStatus: ScriptStatus) {
+    const prevStatus = currentStatus;
     setCurrentStatus(newStatus);
-    startStatusTransition(async () => { await updateScriptStatus(script.id, newStatus); });
+    setStatusError(null);
+    startStatusTransition(async () => {
+      try {
+        await updateScriptStatus(script.id, newStatus);
+      } catch (e) {
+        // Revierte la UI optimista y muestra el error en vez de crashear la página.
+        setCurrentStatus(prevStatus);
+        setStatusError(e instanceof Error ? e.message : "No se pudo cambiar el estado");
+      }
+    });
   }
 
   function handleSaveTitle() {
+    setTitleError(null);
     startTitleTransition(async () => {
-      await updateScriptTitle(script.id, titleDraft);
-      setEditingTitle(false);
-      router.refresh();
+      try {
+        await updateScriptTitle(script.id, titleDraft);
+        setEditingTitle(false);
+        router.refresh();
+      } catch (e) {
+        setTitleError(e instanceof Error ? e.message : "No se pudo guardar el título");
+      }
     });
   }
 
   function handleRecordingTypeChange(newType: RecordingType | "") {
+    const prev = currentRecordingType;
     const val = newType === "" ? null : newType;
     setCurrentRecordingType(val);
+    setRecordingTypeError(null);
     startRecordingTypeTransition(async () => {
-      await updateScriptRecordingType(script.id, val);
+      try {
+        await updateScriptRecordingType(script.id, val);
+      } catch (e) {
+        // Revierte la selección optimista y muestra el error.
+        setCurrentRecordingType(prev);
+        setRecordingTypeError(e instanceof Error ? e.message : "No se pudo cambiar el tipo de grabación");
+      }
     });
   }
 
@@ -707,25 +743,30 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
 
           {/* Title: editable inline */}
           {editingTitle ? (
-            <div className={styles.titleEditRow}>
-              <input
-                className={`input ${styles.titleInput}`}
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                placeholder="Título de la publicación…"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSaveTitle();
-                  if (e.key === "Escape") setEditingTitle(false);
-                }}
-              />
-              <button className="btn btn-primary" onClick={handleSaveTitle} disabled={isSavingTitle} style={{ padding: "8px 16px", fontSize: 12 }}>
-                {isSavingTitle ? "…" : "Guardar"}
-              </button>
-              <button className="btn btn-ghost" onClick={() => { setEditingTitle(false); setTitleDraft(script.title ?? ""); }} style={{ padding: "8px 12px", fontSize: 12 }}>
-                ✕
-              </button>
-            </div>
+            <>
+              <div className={styles.titleEditRow}>
+                <input
+                  className={`input ${styles.titleInput}`}
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  placeholder="Título de la publicación…"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveTitle();
+                    if (e.key === "Escape") setEditingTitle(false);
+                  }}
+                />
+                <button className="btn btn-primary" onClick={handleSaveTitle} disabled={isSavingTitle} style={{ padding: "8px 16px", fontSize: 12 }}>
+                  {isSavingTitle ? "…" : "Guardar"}
+                </button>
+                <button className="btn btn-ghost" onClick={() => { setEditingTitle(false); setTitleDraft(script.title ?? ""); setTitleError(null); }} style={{ padding: "8px 12px", fontSize: 12 }}>
+                  ✕
+                </button>
+              </div>
+              {titleError && (
+                <p style={{ color: "var(--flare)", fontSize: 12, margin: "4px 0 0" }}>{titleError}</p>
+              )}
+            </>
           ) : (
             <div className={styles.titleRow}>
               <h1 className={styles.detailTitle}>{script.title || script.structure_name}</h1>
@@ -762,6 +803,11 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
               </button>
             ))}
           </div>
+          {statusError && (
+            <p style={{ color: "var(--flare)", fontSize: 12, margin: "4px 0 0", maxWidth: 260 }}>
+              {statusError}
+            </p>
+          )}
           <div className={styles.recordingTypeRow}>
             <label className={styles.recordingTypeLabel}>Grabación</label>
             <select
@@ -775,12 +821,22 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
               ))}
             </select>
           </div>
+          {recordingTypeError && (
+            <p style={{ color: "var(--flare)", fontSize: 12, margin: "4px 0 0", maxWidth: 260 }}>
+              {recordingTypeError}
+            </p>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
             <Link href="/guiones/nuevo" className="btn btn-primary" style={{ whiteSpace: "nowrap" }}>+ Nuevo guion</Link>
             <button onClick={handleDelete} disabled={isDeleting} className="btn btn-ghost" style={{ color: "var(--flare)" }}>
               {isDeleting ? "Eliminando…" : "Eliminar"}
             </button>
           </div>
+          {deleteError && (
+            <p style={{ color: "var(--flare)", fontSize: 12, margin: "4px 0 0", maxWidth: 260, textAlign: "right" }}>
+              {deleteError}
+            </p>
+          )}
         </div>
       </div>
 

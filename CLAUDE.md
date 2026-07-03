@@ -39,6 +39,25 @@ Vive en `guionizator.pacocuevasia.com`.
 - Cerebro versionado: `brain_versions` en Supabase (activa por `is_active=true` + unique index).
   Si no hay versión activa, cae back a `brain/system-prompt.md` leído con `fs.readFileSync`.
 
+## Columnas tipo-enum y migraciones (⚠️ leer antes de tocar estados)
+
+Varias columnas tienen un **`CHECK constraint` en Supabase** que restringe sus valores.
+Las migraciones se aplican **a mano en el SQL Editor de Supabase** (no hay carpeta de
+migraciones versionada). **Regla dura:** agregar/renombrar un valor en el tipo de
+TypeScript **exige** el `ALTER TABLE … DROP/ADD CONSTRAINT` correspondiente **en el mismo
+cambio** — si no, el `UPDATE`/`INSERT` revienta con error de servidor en runtime.
+Cuando toques un valor de estos, dilo explícitamente y entrega el SQL a Paco.
+
+| Tabla / columna | Valores permitidos (deben coincidir con el `CHECK`) |
+|---|---|
+| `scripts.status` | `idea`, `preproduccion`, `produccion`, `listo`, `publicado` |
+| `scripts.recording_type` | `voz_off`, `actuacion`, `actuacion_compu`, `actuacion_cel`, `compu`, `cel` |
+| `content_calendar.status` | `idea`, `etapa0`, `produccion`, `publicado` |
+
+Además: los handlers de estos cambios (en `ScriptDetailClient.tsx`) capturan el error,
+revierten la UI optimista y muestran el mensaje en línea — **nunca** dejar un server
+action de mutación sin `try/catch` en el cliente (evita la pantalla "This page couldn't load").
+
 ## Estructura de carpetas
 
 ```
