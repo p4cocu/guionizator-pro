@@ -11,6 +11,7 @@ const STATUS_OPTIONS = [
   { value: "produccion",    label: "En producción", textColor: "var(--signal)" },
   { value: "listo",         label: "Listo",         textColor: "#63b3ed" },
   { value: "publicado",     label: "Publicado",     textColor: "var(--emerald)" },
+  { value: "baul",          label: "Baúl",          textColor: "#9d8ec9" },
 ];
 
 const LS_KEY = "guionizator_estados_filter";

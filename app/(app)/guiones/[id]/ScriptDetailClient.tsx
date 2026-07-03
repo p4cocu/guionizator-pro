@@ -56,6 +56,7 @@ const STATUS_OPTIONS: { value: ScriptStatus; label: string; color: string }[] = 
   { value: "produccion", label: "En producción", color: "var(--signal)" },
   { value: "listo", label: "Listo", color: "#63b3ed" },
   { value: "publicado", label: "Publicado", color: "var(--emerald)" },
+  { value: "baul", label: "Baúl", color: "#9d8ec9" },
 ];
 
 // ── Markdown renderer (bold / underline / highlight) ─────────────────────────

@@ -3,6 +3,7 @@ import { getScripts, getClientOptions, type ScriptRow, type ScriptType, type Rec
 import styles from "./guiones.module.css";
 import ScriptIdChip from "./ScriptIdChip";
 import ClientFilter from "./ClientFilter";
+import StarButton from "./StarButton";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("es-MX", {
@@ -18,6 +19,7 @@ const STATUS_LABELS: Record<string, string> = {
   produccion: "En producción",
   listo: "Listo",
   publicado: "Publicado",
+  baul: "Baúl",
 };
 
 const CARD_BORDER_BY_STATUS: Record<string, string> = {
@@ -26,6 +28,7 @@ const CARD_BORDER_BY_STATUS: Record<string, string> = {
   produccion: "rgba(255, 210, 58, 0.45)",
   listo: "rgba(255, 235, 150, 0.5)",
   publicado: "transparent",
+  baul: "rgba(157, 142, 201, 0.45)",
 };
 
 export const RECORDING_TYPE_LABELS: Record<RecordingType, string> = {
@@ -72,7 +75,9 @@ function RecordingTypeBadge({ type }: { type: RecordingType }) {
 function ScriptCard({ script, hideClient }: { script: ScriptRow; hideClient: boolean }) {
   const clientName = script.clients?.nombre ?? "—";
   const status = script.status ?? "idea";
-  const borderColor = script.has_resource
+  const borderColor = script.featured
+    ? "rgba(255, 210, 58, 0.7)"
+    : script.has_resource
     ? "rgba(255, 215, 0, 0.55)"
     : (CARD_BORDER_BY_STATUS[status] ?? "var(--glass-border)");
 
@@ -86,6 +91,7 @@ function ScriptCard({ script, hideClient }: { script: ScriptRow; hideClient: boo
           {STATUS_LABELS[status] ?? status}
         </span>
         <span className={styles.cardDate}>{formatDate(script.created_at)}</span>
+        <StarButton scriptId={script.id} featured={script.featured} />
       </div>
       {script.recording_type && (
         <div>

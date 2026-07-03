@@ -8,6 +8,7 @@ const STATUS_LABELS: Record<string, string> = {
   produccion: "Producción",
   listo: "Listo",
   publicado: "Publicado",
+  baul: "Baúl",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -16,6 +17,7 @@ const STATUS_COLORS: Record<string, string> = {
   produccion: "rgba(255,210,58,0.9)",
   listo: "rgba(255,235,150,0.9)",
   publicado: "var(--emerald)",
+  baul: "rgba(157,142,201,0.9)",
 };
 
 const CAL_STATUS_LABELS: Record<string, string> = {
@@ -32,7 +34,7 @@ const CAL_STATUS_COLORS: Record<string, string> = {
   publicado: "rgba(0,159,125,0.7)",
 };
 
-const SCRIPT_STATUS_ORDER = ["idea", "preproduccion", "produccion", "listo", "publicado"];
+const SCRIPT_STATUS_ORDER = ["idea", "preproduccion", "produccion", "listo", "publicado", "baul"];
 const CAL_STATUS_ORDER = ["idea", "etapa0", "produccion", "publicado"];
 
 export default async function DashboardPage() {

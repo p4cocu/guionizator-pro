@@ -158,6 +158,33 @@
   margin-left: auto;
 }
 
+.starBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-dim);
+  opacity: 0.55;
+  transition: opacity 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.starBtn:hover {
+  opacity: 1;
+  color: var(--signal);
+  transform: scale(1.15);
+}
+
+.starBtnOn {
+  color: var(--signal);
+  opacity: 1;
+}
+
+.starBtn:disabled {
+  cursor: default;
+}
+
 .cardClient {
   font-size: 12px;
   color: var(--emerald);
@@ -1294,6 +1321,12 @@
   background: rgba(0, 159, 125, 0.12);
   color: var(--emerald);
   border: 1px solid rgba(0, 159, 125, 0.25);
+}
+
+.status_baul {
+  background: rgba(157, 142, 201, 0.12);
+  color: #9d8ec9;
+  border: 1px solid rgba(157, 142, 201, 0.3);
 }
 
 /* ── Status selector (detalle) ── */

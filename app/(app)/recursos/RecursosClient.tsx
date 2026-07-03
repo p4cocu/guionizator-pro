@@ -11,6 +11,7 @@ import {
   updateOwnResource,
   updateResourceCategory,
   updateResourceClient,
+  updateResourceKind,
   updateResourceScriptId,
   updateResourceSourceName,
   updateResourceTags,
@@ -36,6 +37,7 @@ const LS_KEY = "guionizator_custom_categories";
 type Props = {
   initialResources: ResourceRow[];
   initialOwnResources: OwnResourceRow[];
+  initialUniversalResources: ResourceRow[];
   clientes: ClienteLite[];
   scripts: ScriptLite[];
   ingestToken: string;
@@ -45,6 +47,7 @@ type Props = {
 export default function RecursosClient({
   initialResources,
   initialOwnResources,
+  initialUniversalResources,
   clientes,
   scripts,
   ingestToken,
@@ -54,7 +57,9 @@ export default function RecursosClient({
   const [, startTransition] = useTransition();
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<"capturados" | "propios">("capturados");
+  const [activeTab, setActiveTab] = useState<"capturados" | "propios" | "universales">(
+    "capturados",
+  );
 
   // Filtros capturados
   const [catFilter, setCatFilter] = useState<string>("all");
@@ -230,6 +235,13 @@ export default function RecursosClient({
           Recursos Propios
           <span className={s.tabCount}>{initialOwnResources.length}</span>
         </button>
+        <button
+          className={`${s.tab} ${activeTab === "universales" ? s.tabActive : ""}`}
+          onClick={() => setActiveTab("universales")}
+        >
+          Universales
+          <span className={s.tabCount}>{initialUniversalResources.length}</span>
+        </button>
       </div>
 
       {/* ══ TAB CAPTURADOS ══ */}
@@ -381,6 +393,16 @@ export default function RecursosClient({
           onChanged={() => router.refresh()}
         />
       )}
+
+      {/* ══ TAB UNIVERSALES ══ */}
+      {activeTab === "universales" && (
+        <UniversalResourcesTab
+          resources={initialUniversalResources}
+          onChanged={() => router.refresh()}
+          copy={copy}
+          copied={copied}
+        />
+      )}
     </div>
   );
 }
@@ -489,6 +511,14 @@ function ResourceCard({
               {r.source_name ?? "+ fuente"}
             </button>
           )}
+          <button
+            className={s.moveBtn}
+            onClick={() => mutate(() => updateResourceKind(r.id, "universal"))}
+            aria-label="Mover a Universales"
+            title="Mover a Universales (uso personal)"
+          >
+            ↪ Universal
+          </button>
           <button
             className={s.delBtn}
             onClick={() => mutate(() => deleteResource(r.id))}
@@ -942,6 +972,318 @@ function OwnResourceCard({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Tab Universales ─────────────────────────────────────────────────────────
+
+function UniversalResourcesTab({
+  resources,
+  onChanged,
+  copy,
+  copied,
+}: {
+  resources: ResourceRow[];
+  onChanged: () => void;
+  copy: (text: string, key: string) => void;
+  copied: string | null;
+}) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+
+  // Alta manual
+  const [manualInput, setManualInput] = useState("");
+  const [manualSourceName, setManualSourceName] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  // Filtros
+  const [tagFilter, setTagFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
+
+  const allTags = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of resources) for (const t of r.tags) m.set(t, (m.get(t) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [resources]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return resources.filter((r) => {
+      if (tagFilter !== "all" && !r.tags.includes(tagFilter)) return false;
+      if (q) {
+        const hay = [r.title, r.summary, r.prompt_text, r.raw_text, r.source_name, r.tags.join(" ")]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [resources, tagFilter, search]);
+
+  function handleAdd() {
+    const value = manualInput.trim();
+    if (!value) return;
+    setAdding(true);
+    setAddError(null);
+    const isUrl = /^https?:\/\//i.test(value);
+    const sourceName = manualSourceName.trim() || null;
+    startTransition(async () => {
+      try {
+        await addResourceManual(
+          isUrl
+            ? { url: value, source_name: sourceName, kind: "universal" }
+            : { text: value, source_name: sourceName, kind: "universal" },
+        );
+        setManualInput("");
+        setManualSourceName("");
+        router.refresh();
+      } catch (e) {
+        setAddError((e as Error).message);
+      } finally {
+        setAdding(false);
+      }
+    });
+  }
+
+  return (
+    <div>
+      {/* Encabezado + alta manual */}
+      <div className={`card ${s.panel}`} style={{ marginTop: 16 }}>
+        <label className="field-label">Recurso universal (uso personal)</label>
+        <p className={s.ownSubtitle} style={{ marginTop: 0, marginBottom: 10 }}>
+          Recursos que guardas para ti — no pensados para convertirse en guion ni lead magnet.
+          Se clasifican con IA y filtras por tags.
+        </p>
+        <div className={s.addRow}>
+          <input
+            className="input"
+            placeholder="Pega un link o un texto…"
+            value={manualInput}
+            onChange={(e) => setManualInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            disabled={adding}
+          />
+          <button className="btn btn-primary" onClick={handleAdd} disabled={adding || !manualInput.trim()}>
+            {adding ? "Clasificando…" : "Agregar"}
+          </button>
+        </div>
+        <div className={s.addRow} style={{ marginTop: 8 }}>
+          <input
+            className="input"
+            placeholder="Creador / fuente (opcional)…"
+            value={manualSourceName}
+            onChange={(e) => setManualSourceName(e.target.value)}
+            disabled={adding}
+            style={{ fontSize: 13 }}
+          />
+        </div>
+        {addError && <p className={s.error}>{addError}</p>}
+      </div>
+
+      {/* Filtros por tag */}
+      {resources.length > 0 && (
+        <div className={s.filters}>
+          <div className={s.filterGroup}>
+            <button
+              className={`${s.chipBtn} ${tagFilter === "all" ? s.chipBtnActive : ""}`}
+              onClick={() => setTagFilter("all")}
+            >
+              Todos ({resources.length})
+            </button>
+            {allTags.map(([t, count]) => (
+              <button
+                key={t}
+                className={`${s.chipBtn} ${tagFilter === t ? s.chipBtnActive : ""}`}
+                onClick={() => setTagFilter(t)}
+              >
+                #{t} ({count})
+              </button>
+            ))}
+          </div>
+          <div className={s.filterRow}>
+            <input
+              className="input"
+              placeholder="Buscar…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Lista */}
+      {filtered.length === 0 ? (
+        <p className={s.empty}>
+          {resources.length === 0
+            ? "Aún no hay recursos universales. Agrega uno arriba o mueve uno desde Capturados."
+            : "Ningún recurso coincide con los filtros."}
+        </p>
+      ) : (
+        <div className={s.grid}>
+          {filtered.map((r) => (
+            <UniversalResourceCard
+              key={r.id}
+              r={r}
+              onChanged={onChanged}
+              copy={copy}
+              copied={copied}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tarjeta de recurso universal ────────────────────────────────────────────
+
+function UniversalResourceCard({
+  r,
+  onChanged,
+  copy,
+  copied,
+}: {
+  r: ResourceRow;
+  onChanged: () => void;
+  copy: (text: string, key: string) => void;
+  copied: string | null;
+}) {
+  const [, startTransition] = useTransition();
+  const [editingTags, setEditingTags] = useState(false);
+  const [tagsDraft, setTagsDraft] = useState(r.tags.join(", "));
+  const [editingSource, setEditingSource] = useState(false);
+  const [sourceDraft, setSourceDraft] = useState(r.source_name ?? "");
+
+  function mutate(fn: () => Promise<void>) {
+    startTransition(async () => {
+      await fn();
+      onChanged();
+    });
+  }
+
+  return (
+    <div className={s.card}>
+      <div className={s.cardTop}>
+        <span className={s.universalBadge}>Universal</span>
+        <div className={s.cardTopRight}>
+          {editingSource ? (
+            <span className={s.sourceEditRow}>
+              <input
+                className={s.sourceEditInput}
+                value={sourceDraft}
+                onChange={(e) => setSourceDraft(e.target.value)}
+                placeholder="Creador / fuente…"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    mutate(async () => {
+                      await updateResourceSourceName(r.id, sourceDraft.trim() || null);
+                      setEditingSource(false);
+                    });
+                  }
+                  if (e.key === "Escape") { setEditingSource(false); setSourceDraft(r.source_name ?? ""); }
+                }}
+              />
+              <button
+                className={s.sourceEditSave}
+                onClick={() =>
+                  mutate(async () => {
+                    await updateResourceSourceName(r.id, sourceDraft.trim() || null);
+                    setEditingSource(false);
+                  })
+                }
+              >✓</button>
+              <button
+                className={s.sourceEditSave}
+                onClick={() => { setEditingSource(false); setSourceDraft(r.source_name ?? ""); }}
+              >✕</button>
+            </span>
+          ) : (
+            <button
+              className={r.source_name ? s.sourceBadge : s.sourceAddBtn}
+              title={r.source_name ? "Editar creador/fuente" : "Agregar creador/fuente"}
+              onClick={() => setEditingSource(true)}
+            >
+              {r.source_name ?? "+ fuente"}
+            </button>
+          )}
+          <button
+            className={s.moveBtn}
+            onClick={() => mutate(() => updateResourceKind(r.id, "capturado"))}
+            title="Mover a Capturados"
+          >
+            ↩ Capturados
+          </button>
+          <button
+            className={s.delBtn}
+            onClick={() => mutate(() => deleteResource(r.id))}
+            title="Eliminar"
+          >
+            🗑
+          </button>
+        </div>
+      </div>
+
+      <p className={s.cardTitle}>{r.title}</p>
+      {r.summary && <p className={s.cardSummary}>{r.summary}</p>}
+
+      {r.prompt_text && (
+        <div className={s.promptBox}>
+          <pre className={s.promptText}>{r.prompt_text}</pre>
+          <button
+            className="btn btn-secondary"
+            onClick={() => copy(r.prompt_text!, `u-${r.id}`)}
+          >
+            {copied === `u-${r.id}` ? "✓ Copiado" : "Copiar"}
+          </button>
+        </div>
+      )}
+
+      {r.source_url && (
+        <a className={s.sourceLink} href={r.source_url} target="_blank" rel="noopener noreferrer">
+          🔗 Abrir recurso
+        </a>
+      )}
+
+      {/* Tags (lista única, sembrada por IA, editable) */}
+      <div className={s.tagsRow}>
+        {!editingTags ? (
+          <>
+            {r.tags.map((t) => (
+              <span key={t} className={s.tag}>#{t}</span>
+            ))}
+            <button className={s.tagEdit} onClick={() => setEditingTags(true)}>
+              ✎ tags
+            </button>
+          </>
+        ) : (
+          <div className={s.tagsEdit}>
+            <input
+              className="input"
+              value={tagsDraft}
+              onChange={(e) => setTagsDraft(e.target.value)}
+              placeholder="tags separados por coma"
+            />
+            <button
+              className="btn btn-secondary"
+              onClick={() =>
+                mutate(async () => {
+                  await updateResourceTags(
+                    r.id,
+                    tagsDraft.split(",").map((t) => t.trim()).filter(Boolean),
+                  );
+                  setEditingTags(false);
+                })
+              }
+            >
+              Guardar
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

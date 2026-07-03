@@ -50,9 +50,13 @@ Cuando toques un valor de estos, dilo explícitamente y entrega el SQL a Paco.
 
 | Tabla / columna | Valores permitidos (deben coincidir con el `CHECK`) |
 |---|---|
-| `scripts.status` | `idea`, `preproduccion`, `produccion`, `listo`, `publicado` |
+| `scripts.status` | `idea`, `preproduccion`, `produccion`, `listo`, `publicado`, `baul` |
 | `scripts.recording_type` | `voz_off`, `actuacion`, `actuacion_compu`, `actuacion_cel`, `compu`, `cel` |
 | `content_calendar.status` | `idea`, `etapa0`, `produccion`, `publicado` |
+
+`baul` = ideas buenas pero congeladas (falta pulir herramientas para producirlas).
+**Se oculta por defecto** en la lista de Guiones (`getScripts` filtra `neq baul` si no hay
+filtro de estado); solo aparece al elegir "Baúl" en el filtro. No estorba en la vista principal.
 
 Además: los handlers de estos cambios (en `ScriptDetailClient.tsx`) capturan el error,
 revierten la UI optimista y muestran el mensaje en línea — **nunca** dejar un server

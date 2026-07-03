@@ -33,6 +33,7 @@ export type ResourceRow = {
   ingest_source: string;
   source_name: string | null;
   script_id: string | null;
+  kind: string;
   clients: { nombre: string } | null;
 };
 
@@ -60,9 +61,39 @@ export async function getResources(): Promise<ResourceRow[]> {
     .from("resources")
     .select("*, clients(nombre)")
     .eq("owner_id", user.id)
+    .eq("kind", "capturado")
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []) as ResourceRow[];
+}
+
+// ── Recursos universales (uso personal, no para contenido) ──────────────────
+
+export async function getUniversalResources(): Promise<ResourceRow[]> {
+  const { supabase, user } = await getAuthUser();
+  const { data, error } = await supabase
+    .from("resources")
+    .select("*, clients(nombre)")
+    .eq("owner_id", user.id)
+    .eq("kind", "universal")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ResourceRow[];
+}
+
+/** Mueve un recurso entre buckets: 'capturado' ↔ 'universal'. */
+export async function updateResourceKind(
+  id: string,
+  kind: "capturado" | "universal",
+): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+  const { error } = await supabase
+    .from("resources")
+    .update({ kind, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/recursos");
 }
 
 export async function getClientesLite(): Promise<ClienteLite[]> {
@@ -123,19 +154,25 @@ export async function addResourceManual(input: {
   url?: string;
   text?: string;
   source_name?: string | null;
+  kind?: "capturado" | "universal";
 }): Promise<string> {
   const { supabase, user } = await getAuthUser();
 
   const url = input.url?.trim() || null;
   const text = input.text?.trim() || null;
   const sourceName = input.source_name?.trim() || null;
+  const kind = input.kind ?? "capturado";
   if (!url && !text) throw new Error("Pega un link o un texto.");
 
-  const { data: clientsData } = await supabase
-    .from("clients")
-    .select("id, nombre, nicho, que_vende, cliente_ideal, dolor, deseo")
-    .eq("owner_id", user.id);
-  const clients = (clientsData ?? []) as ClientLite[];
+  // Los universales no se asocian a un cliente: clasificamos sin la lista.
+  let clients: ClientLite[] = [];
+  if (kind === "capturado") {
+    const { data: clientsData } = await supabase
+      .from("clients")
+      .select("id, nombre, nicho, que_vende, cliente_ideal, dolor, deseo")
+      .eq("owner_id", user.id);
+    clients = (clientsData ?? []) as ClientLite[];
+  }
 
   const classified = await classifyResource({ url, text, clients });
 
@@ -149,11 +186,12 @@ export async function addResourceManual(input: {
       title: classified.title,
       summary: classified.summary,
       prompt_text: classified.prompt_text,
-      client_id: classified.client_id,
-      client_auto: classified.client_auto,
+      client_id: kind === "universal" ? null : classified.client_id,
+      client_auto: kind === "universal" ? false : classified.client_auto,
       tags: classified.tags,
       ingest_source: "manual",
       source_name: sourceName,
+      kind,
     })
     .select("id")
     .single();

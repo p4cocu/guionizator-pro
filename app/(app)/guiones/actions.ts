@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export type ScriptType = "reel" | "carousel";
 
-export type ScriptStatus = "idea" | "preproduccion" | "produccion" | "listo" | "publicado";
+export type ScriptStatus = "idea" | "preproduccion" | "produccion" | "listo" | "publicado" | "baul";
 
 export type RecordingType =
   | "voz_off"
@@ -32,6 +32,7 @@ export type ScriptRow = {
   status: ScriptStatus;
   recording_type: RecordingType | null;
   source_post_permalink: string | null;
+  featured: boolean;
   clients: { nombre: string; marca: string | null } | null;
   has_resource?: boolean;
 };
@@ -241,12 +242,18 @@ export async function getScripts(
     .select("*, clients(nombre, marca)")
     .eq("owner_id", user.id)
     .eq("is_latest", true)
+    .order("featured", { ascending: false })
     .order("created_at", { ascending: false });
 
   if (clientId) query = query.eq("client_id", clientId);
   if (type) query = query.eq("type", type);
   if (estados && estados.length > 0) {
     query = query.in("status", estados);
+  } else {
+    // Por defecto (sin filtro de estado) ocultamos el Baúl: son ideas congeladas
+    // que no deben estorbar en la vista principal. Solo aparecen si se filtran
+    // explícitamente por "baul".
+    query = query.neq("status", "baul");
   }
 
   const { data, error } = await query;
@@ -486,6 +493,24 @@ export async function linkScriptToCalendar(
 
   if (error) throw new Error(error.message);
   revalidatePath("/calendario");
+}
+
+/** Marca/desmarca un guion como destacado (para desarrollar a la brevedad). */
+export async function toggleScriptFeatured(
+  scriptId: string,
+  featured: boolean,
+): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+
+  const { error } = await supabase
+    .from("scripts")
+    .update({ featured })
+    .eq("id", scriptId)
+    .eq("owner_id", user.id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/guiones");
+  revalidatePath(`/guiones/${scriptId}`);
 }
 
 export async function updateScriptRecordingType(
