@@ -43,6 +43,13 @@ export default function CoverCreatorPanel({
           content: scriptContent,
         }),
       });
+
+      // Si el middleware de auth nos rebotó a /login, fetch sigue la
+      // redirección y devuelve el HTML de login. Lo detectamos antes de
+      // intentar parsear JSON para dar un mensaje claro.
+      if (res.redirected || !res.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Tu sesión expiró o el sitio se está actualizando. Recarga la página (Cmd+Shift+R) e intenta de nuevo.");
+      }
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error ?? "Error generando portadas");
