@@ -131,8 +131,11 @@ export async function POST(req: NextRequest) {
     );
 
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2048,
+      // Haiku 4.5: rápido y dentro del límite de ~26-30s de Netlify (funciones
+      // síncronas). Sonnet generaba 3 conceptos + doc de conocimiento en ~30s y
+      // provocaba 504 Gateway Timeout.
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1600,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userMessage }],
     });
