@@ -10,6 +10,7 @@ import {
   ScriptStatus,
   RecordingType,
   ScriptCopy,
+  ScriptCoverIdea,
   OwnResourceForScript,
   saveScriptVersion,
   deleteScript,
@@ -22,6 +23,7 @@ import { RECORDING_TYPE_LABELS } from "../page";
 import { ReelEditor, CarouselEditor } from "./ScriptEditors";
 import CopyExpertPanel from "./CopyExpertPanel";
 import ImagePromptsPanel from "./ImagePromptsPanel";
+import CoverCreatorPanel from "./CoverCreatorPanel";
 import HooksPanel from "./HooksPanel";
 import type { PromptStyle } from "../../prompts/actions";
 import type { ScriptHook } from "./hooksActions";
@@ -475,6 +477,7 @@ type Props = {
   ownResources: OwnResourceForScript[];
   initialHooks: ScriptHook[];
   vaultHooks: Pick<Hook, "id" | "hook_template" | "category">[];
+  initialCovers: ScriptCoverIdea[] | null;
 };
 
 function formatDate(iso: string) {
@@ -487,7 +490,7 @@ function formatDate(iso: string) {
 
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
-export default function ScriptDetailClient({ script, versions, initialCopies, customStyles, ownResources, initialHooks, vaultHooks }: Props) {
+export default function ScriptDetailClient({ script, versions, initialCopies, customStyles, ownResources, initialHooks, vaultHooks, initialCovers }: Props) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("view");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -506,6 +509,7 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
   const [recordingTypeError, setRecordingTypeError] = useState<string | null>(null);
   const [showCopyPanel, setShowCopyPanel] = useState(false);
   const [showImagePanel, setShowImagePanel] = useState(false);
+  const [showCoverPanel, setShowCoverPanel] = useState(false);
   const [showCalModal, setShowCalModal] = useState(false);
 
   // Title editing
@@ -905,6 +909,13 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
           </button>
 
           <button
+            className={`btn btn-ghost ${showCoverPanel ? "btn-secondary" : ""}`}
+            onClick={() => setShowCoverPanel((v) => !v)}
+          >
+            🎨 Portadas
+          </button>
+
+          <button
             className="btn btn-ghost"
             onClick={() => setShowCalModal(true)}
           >
@@ -1051,6 +1062,18 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
           scriptContent={script.content}
           scriptType={script.type}
           initialCopies={initialCopies}
+        />
+      )}
+
+      {/* ── Cover Creator Panel ── */}
+      {showCoverPanel && (
+        <CoverCreatorPanel
+          scriptId={script.id}
+          scriptBrief={script.brief}
+          scriptContent={script.content}
+          scriptType={script.type}
+          structureName={script.structure_name}
+          initialCovers={initialCovers}
         />
       )}
 

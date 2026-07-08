@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getScriptWithVersions, getScriptCopies, getOwnResourcesForScript } from "../actions";
+import { getScriptWithVersions, getScriptCopies, getOwnResourcesForScript, getScriptCovers } from "../actions";
 import { getPromptStyles } from "../../prompts/actions";
 import { getScriptHooks } from "./hooksActions";
 import { getVaultHooks } from "./vaultHooksLoader";
@@ -11,7 +11,7 @@ export default async function ScriptDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [result, copies, customStyles, ownResources, initialHooks, vaultHooks] =
+  const [result, copies, customStyles, ownResources, initialHooks, vaultHooks, savedCovers] =
     await Promise.all([
       getScriptWithVersions(id),
       getScriptCopies(id),
@@ -19,6 +19,7 @@ export default async function ScriptDetailPage({
       getOwnResourcesForScript(id),
       getScriptHooks(id),
       getVaultHooks(),
+      getScriptCovers(id),
     ]);
   if (!result) notFound();
 
@@ -31,6 +32,7 @@ export default async function ScriptDetailPage({
       ownResources={ownResources}
       initialHooks={initialHooks}
       vaultHooks={vaultHooks}
+      initialCovers={savedCovers?.covers ?? null}
     />
   );
 }

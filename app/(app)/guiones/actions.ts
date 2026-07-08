@@ -479,6 +479,55 @@ export async function saveScriptCopy(
   revalidatePath(`/guiones/${scriptId}`);
 }
 
+export type ScriptCoverIdea = {
+  has_character: boolean;
+  medium: string;
+  subject: string;
+  action: string;
+  environment: string;
+  style_vibe: string;
+  technical_specs: string;
+  prompt_en: string;
+  cover_text: string;
+  rationale_es: string;
+};
+
+export type SavedScriptCovers = {
+  id: string;
+  script_id: string;
+  covers: ScriptCoverIdea[];
+  updated_at: string;
+};
+
+export async function getScriptCovers(scriptId: string): Promise<SavedScriptCovers | null> {
+  const { supabase, user } = await getAuthUser();
+  const { data } = await supabase
+    .from("script_covers")
+    .select("*")
+    .eq("script_id", scriptId)
+    .eq("owner_id", user.id)
+    .single();
+  return data as SavedScriptCovers | null;
+}
+
+export async function saveScriptCovers(
+  scriptId: string,
+  covers: ScriptCoverIdea[],
+): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+  const { error } = await supabase.from("script_covers").upsert(
+    {
+      owner_id: user.id,
+      script_id: scriptId,
+      covers,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "script_id,owner_id" },
+  );
+  if (error) throw new Error(error.message);
+  revalidatePath(`/guiones/${scriptId}`);
+}
+
 export async function linkScriptToCalendar(
   scriptId: string,
   calendarId: string,

@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Worker de transcripción local
 workers/media/
+
+# Artefactos de pruebas con Playwright MCP
+.playwright-mcp/
