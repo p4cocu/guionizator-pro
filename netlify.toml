@@ -14,3 +14,10 @@
 # Las variables de entorno (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
 # ANTHROPIC_API_KEY, NEXT_PUBLIC_SITE_URL) se configuran en:
 # Netlify → Site settings → Environment variables. No se guardan en este archivo.
+
+# Limpieza diaria de posts de Competencia con más de 40 días de publicados
+# (netlify/functions/cleanup-competencia-scheduled.ts). Requiere
+# SUPABASE_SERVICE_ROLE_KEY seteada en Netlify (ya lo está, la usa también
+# el ingest de Recursos).
+[functions."cleanup-competencia-scheduled"]
+  schedule = "@daily"

@@ -94,6 +94,18 @@ secreto/token (no por sesión de usuario) debe agregarse a `PUBLIC_PATHS`
 chequear `res.ok` y tratar respuestas no-2xx como error (no asumir éxito solo
 porque no lanzó excepción).
 
+## Jobs programados (Netlify Scheduled Functions)
+
+- **`cleanup-competencia-scheduled`** (`netlify/functions/cleanup-competencia-scheduled.ts`,
+  cron `@daily` en `netlify.toml`) — borra posts de `competitor_posts` con más de
+  **40 días** desde `posted_at`, para todos los owners/clientes (independiente de que
+  se dispare una búsqueda). Excluye posts marcados `is_favorite`. Usa service role.
+  El mismo umbral de 40 días también corre "al vuelo" en `runScrapeJob`
+  (`lib/competencia/scrape.ts`) al terminar cada búsqueda, solo para el cliente
+  recién scrapeado — el cron cubre a los que no se vuelven a buscar.
+  Netlify bloquea (404) cualquier invocación externa a una función con `schedule`
+  configurado, así que no necesita secreto propio como `scrape-competencia-background`.
+
 ## Estructura de carpetas
 
 ```
@@ -167,3 +179,5 @@ cualquier cambio de backend/infra), **recomendar proactivamente** automatizar el
 refresh con un cron (ej. Netlify Scheduled Function diaria) que llame a
 `refreshInstagramToken` para las cuentas cuyo `token_expires_at` esté dentro de los
 próximos ~7 días. No forzarlo fuera de ese contexto (Etapa B/C en stand-by).
+El patrón de Scheduled Function ya existe en el repo — copiar la estructura de
+`cleanup-competencia-scheduled` (ver "Jobs programados" arriba).
