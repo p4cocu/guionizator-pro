@@ -74,6 +74,26 @@ Además: los handlers de estos cambios (en `ScriptDetailClient.tsx`) capturan el
 revierten la UI optimista y muestran el mensaje en línea — **nunca** dejar un server
 action de mutación sin `try/catch` en el cliente (evita la pantalla "This page couldn't load").
 
+## ⚠️ Middleware (`proxy.ts`) y rutas server-to-server
+
+El matcher de `proxy.ts` aplica a **todas** las rutas excepto estáticos/imágenes —
+incluye por defecto cualquier ruta nueva, también las que no pasan por Next.js
+(`/.netlify/functions/*`). `updateSession` (`lib/supabase/middleware.ts`) redirige
+(307) a `/login` cualquier request sin sesión de usuario que no esté en `PUBLIC_PATHS`.
+
+**Cualquier endpoint llamado server-to-server (Netlify Background/Scheduled
+Functions, webhooks, workers) NO lleva cookies de sesión** → si su ruta no está en
+`PUBLIC_PATHS`, el middleware lo redirige a `/login` **antes** de que su código
+corra. Como `fetch()` no lanza error en respuestas no-2xx (307 incluido), el fallo
+queda silencioso: el caller cree que disparó el job y el job nunca se ejecuta.
+Ya pasó dos veces: Portadas (`d60badd`) y el scraper de Competencia
+(`scrape-competencia-background`, corregido agregando `/.netlify/functions` a
+`PUBLIC_PATHS`). **Regla dura:** toda ruta nueva que se autentique por su propio
+secreto/token (no por sesión de usuario) debe agregarse a `PUBLIC_PATHS`
+**en el mismo cambio** que la crea. Y todo `fetch()` que dispare un worker debe
+chequear `res.ok` y tratar respuestas no-2xx como error (no asumir éxito solo
+porque no lanzó excepción).
+
 ## Estructura de carpetas
 
 ```

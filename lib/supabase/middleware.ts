@@ -8,6 +8,12 @@ const PUBLIC_PATHS = [
   // Endpoint de ingesta del Shortcut: se autentica por token (Bearer), no por
   // sesión, así que no debe redirigir a /login.
   "/api/resources/ingest",
+  // Netlify Background/Scheduled Functions: se llaman server-to-server (sin
+  // cookies de sesión) y se autentican con su propio secreto de header
+  // (ej. x-scrape-secret). Si el matcher las intercepta, el middleware las
+  // redirige (307) a /login antes de que corra su código — el fetch() que las
+  // dispara no lanza error con un 307, así que el fallo queda silencioso.
+  "/.netlify/functions",
 ];
 
 /**

@@ -144,11 +144,17 @@ export async function startScrape(
     // Producción: disparar la background function (no esperamos a que termine)
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
     try {
-      await fetch(`${siteUrl}/.netlify/functions/scrape-competencia-background`, {
+      const res = await fetch(`${siteUrl}/.netlify/functions/scrape-competencia-background`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-scrape-secret": secret },
         body: JSON.stringify({ scrapeId }),
       });
+      // fetch() no lanza en respuestas no-2xx (ej. 307 de un redirect a /login,
+      // 401, 500) — sin este chequeo el trigger queda "exitoso" en falso y el
+      // scrape se queda colgado en "pending" para siempre, sin avisar.
+      if (!res.ok) {
+        throw new Error(`El worker respondió ${res.status} (${res.redirected ? "redirigido" : "sin redirect"}).`);
+      }
     } catch (e) {
       await supabase
         .from("competitor_scrapes")
