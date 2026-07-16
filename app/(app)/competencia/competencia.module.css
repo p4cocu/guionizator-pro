@@ -145,6 +145,37 @@
   margin: 0 0 20px;
 }
 
+/* ── Pestañas (Todos los posts / Outliers) ── */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tabBtn {
+  border: 1px solid var(--glass-border);
+  background: var(--ink-card);
+  color: var(--text-muted);
+  border-radius: var(--r-md);
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tabBtn:hover {
+  color: var(--text);
+  border-color: var(--emerald);
+}
+
+.tabBtnActive {
+  background: var(--grad-g1);
+  color: var(--ink);
+  border-color: transparent;
+}
+
 /* ── Filtros ── */
 .filters {
   display: flex;
@@ -288,6 +319,33 @@
   background: color-mix(in srgb, var(--signal) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--signal) 35%, transparent);
   border-radius: var(--r-md);
+}
+
+/* ── Sección Outliers ── */
+.outliersPanel {
+  border-color: color-mix(in srgb, var(--signal) 30%, var(--glass-border));
+}
+
+.outlierAvgLine {
+  margin: -4px 0 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.outlierMedians {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 0;
+}
+
+.outlierMedianChip {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--ink-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  padding: 4px 10px;
 }
 
 /* ── Fila de transcripción (solo en Mac/dev) ── */

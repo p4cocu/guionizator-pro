@@ -204,6 +204,9 @@ export type CompetitorPost = {
   is_favorite: boolean;
   is_disliked: boolean;
   is_manual: boolean;
+  is_outlier: boolean;
+  outlier_multiple: number | null;
+  account_median_comments: number | null;
 };
 
 export type LatestResults = {
@@ -211,6 +214,60 @@ export type LatestResults = {
   scrapedAt: string | null;
   posts: CompetitorPost[];
 };
+
+// ─── Detección de outliers ─────────────────────────────────────────────────
+// Un post es "outlier" cuando sus comentarios superan por mucho (≥3×) la
+// mediana de comentarios de esa misma cuenta. Se usa mediana en vez de
+// promedio porque el propio outlier, si se incluyera en un promedio, infla la
+// referencia y esconde el efecto (un post viral entre pocos posts ya sesga la
+// media). Se requieren al menos 5 posts no-manuales de la cuenta para tener
+// una mediana confiable; cuentas con menos muestra no se marcan.
+const OUTLIER_MIN_SAMPLE = 5;
+const OUTLIER_MULTIPLE = 3;
+// Con medianas muy bajas (cuentas chicas: mediana de 1-5 comentarios), el
+// múltiplo 3x se dispara con ruido normal (ej. mediana 5 → 16 comentarios ya
+// "califica" sin ser un post realmente destacado). Exigimos además una
+// diferencia absoluta mínima sobre la mediana para que cuente como outlier.
+const OUTLIER_MIN_EXTRA_COMMENTS = 15;
+
+function median(nums: number[]): number {
+  const sorted = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function withOutliers(
+  posts: Omit<CompetitorPost, "is_outlier" | "outlier_multiple" | "account_median_comments">[],
+): CompetitorPost[] {
+  const commentsByUser = new Map<string, number[]>();
+  for (const p of posts) {
+    if (p.is_manual) continue;
+    const arr = commentsByUser.get(p.username) ?? [];
+    arr.push(p.comments ?? 0);
+    commentsByUser.set(p.username, arr);
+  }
+
+  const medianByUser = new Map<string, number>();
+  for (const [username, arr] of commentsByUser) {
+    if (arr.length >= OUTLIER_MIN_SAMPLE) medianByUser.set(username, median(arr));
+  }
+
+  return posts.map((p) => {
+    const med = medianByUser.get(p.username) ?? null;
+    const outlierMultiple = med != null && med > 0 ? (p.comments ?? 0) / med : null;
+    const isOutlier =
+      !p.is_manual &&
+      outlierMultiple != null &&
+      outlierMultiple >= OUTLIER_MULTIPLE &&
+      (p.comments ?? 0) - (med ?? 0) >= OUTLIER_MIN_EXTRA_COMMENTS;
+    return {
+      ...p,
+      account_median_comments: med,
+      outlier_multiple: outlierMultiple,
+      is_outlier: isOutlier,
+    };
+  });
+}
 
 /**
  * Devuelve TODOS los posts acumulados del cliente (deduplicados por post vía el
@@ -242,7 +299,12 @@ export async function getLatestResults(clientId: string): Promise<LatestResults>
   return {
     scrapeId: (scrape?.id as string) ?? null,
     scrapedAt: (scrape?.updated_at as string) ?? null,
-    posts: (posts ?? []) as CompetitorPost[],
+    posts: withOutliers(
+      (posts ?? []) as Omit<
+        CompetitorPost,
+        "is_outlier" | "outlier_multiple" | "account_median_comments"
+      >[],
+    ),
   };
 }
 
@@ -319,5 +381,13 @@ export async function addManualPost(input: AddManualPostInput): Promise<AddManua
     .single();
 
   if (error) return { ok: false, error: error.message };
-  return { ok: true, post: data as CompetitorPost };
+  return {
+    ok: true,
+    post: {
+      ...(data as Omit<CompetitorPost, "is_outlier" | "outlier_multiple" | "account_median_comments">),
+      is_outlier: false,
+      outlier_multiple: null,
+      account_median_comments: null,
+    },
+  };
 }

@@ -86,6 +86,7 @@ export default function CompetenciaClient({ clients }: Props) {
   const [runError, setRunError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
+  const [view, setView] = useState<"posts" | "outliers">("posts");
   const [sortBy, setSortBy] = useState<SortKey>("views");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [accountFilter, setAccountFilter] = useState<string>("all");
@@ -188,23 +189,27 @@ export default function CompetenciaClient({ clients }: Props) {
     return list;
   }, [posts, sortBy, typeFilter, accountFilter, onlyFavorites]);
 
+  // ── Outliers: posts con comentarios ≥3× la mediana de esa cuenta (calculado
+  // en el servidor, en getLatestResults, sobre TODOS los posts acumulados —
+  // no solo los filtrados). accountFilter decide si vemos una cuenta o todas. ──
+  const outlierPosts = useMemo(() => {
+    let list = posts.filter((p) => p.is_outlier);
+    if (accountFilter !== "all") list = list.filter((p) => p.username === accountFilter);
+    list.sort((a, b) => (b.outlier_multiple ?? 0) - (a.outlier_multiple ?? 0));
+    return list;
+  }, [posts, accountFilter]);
+
   useEffect(() => {
     const t = setTimeout(() => window.instgrm?.Embeds.process(), 300);
     return () => clearTimeout(t);
-  }, [sorted, visibleCount]);
+  }, [sorted, visibleCount, view, outlierPosts]);
 
-  // ── Promedio de engagement por cuenta (para el badge de outlier) ──
-  const avgByUser = useMemo(() => {
-    const sum = new Map<string, { total: number; n: number }>();
+  const accountMedians = useMemo(() => {
+    const map = new Map<string, number>();
     for (const p of posts) {
-      const cur = sum.get(p.username) ?? { total: 0, n: 0 };
-      cur.total += eng(p);
-      cur.n += 1;
-      sum.set(p.username, cur);
+      if (p.account_median_comments != null) map.set(p.username, p.account_median_comments);
     }
-    const out = new Map<string, number>();
-    for (const [u, v] of sum) out.set(u, v.n ? v.total / v.n : 0);
-    return out;
+    return map;
   }, [posts]);
 
   // ── Totales para las tarjetas (dinámicos: respetan los filtros activos) ──
@@ -377,6 +382,168 @@ export default function CompetenciaClient({ clients }: Props) {
     });
   }
 
+  function renderPostCard(p: CompetitorPost, i: number) {
+    return (
+      <div key={p.id} className={s.postCard}>
+        <div className={s.postTop}>
+          <span className={s.rank}>#{i + 1}</span>
+          <a
+            className={s.user}
+            href={`https://www.instagram.com/${p.username}/`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            @{p.username}
+          </a>
+          {p.is_manual && (
+            <span className={s.manualBadge}>Manual</span>
+          )}
+          {p.is_outlier && (
+            <span className={s.outlier} title="Comentarios vs la mediana de esa cuenta">
+              🔥 {(p.outlier_multiple ?? 0).toFixed(1)}×
+            </span>
+          )}
+          <span className={s.postActions}>
+            <button
+              className={s.iconBtn}
+              title={p.is_favorite ? "Quitar de favoritos" : "Marcar como favorito"}
+              onClick={() => handleToggleFavorite(p)}
+            >
+              {p.is_favorite ? "♥" : "♡"}
+            </button>
+            <button
+              className={`${s.iconBtn} ${p.is_disliked ? s.iconBtnDisliked : ""}`}
+              title={p.is_disliked ? "Quitar dislike" : "Ya lo vi, no me gustó"}
+              onClick={() => handleToggleDislike(p)}
+            >
+              👎
+            </button>
+            <button
+              className={`${s.iconBtn} ${s.iconBtnDelete}`}
+              title="Eliminar este post"
+              onClick={() => handleDeletePost(p)}
+            >
+              🗑
+            </button>
+          </span>
+        </div>
+
+        {p.permalink ? (
+          <blockquote
+            className="instagram-media"
+            data-instgrm-permalink={p.permalink}
+            data-instgrm-version="14"
+            style={{ margin: 0, width: "100%", minWidth: 0 }}
+          />
+        ) : (
+          <div className={s.noEmbed}>Sin enlace embebible</div>
+        )}
+
+        <div className={s.postMetrics}>
+          {p.video_views != null && <span>▶️ {fmt(p.video_views)}</span>}
+          <span>❤️ {fmt(p.likes)}</span>
+          <span>💬 {fmt(p.comments)}</span>
+          {p.posted_at && (
+            <span className={s.date}>
+              {new Date(p.posted_at).toLocaleDateString("es-MX")}
+            </span>
+          )}
+        </div>
+
+        {transcribeEnabled && p.type !== "image" && (
+          <div className={s.transcribeRow}>
+            {p.transcription ? (
+              <span className={s.transcribedBadge}>
+                <span className={s.transcribedDot} />
+                Transcripción lista
+              </span>
+            ) : (
+              <span className={s.transcribedBadge} style={{ opacity: 0.5 }}>
+                Sin transcripción
+              </span>
+            )}
+            <button
+              className={s.transcribeBtn}
+              disabled={transcribingId === p.id}
+              onClick={() => handleTranscribeClick(p)}
+            >
+              {transcribingId === p.id ? "Transcribiendo…" : p.transcription ? "Re-transcribir" : "🎤 Transcribir"}
+            </button>
+          </div>
+        )}
+
+        {p.transcription && (
+          <button
+            className={s.ganchoBtn}
+            onClick={() => setGanchoPost(p)}
+          >
+            ⚡ Extraer gancho
+          </button>
+        )}
+
+        <button
+          className={s.adaptBtn}
+          onClick={() => {
+            setAdaptTargetClientId(null);
+            setOtherBrandPickerPostId(null);
+            setAdaptingPost(p);
+          }}
+        >
+          ✦ Adaptar a mi marca
+        </button>
+
+        {otherClients.length > 0 && (
+          otherBrandPickerPostId === p.id ? (
+            <div className={s.otherBrandPicker}>
+              <span className={s.otherBrandPickerLabel}>¿Para qué marca?</span>
+              <div className={s.otherBrandOptions}>
+                {otherClients.map((c) => (
+                  <button
+                    key={c.id}
+                    className={s.otherBrandOption}
+                    onClick={() => {
+                      setAdaptTargetClientId(c.id);
+                      setOtherBrandPickerPostId(null);
+                      setAdaptingPost(p);
+                    }}
+                  >
+                    {c.nombre}
+                    {c.marca ? <span className={s.otherBrandMarca}>{c.marca}</span> : null}
+                  </button>
+                ))}
+                <button
+                  className={s.otherBrandCancel}
+                  onClick={() => setOtherBrandPickerPostId(null)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className={s.otherBrandBtn}
+              onClick={() => setOtherBrandPickerPostId(p.id)}
+            >
+              ↗ Adaptar para otra marca
+            </button>
+          )
+        )}
+
+        {p.permalink && (
+          <button
+            className={s.downloadBtn}
+            onClick={async () => {
+              await navigator.clipboard.writeText(p.permalink!);
+              window.open("https://snapinsta.to/es", "_blank", "noopener,noreferrer");
+            }}
+          >
+            ↓ Descargar
+          </button>
+        )}
+      </div>
+    );
+  }
+
   const isFresh = hoursSinceScrape != null && hoursSinceScrape < 72;
 
   const currentClient = clients.find((c) => c.id === clientId);
@@ -538,6 +705,21 @@ export default function CompetenciaClient({ clients }: Props) {
             </p>
           )}
 
+          <div className={s.tabs}>
+            <button
+              className={`${s.tabBtn} ${view === "posts" ? s.tabBtnActive : ""}`}
+              onClick={() => setView("posts")}
+            >
+              Todos los posts
+            </button>
+            <button
+              className={`${s.tabBtn} ${view === "outliers" ? s.tabBtnActive : ""}`}
+              onClick={() => setView("outliers")}
+            >
+              🔥 Outliers {outlierPosts.length > 0 ? `(${outlierPosts.length})` : ""}
+            </button>
+          </div>
+
           <div className={s.filters}>
             <div className={s.filterGroup}>
               <button
@@ -547,18 +729,20 @@ export default function CompetenciaClient({ clients }: Props) {
                 {onlyFavorites ? "♥ Favoritos" : "♡ Solo favoritos"}
               </button>
             </div>
-            <div className={s.filterGroup}>
-              <span className={s.filterLabel}>Ordenar:</span>
-              {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-                <button
-                  key={k}
-                  className={`${s.chipBtn} ${sortBy === k ? s.chipBtnActive : ""}`}
-                  onClick={() => setSortBy(k)}
-                >
-                  {SORT_LABELS[k]}
-                </button>
-              ))}
-            </div>
+            {view === "posts" && (
+              <div className={s.filterGroup}>
+                <span className={s.filterLabel}>Ordenar:</span>
+                {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                  <button
+                    key={k}
+                    className={`${s.chipBtn} ${sortBy === k ? s.chipBtnActive : ""}`}
+                    onClick={() => setSortBy(k)}
+                  >
+                    {SORT_LABELS[k]}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className={s.filterGroup}>
               <span className={s.filterLabel}>Tipo:</span>
               {(Object.keys(TYPE_LABELS) as TypeFilter[]).map((k) => (
@@ -593,256 +777,143 @@ export default function CompetenciaClient({ clients }: Props) {
             )}
           </div>
 
-          {/* ── Agregar contenido manualmente ── */}
-          <div className={`card ${s.panel} ${s.manualPanel}`}>
-            <div className={s.panelHead}>
-              <span className="eyebrow">Agregar contenido manualmente</span>
-              <button
-                className="btn btn-secondary"
-                style={{ fontSize: 12, padding: "5px 12px" }}
-                onClick={() => { setShowManualForm((v) => !v); setManualError(null); }}
-              >
-                {showManualForm ? "Cancelar" : "+ Agregar"}
-              </button>
-            </div>
-            {!showManualForm && (
+          {view === "outliers" && (
+            <div className={`card ${s.panel} ${s.outliersPanel}`}>
               <p className={s.hint}>
-                ¿Encontraste un video que te encanta pero no está en la base? Agrégalo aquí y úsalo con "Adaptar a mi marca".
+                Posts con comentarios ≥3× la mediana de esa cuenta (y al menos 15 comentarios más
+                que esa mediana, para que cuentas chicas no marquen ruido normal como outlier). Se
+                necesitan al menos 5 posts guardados de una cuenta para calcular su mediana.
               </p>
-            )}
-            {showManualForm && (
-              <div className={s.manualForm}>
-                <label className={s.field}>
-                  <span className="field-label">URL de Instagram *</span>
-                  <input
-                    className="input"
-                    placeholder="https://www.instagram.com/p/..."
-                    value={manualUrl}
-                    onChange={(e) => setManualUrl(e.target.value)}
-                  />
-                </label>
-                <label className={s.field}>
-                  <span className="field-label">@usuario *</span>
-                  <input
-                    className="input"
-                    placeholder="@usuario"
-                    value={manualUser}
-                    onChange={(e) => setManualUser(e.target.value)}
-                  />
-                </label>
-                <label className={s.field}>
-                  <span className="field-label">Tipo</span>
-                  <select
-                    className="input"
-                    value={manualType}
-                    onChange={(e) => setManualType(e.target.value as "video" | "carousel" | "image")}
-                  >
-                    <option value="video">Reel / Video</option>
-                    <option value="carousel">Carrusel</option>
-                    <option value="image">Imagen</option>
-                  </select>
-                </label>
-                <label className={s.field}>
-                  <span className="field-label">Descripción / notas (opcional)</span>
-                  <textarea
-                    className="textarea"
-                    rows={3}
-                    placeholder="¿Por qué te gustó? ¿Qué quieres adaptar?"
-                    value={manualCaption}
-                    onChange={(e) => setManualCaption(e.target.value)}
-                  />
-                </label>
-                {manualError && <p className={s.error}>{manualError}</p>}
-                <button
-                  className="btn btn-primary"
-                  onClick={handleAddManual}
-                  disabled={isAddingManual}
-                >
-                  {isAddingManual ? "Guardando…" : "Guardar post"}
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className={s.grid}>
-            {sorted.slice(0, visibleCount).map((p, i) => {
-              const avg = avgByUser.get(p.username) ?? 0;
-              const mult = avg > 0 ? eng(p) / avg : 0;
-              const isOutlier = mult >= 1.5;
-              return (
-                <div key={p.id} className={s.postCard}>
-                  <div className={s.postTop}>
-                    <span className={s.rank}>#{i + 1}</span>
-                    <a
-                      className={s.user}
-                      href={`https://www.instagram.com/${p.username}/`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      @{p.username}
-                    </a>
-                    {p.is_manual && (
-                      <span className={s.manualBadge}>Manual</span>
-                    )}
-                    {isOutlier && (
-                      <span className={s.outlier} title="Engagement vs su promedio">
-                        🔥 {mult.toFixed(1)}×
-                      </span>
-                    )}
-                    <span className={s.postActions}>
-                      <button
-                        className={s.iconBtn}
-                        title={p.is_favorite ? "Quitar de favoritos" : "Marcar como favorito"}
-                        onClick={() => handleToggleFavorite(p)}
-                      >
-                        {p.is_favorite ? "♥" : "♡"}
-                      </button>
-                      <button
-                        className={`${s.iconBtn} ${p.is_disliked ? s.iconBtnDisliked : ""}`}
-                        title={p.is_disliked ? "Quitar dislike" : "Ya lo vi, no me gustó"}
-                        onClick={() => handleToggleDislike(p)}
-                      >
-                        👎
-                      </button>
-                      <button
-                        className={`${s.iconBtn} ${s.iconBtnDelete}`}
-                        title="Eliminar este post"
-                        onClick={() => handleDeletePost(p)}
-                      >
-                        🗑
-                      </button>
-                    </span>
-                  </div>
-
-                  {p.permalink ? (
-                    <blockquote
-                      className="instagram-media"
-                      data-instgrm-permalink={p.permalink}
-                      data-instgrm-version="14"
-                      style={{ margin: 0, width: "100%", minWidth: 0 }}
-                    />
+              {accountFilter !== "all" && (
+                <p className={s.outlierAvgLine}>
+                  {accountMedians.has(accountFilter) ? (
+                    <>
+                      @{accountFilter} promedia (mediana) <strong>{fmt(accountMedians.get(accountFilter)!)}</strong>{" "}
+                      comentarios por post.
+                    </>
                   ) : (
-                    <div className={s.noEmbed}>Sin enlace embebible</div>
+                    <>@{accountFilter} todavía no tiene suficientes posts (mínimo 5) para calcular su mediana.</>
                   )}
-
-                  <div className={s.postMetrics}>
-                    {p.video_views != null && <span>▶️ {fmt(p.video_views)}</span>}
-                    <span>❤️ {fmt(p.likes)}</span>
-                    <span>💬 {fmt(p.comments)}</span>
-                    {p.posted_at && (
-                      <span className={s.date}>
-                        {new Date(p.posted_at).toLocaleDateString("es-MX")}
+                </p>
+              )}
+              {accountFilter === "all" && accountMedians.size > 0 && (
+                <div className={s.outlierMedians}>
+                  {competitors.map((c) => {
+                    const med = accountMedians.get(c.username);
+                    if (med == null) return null;
+                    return (
+                      <span key={c.id} className={s.outlierMedianChip}>
+                        @{c.username}: {fmt(med)} comentarios prom.
                       </span>
-                    )}
-                  </div>
-
-                  {transcribeEnabled && p.type !== "image" && (
-                    <div className={s.transcribeRow}>
-                      {p.transcription ? (
-                        <span className={s.transcribedBadge}>
-                          <span className={s.transcribedDot} />
-                          Transcripción lista
-                        </span>
-                      ) : (
-                        <span className={s.transcribedBadge} style={{ opacity: 0.5 }}>
-                          Sin transcripción
-                        </span>
-                      )}
-                      <button
-                        className={s.transcribeBtn}
-                        disabled={transcribingId === p.id}
-                        onClick={() => handleTranscribeClick(p)}
-                      >
-                        {transcribingId === p.id ? "Transcribiendo…" : p.transcription ? "Re-transcribir" : "🎤 Transcribir"}
-                      </button>
-                    </div>
-                  )}
-
-                  {p.transcription && (
-                    <button
-                      className={s.ganchoBtn}
-                      onClick={() => setGanchoPost(p)}
-                    >
-                      ⚡ Extraer gancho
-                    </button>
-                  )}
-
-                  <button
-                    className={s.adaptBtn}
-                    onClick={() => {
-                      setAdaptTargetClientId(null);
-                      setOtherBrandPickerPostId(null);
-                      setAdaptingPost(p);
-                    }}
-                  >
-                    ✦ Adaptar a mi marca
-                  </button>
-
-                  {otherClients.length > 0 && (
-                    otherBrandPickerPostId === p.id ? (
-                      <div className={s.otherBrandPicker}>
-                        <span className={s.otherBrandPickerLabel}>¿Para qué marca?</span>
-                        <div className={s.otherBrandOptions}>
-                          {otherClients.map((c) => (
-                            <button
-                              key={c.id}
-                              className={s.otherBrandOption}
-                              onClick={() => {
-                                setAdaptTargetClientId(c.id);
-                                setOtherBrandPickerPostId(null);
-                                setAdaptingPost(p);
-                              }}
-                            >
-                              {c.nombre}
-                              {c.marca ? <span className={s.otherBrandMarca}>{c.marca}</span> : null}
-                            </button>
-                          ))}
-                          <button
-                            className={s.otherBrandCancel}
-                            onClick={() => setOtherBrandPickerPostId(null)}
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        className={s.otherBrandBtn}
-                        onClick={() => setOtherBrandPickerPostId(p.id)}
-                      >
-                        ↗ Adaptar para otra marca
-                      </button>
-                    )
-                  )}
-
-                  {p.permalink && (
-                    <button
-                      className={s.downloadBtn}
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(p.permalink!);
-                        window.open("https://snapinsta.to/es", "_blank", "noopener,noreferrer");
-                      }}
-                    >
-                      ↓ Descargar
-                    </button>
-                  )}
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-
-          {visibleCount < sorted.length && (
-            <div className={s.loadMore}>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
-              >
-                Cargar {Math.min(PAGE_SIZE, sorted.length - visibleCount)} más
-                <span className={s.loadMoreCount}>
-                  ({visibleCount} de {sorted.length})
-                </span>
-              </button>
+              )}
+              {outlierPosts.length === 0 ? (
+                <p className={s.hint}>
+                  {accountFilter === "all"
+                    ? "Ningún post supera por ahora el umbral de outlier."
+                    : "Esta cuenta no tiene posts outlier por ahora."}
+                </p>
+              ) : (
+                <div className={s.grid}>
+                  {outlierPosts.map((p, i) => renderPostCard(p, i))}
+                </div>
+              )}
             </div>
+          )}
+
+          {view === "posts" && (
+            <>
+              {/* ── Agregar contenido manualmente ── */}
+              <div className={`card ${s.panel} ${s.manualPanel}`}>
+                <div className={s.panelHead}>
+                  <span className="eyebrow">Agregar contenido manualmente</span>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ fontSize: 12, padding: "5px 12px" }}
+                    onClick={() => { setShowManualForm((v) => !v); setManualError(null); }}
+                  >
+                    {showManualForm ? "Cancelar" : "+ Agregar"}
+                  </button>
+                </div>
+                {!showManualForm && (
+                  <p className={s.hint}>
+                    ¿Encontraste un video que te encanta pero no está en la base? Agrégalo aquí y úsalo con "Adaptar a mi marca".
+                  </p>
+                )}
+                {showManualForm && (
+                  <div className={s.manualForm}>
+                    <label className={s.field}>
+                      <span className="field-label">URL de Instagram *</span>
+                      <input
+                        className="input"
+                        placeholder="https://www.instagram.com/p/..."
+                        value={manualUrl}
+                        onChange={(e) => setManualUrl(e.target.value)}
+                      />
+                    </label>
+                    <label className={s.field}>
+                      <span className="field-label">@usuario *</span>
+                      <input
+                        className="input"
+                        placeholder="@usuario"
+                        value={manualUser}
+                        onChange={(e) => setManualUser(e.target.value)}
+                      />
+                    </label>
+                    <label className={s.field}>
+                      <span className="field-label">Tipo</span>
+                      <select
+                        className="input"
+                        value={manualType}
+                        onChange={(e) => setManualType(e.target.value as "video" | "carousel" | "image")}
+                      >
+                        <option value="video">Reel / Video</option>
+                        <option value="carousel">Carrusel</option>
+                        <option value="image">Imagen</option>
+                      </select>
+                    </label>
+                    <label className={s.field}>
+                      <span className="field-label">Descripción / notas (opcional)</span>
+                      <textarea
+                        className="textarea"
+                        rows={3}
+                        placeholder="¿Por qué te gustó? ¿Qué quieres adaptar?"
+                        value={manualCaption}
+                        onChange={(e) => setManualCaption(e.target.value)}
+                      />
+                    </label>
+                    {manualError && <p className={s.error}>{manualError}</p>}
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleAddManual}
+                      disabled={isAddingManual}
+                    >
+                      {isAddingManual ? "Guardando…" : "Guardar post"}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className={s.grid}>
+                {sorted.slice(0, visibleCount).map((p, i) => renderPostCard(p, i))}
+              </div>
+
+              {visibleCount < sorted.length && (
+                <div className={s.loadMore}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
+                  >
+                    Cargar {Math.min(PAGE_SIZE, sorted.length - visibleCount)} más
+                    <span className={s.loadMoreCount}>
+                      ({visibleCount} de {sorted.length})
+                    </span>
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
