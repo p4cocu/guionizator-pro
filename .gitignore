@@ -46,3 +46,6 @@ workers/media/
 
 # Artefactos de pruebas con Playwright MCP
 .playwright-mcp/
+
+# Local Netlify folder
+.netlify

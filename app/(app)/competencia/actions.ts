@@ -3,6 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { runScrapeJob } from "@/lib/competencia/scrape";
+import Anthropic from "@anthropic-ai/sdk";
+import { MODEL_FAST } from "@/lib/ai/anthropic";
+import {
+  buildTaxonomyPrompt,
+  HOOK_TYPE_SLUGS,
+  SCRIPT_STRUCTURE_SLUGS,
+  VALUE_PILLAR_SLUGS,
+} from "@/lib/competencia/taxonomy";
 
 async function getAuthUser() {
   const supabase = await createClient();
@@ -204,10 +212,19 @@ export type CompetitorPost = {
   is_favorite: boolean;
   is_disliked: boolean;
   is_manual: boolean;
+  hook_type: string | null;
+  script_structure: string | null;
+  value_pillar: string | null;
+  classification_notes: string | null;
+  classified_at: string | null;
   is_outlier: boolean;
   outlier_multiple: number | null;
   account_median_comments: number | null;
 };
+
+/** Columnas base de un post (sin los derivados de outlier). */
+const POST_COLUMNS =
+  "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual, hook_type, script_structure, value_pillar, classification_notes, classified_at";
 
 export type LatestResults = {
   scrapeId: string | null;
@@ -290,9 +307,7 @@ export async function getLatestResults(clientId: string): Promise<LatestResults>
 
   const { data: posts } = await supabase
     .from("competitor_posts")
-    .select(
-      "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual",
-    )
+    .select(POST_COLUMNS)
     .eq("owner_id", user.id)
     .eq("client_id", clientId);
 
@@ -375,9 +390,7 @@ export async function addManualPost(input: AddManualPostInput): Promise<AddManua
       is_favorite: false,
       is_disliked: false,
     })
-    .select(
-      "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual",
-    )
+    .select(POST_COLUMNS)
     .single();
 
   if (error) return { ok: false, error: error.message };
@@ -389,5 +402,196 @@ export async function addManualPost(input: AddManualPostInput): Promise<AddManua
       outlier_multiple: null,
       account_median_comments: null,
     },
+  };
+}
+
+// ─── Clasificación por IA (gancho / estructura / pilar) ───────────────────────
+
+export type Classification = {
+  hook_type: string | null;
+  script_structure: string | null;
+  value_pillar: string | null;
+  classification_notes: string | null;
+  classified_at: string | null;
+};
+
+export type ClassifyResult =
+  | { ok: true; classification: Classification }
+  | { ok: false; error: string };
+
+/** Valida que el valor devuelto por la IA esté en el enum; si no, null (evita romper el CHECK). */
+function validSlug(value: unknown, allowed: string[]): string | null {
+  return typeof value === "string" && allowed.includes(value) ? value : null;
+}
+
+/**
+ * Clasifica un post con transcripción en las 3 taxonomías de Andrea Estratega.
+ * 1 llamada a Claude por post (patrón de `extractHook`), con reintento para
+ * blindar el parseo del JSON. Valida cada valor contra el enum antes de guardar.
+ */
+export async function classifyPost(postId: string): Promise<ClassifyResult> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data: post } = await supabase
+    .from("competitor_posts")
+    .select("id, transcription, caption")
+    .eq("id", postId)
+    .eq("owner_id", user.id)
+    .single();
+
+  if (!post) return { ok: false, error: "Post no encontrado." };
+
+  const transcription = (post.transcription as string | null)?.trim() ?? "";
+  const caption = (post.caption as string | null)?.trim() ?? "";
+  if (!transcription && !caption) {
+    return { ok: false, error: "El post no tiene transcripción ni descripción para analizar." };
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return { ok: false, error: "Falta ANTHROPIC_API_KEY." };
+  const ai = new Anthropic({ apiKey });
+
+  const prompt = `Eres analista experto en contenido de Instagram (Reels y carruseles) en español latinoamericano, formado en la metodología de Andrea Estratega (Fórmula 100K).
+
+Clasifica el siguiente contenido en TRES dimensiones. Elige SIEMPRE exactamente una opción por dimensión (la que mejor domine la pieza), usando el slug exacto.
+
+${buildTaxonomyPrompt()}
+
+Devuelve ÚNICAMENTE este JSON (sin markdown, sin explicaciones fuera del JSON):
+{
+  "hook_type": "<slug de tipo de gancho>",
+  "script_structure": "<slug de estructura>",
+  "value_pillar": "<slug de pilar>",
+  "notes": "1 frase breve explicando por qué elegiste esas categorías"
+}
+
+${caption ? `DESCRIPCIÓN / CAPTION:\n${caption.slice(0, 800)}\n\n` : ""}TRANSCRIPCIÓN:
+${transcription.slice(0, 4000) || "(sin transcripción; clasifica con base en la descripción)"}`;
+
+  async function askOnce(): Promise<Record<string, unknown> | null> {
+    const response = await ai.messages.create({
+      model: MODEL_FAST,
+      max_tokens: 512,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+    try {
+      const match = text.match(/\{[\s\S]*\}/);
+      return JSON.parse(match ? match[0] : text) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  // Reintento: hasta 2 intentos si el parseo falla (atiende el pendiente de retry de IA).
+  let parsed = await askOnce();
+  if (!parsed) parsed = await askOnce();
+  if (!parsed) {
+    return { ok: false, error: "La IA no devolvió un formato válido. Intenta de nuevo." };
+  }
+
+  const classification: Classification = {
+    hook_type: validSlug(parsed.hook_type, HOOK_TYPE_SLUGS),
+    script_structure: validSlug(parsed.script_structure, SCRIPT_STRUCTURE_SLUGS),
+    value_pillar: validSlug(parsed.value_pillar, VALUE_PILLAR_SLUGS),
+    classification_notes:
+      typeof parsed.notes === "string" ? parsed.notes.trim().slice(0, 500) : null,
+    classified_at: new Date().toISOString(),
+  };
+
+  const { error: updateError } = await supabase
+    .from("competitor_posts")
+    .update({
+      hook_type: classification.hook_type,
+      script_structure: classification.script_structure,
+      value_pillar: classification.value_pillar,
+      classification_notes: classification.classification_notes,
+      classified_at: classification.classified_at,
+    })
+    .eq("id", postId)
+    .eq("owner_id", user.id);
+
+  if (updateError) return { ok: false, error: updateError.message };
+
+  return { ok: true, classification };
+}
+
+// ─── Estadísticas de clasificación (subvista de Análisis) ─────────────────────
+
+export type CategoryStat = {
+  slug: string;
+  count: number;
+  /** Vistas promedio de los posts en esta categoría (Reels con video_views). */
+  avgViews: number | null;
+  /** Engagement promedio (likes + comentarios). */
+  avgEngagement: number;
+};
+
+export type ClassificationStats = {
+  totalClassified: number;
+  totalWithTranscription: number;
+  pending: number;
+  hook_type: CategoryStat[];
+  script_structure: CategoryStat[];
+  value_pillar: CategoryStat[];
+};
+
+export async function getClassificationStats(clientId: string): Promise<ClassificationStats> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data } = await supabase
+    .from("competitor_posts")
+    .select(
+      "hook_type, script_structure, value_pillar, transcription, classified_at, likes, comments, video_views",
+    )
+    .eq("owner_id", user.id)
+    .eq("client_id", clientId);
+
+  const rows = (data ?? []) as {
+    hook_type: string | null;
+    script_structure: string | null;
+    value_pillar: string | null;
+    transcription: string | null;
+    classified_at: string | null;
+    likes: number | null;
+    comments: number | null;
+    video_views: number | null;
+  }[];
+
+  const totalClassified = rows.filter((r) => r.classified_at != null).length;
+  const totalWithTranscription = rows.filter((r) => (r.transcription ?? "").trim() !== "").length;
+  const pending = rows.filter(
+    (r) => (r.transcription ?? "").trim() !== "" && r.classified_at == null,
+  ).length;
+
+  function aggregate(dim: "hook_type" | "script_structure" | "value_pillar"): CategoryStat[] {
+    const byslug = new Map<string, { count: number; viewsSum: number; viewsN: number; engSum: number }>();
+    for (const r of rows) {
+      const slug = r[dim];
+      if (!slug) continue;
+      const acc = byslug.get(slug) ?? { count: 0, viewsSum: 0, viewsN: 0, engSum: 0 };
+      acc.count += 1;
+      acc.engSum += (r.likes ?? 0) + (r.comments ?? 0);
+      if (r.video_views != null) {
+        acc.viewsSum += r.video_views;
+        acc.viewsN += 1;
+      }
+      byslug.set(slug, acc);
+    }
+    return Array.from(byslug.entries()).map(([slug, a]) => ({
+      slug,
+      count: a.count,
+      avgViews: a.viewsN > 0 ? Math.round(a.viewsSum / a.viewsN) : null,
+      avgEngagement: a.count > 0 ? Math.round(a.engSum / a.count) : 0,
+    }));
+  }
+
+  return {
+    totalClassified,
+    totalWithTranscription,
+    pending,
+    hook_type: aggregate("hook_type"),
+    script_structure: aggregate("script_structure"),
+    value_pillar: aggregate("value_pillar"),
   };
 }

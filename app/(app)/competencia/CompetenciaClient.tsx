@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   addCompetitor,
   addManualPost,
+  classifyPost,
   deleteCompetitorPost,
   getLatestResults,
   getScrapeStatus,
@@ -15,6 +17,7 @@ import {
   type Competitor,
   type CompetitorPost,
 } from "./actions";
+import { DIMENSIONS, labelFor, colorFor } from "@/lib/competencia/taxonomy";
 import AdaptarModal from "./AdaptarModal";
 import GanchoModal from "./GanchoModal";
 import s from "./competencia.module.css";
@@ -97,6 +100,8 @@ export default function CompetenciaClient({ clients }: Props) {
   const [ganchoPost, setGanchoPost] = useState<CompetitorPost | null>(null);
   const [otherBrandPickerPostId, setOtherBrandPickerPostId] = useState<string | null>(null);
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
+  const [classifyingId, setClassifyingId] = useState<string | null>(null);
+  const [bulkClassify, setBulkClassify] = useState<{ done: number; total: number } | null>(null);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [visibleCount, setVisibleCount] = useState(15);
 
@@ -228,6 +233,12 @@ export default function CompetenciaClient({ clients }: Props) {
     return { likes, comments, views, accounts, posts: sorted.length };
   }, [sorted, competitors.length, accountFilter]);
 
+  // Posts con transcripción lista pero aún sin clasificar (para el botón masivo).
+  const pendingClassifyCount = useMemo(
+    () => posts.filter((p) => p.transcription && p.transcription.trim() !== "" && !p.classified_at).length,
+    [posts],
+  );
+
   // ── Acciones ──
   function handleAdd() {
     const u = newUser.trim();
@@ -321,11 +332,60 @@ export default function CompetenciaClient({ clients }: Props) {
           p.id === post.id ? { ...p, transcription: json.transcription ?? null } : p
         )
       );
+      // Auto-clasificar en cuanto hay transcripción (gancho / estructura / pilar).
+      await handleClassify(post.id, { silent: true });
     } catch (e) {
       alert(e instanceof Error ? e.message : "Error al transcribir");
     } finally {
       setTranscribingId(null);
     }
+  }
+
+  async function handleClassify(postId: string, opts?: { silent?: boolean }) {
+    setClassifyingId(postId);
+    try {
+      const res = await classifyPost(postId);
+      if (!res.ok) {
+        if (!opts?.silent) alert(res.error);
+        return;
+      }
+      setPosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, ...res.classification } : p))
+      );
+    } catch (e) {
+      if (!opts?.silent) alert(e instanceof Error ? e.message : "Error al clasificar");
+    } finally {
+      setClassifyingId(null);
+    }
+  }
+
+  // Clasifica en lote todos los posts con transcripción y sin clasificar,
+  // con concurrencia limitada (3) para no saturar la API ni perder robustez.
+  async function handleClassifyPending() {
+    const pending = posts.filter(
+      (p) => p.transcription && p.transcription.trim() !== "" && !p.classified_at
+    );
+    if (pending.length === 0) return;
+    setBulkClassify({ done: 0, total: pending.length });
+
+    const CONCURRENCY = 3;
+    let cursor = 0;
+    let done = 0;
+    async function worker() {
+      while (cursor < pending.length) {
+        const post = pending[cursor++];
+        const res = await classifyPost(post.id);
+        if (res.ok) {
+          setPosts((prev) =>
+            prev.map((p) => (p.id === post.id ? { ...p, ...res.classification } : p))
+          );
+        }
+        done += 1;
+        setBulkClassify({ done, total: pending.length });
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pending.length) }, worker));
+    setBulkClassify(null);
   }
 
   async function handleDeletePost(post: CompetitorPost) {
@@ -470,6 +530,38 @@ export default function CompetenciaClient({ clients }: Props) {
               {transcribingId === p.id ? "Transcribiendo…" : p.transcription ? "Re-transcribir" : "🎤 Transcribir"}
             </button>
           </div>
+        )}
+
+        {(p.hook_type || p.script_structure || p.value_pillar) && (
+          <div className={s.classTags} title={p.classification_notes ?? undefined}>
+            {DIMENSIONS.map(({ key }) => {
+              const slug = p[key] as string | null;
+              if (!slug) return null;
+              return (
+                <span
+                  key={key}
+                  className={s.classTag}
+                  style={{ borderColor: colorFor(key, slug), color: colorFor(key, slug) }}
+                >
+                  {labelFor(key, slug)}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {p.transcription && (
+          <button
+            className={s.classifyBtn}
+            disabled={classifyingId === p.id}
+            onClick={() => handleClassify(p.id)}
+          >
+            {classifyingId === p.id
+              ? "Clasificando…"
+              : p.classified_at
+                ? "↻ Reclasificar"
+                : "🏷 Clasificar"}
+          </button>
         )}
 
         {p.transcription && (
@@ -718,6 +810,28 @@ export default function CompetenciaClient({ clients }: Props) {
             >
               🔥 Outliers {outlierPosts.length > 0 ? `(${outlierPosts.length})` : ""}
             </button>
+            <Link
+              className={`${s.tabBtn} ${s.tabLink}`}
+              href={`/competencia/analisis?client=${clientId}`}
+            >
+              📊 Análisis
+            </Link>
+          </div>
+
+          <div className={s.classBar}>
+            {bulkClassify ? (
+              <span className={s.classBarProgress}>
+                Clasificando… {bulkClassify.done}/{bulkClassify.total}
+              </span>
+            ) : pendingClassifyCount > 0 ? (
+              <button className="btn btn-secondary" onClick={handleClassifyPending}>
+                🏷 Clasificar pendientes ({pendingClassifyCount})
+              </button>
+            ) : (
+              <span className={s.classBarHint}>
+                Clasificación al día — se etiqueta gancho, estructura y pilar de cada post transcrito.
+              </span>
+            )}
           </div>
 
           <div className={s.filters}>

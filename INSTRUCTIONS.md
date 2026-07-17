@@ -134,16 +134,31 @@ Si el post tiene transcripción, Claude usa el audio como fuente primaria en amb
 
 ## Deploy a producción
 
-El deploy es automático al hacer push a `main`. Netlify detecta los cambios y construye.
+⚠️ **Desde 2026-07-16 los builds automáticos de Netlify están PAUSADOS** (`stop_builds: true`,
+badge "Builds are stopped" visible en el dashboard). Un `git push` a `main` **ya NO dispara
+un deploy**. Se hace manual con el CLI de Netlify para no gastar build minutes/créditos:
 
 ```bash
 git add .
 git commit -m "descripción del cambio"
-git push
+git push                              # opcional, solo respalda el código en GitHub
+
+netlify build && netlify deploy --prod
 ```
 
-Para forzar un redeploy sin cambios de código (ej. para tomar nuevas env vars):
-ir a Netlify → Deploys → **Trigger deploy**.
+- `netlify build` corre el build **en tu Mac** (no en los runners de Netlify) y ejecuta el
+  plugin `@netlify/plugin-nextjs`, que genera las Functions necesarias para SSR, las API
+  routes, el middleware de auth (`proxy.ts`) y la Scheduled Function de limpieza.
+- `netlify deploy --prod` (sin `--build`) sube ese resultado ya construido — no dispara
+  build remoto.
+- El repo (`p4cocu/guionizator-pro`) sigue conectado en Netlify vía GitHub, pero solo para
+  referencia/vínculo — no para auto-deploy.
+- Site ID: `206f4da1-f18e-468b-a2d2-ff41b5e92fff`. Requiere `netlify link` una sola vez por
+  máquina nueva (ya vinculado en este Mac).
+
+**Reactivar auto-deploy** (si algún día se quiere volver atrás):
+Netlify → Site settings → Build & deploy → Continuous deployment → reanudar builds.
+O vía API: `netlify api updateSite --data '{"site_id":"206f4da1-f18e-468b-a2d2-ff41b5e92fff","body":{"build_settings":{"stop_builds":false}}}'`
 
 ---
 

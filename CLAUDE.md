@@ -54,6 +54,9 @@ Cuando toques un valor de estos, dilo explícitamente y entrega el SQL a Paco.
 | `scripts.recording_type` | `voz_off`, `actuacion`, `actuacion_compu`, `actuacion_cel`, `compu`, `cel` |
 | `content_calendar.status` | `idea`, `etapa0`, `produccion`, `publicado` |
 | `resources.kind` | `capturado`, `universal` |
+| `competitor_posts.hook_type` | `resultado`, `vacio_info`, `error`, `controversia`, `dolor_comun`, `filtrante`, `negativo` |
+| `competitor_posts.script_structure` | `how_to`, `golpe_valor`, `vacio_info`, `espejo`, `controversial`, `momento_wtf`, `problema_invisible` |
+| `competitor_posts.value_pillar` | `utilidad_practica`, `validacion_emocional`, `revelacion`, `curaduria`, `disrupcion`, `actualidad` |
 
 `baul` = ideas buenas pero congeladas (falta pulir herramientas para producirlas).
 **Se oculta por defecto** en la lista de Guiones (`getScripts` filtra `neq baul` si no hay
@@ -64,6 +67,18 @@ filtro de estado); solo aparece al elegir "Baúl" en el filtro. No estorba en la
 sin cliente ni guión — no pensados para contenido). `getResources`/`getUniversalResources`
 filtran por `kind`; `updateResourceKind` mueve entre ambos. Los **Recursos Propios** son
 otra tabla (`own_resources`), no un `kind`.
+
+Las 3 columnas de clasificación de `competitor_posts` (`hook_type`, `script_structure`,
+`value_pillar`) las asigna la IA a partir de la transcripción (`classifyPost` en
+`competencia/actions.ts`, modelo `MODEL_FAST` con retry). La **fuente de verdad** de los
+slugs, labels, colores y definiciones (destiladas de los playbooks de Andrea Estratega) es
+`lib/competencia/taxonomy.ts` — al tocar un valor del enum, actualiza **el CHECK, la tabla
+de arriba y `taxonomy.ts` en el mismo cambio**. Columnas acompañantes sin CHECK:
+`classification_notes` (text, 1 frase de por qué la IA eligió) y `classified_at` (timestamptz,
+marca lo ya clasificado → alimenta el botón "Clasificar pendientes" y la subvista
+`/competencia/analisis`). La clasificación se dispara auto tras transcribir, en lote, o
+individual; corre en producción (es solo una llamada a Claude, a diferencia de la
+transcripción que es local).
 
 Columnas booleanas nuevas (sin `CHECK`, pero también requieren `ALTER TABLE` a mano):
 `scripts.featured` (`default false`) — guiones destacados para desarrollar pronto; se
