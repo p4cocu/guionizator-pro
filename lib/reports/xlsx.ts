@@ -1,10 +1,15 @@
 /**
  * Generación del .xlsx de un reporte de competencia (exceljs).
  *
- * Tres hojas, en orden de utilidad para el cliente:
+ * Cuatro hojas, en orden de utilidad para el cliente:
  *   1. Plan de grabación — lo accionable: qué grabar, por qué, con qué guion.
- *   2. Datos             — la tabla completa con métricas y transcripciones.
- *   3. Qué funciona      — agregado por gancho / estructura / pilar.
+ *   2. Guiones           — los guiones adaptados completos, listos para copiar.
+ *   3. Datos             — la tabla completa con métricas y transcripciones.
+ *   4. Qué funciona      — agregado por gancho / estructura / pilar.
+ *
+ * Los guiones van en hoja propia y no como columna de "Datos" a propósito: un
+ * guion de 200 palabras en una celda estira la fila y descuadra la lectura de
+ * las métricas, que es justo para lo que sirve esa hoja.
  *
  * SERVER-ONLY.
  */
@@ -107,7 +112,55 @@ export async function buildReportXlsx(snapshot: ReportSnapshot): Promise<Buffer>
     }
   });
 
-  // ── Hoja 2: Datos ──────────────────────────────────────────────────────────
+  // ── Hoja 2: Guiones adaptados completos ────────────────────────────────────
+  const guiones = wb.addWorksheet("Guiones", { views: [{ state: "frozen", ySplit: 1 }] });
+  guiones.columns = [
+    { header: "#", key: "n", width: 5 },
+    { header: "Inspirado en", key: "inspirado", width: 20 },
+    { header: "Post original", key: "link", width: 14 },
+    { header: "Título", key: "titulo", width: 42 },
+    { header: "Formato", key: "formato", width: 12 },
+    { header: "Estructura", key: "estructura", width: 20 },
+    { header: "Guion completo", key: "guion", width: 95 },
+  ];
+  styleHeader(guiones.getRow(1));
+
+  const conGuion = snapshot.rows.filter((r) => r.script != null);
+
+  conGuion.forEach((r, i) => {
+    const script = r.script!;
+    const row = guiones.addRow({
+      n: i + 1,
+      inspirado: `@${r.post.username}`,
+      link: "",
+      titulo: script.title ?? "",
+      formato: script.type === "carousel" ? "Carrusel" : "Reel",
+      estructura: script.structureName ?? "",
+      guion: script.text || "(guion vacío)",
+    });
+    row.alignment = { vertical: "top", wrapText: true };
+    if (i % 2 === 1) {
+      row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ZEBRA } };
+    }
+    row.getCell("titulo").font = { bold: true };
+    if (r.post.permalink) {
+      row.getCell("link").value = { text: "Ver post", hyperlink: r.post.permalink };
+      row.getCell("link").font = { color: { argb: "FF0563C1" }, underline: true };
+    }
+  });
+
+  if (conGuion.length === 0) {
+    const note = guiones.addRow({
+      n: "",
+      inspirado: "",
+      titulo: "Ningún post de este reporte tiene guion adaptado todavía.",
+      guion: 'Adáptalos desde Competencia con "Adaptar a mi marca" y regenera el reporte.',
+    });
+    note.font = { italic: true, color: { argb: "FF9A6700" } };
+    note.alignment = { vertical: "top", wrapText: true };
+  }
+
+  // ── Hoja 3: Datos ──────────────────────────────────────────────────────────
   const datos = wb.addWorksheet("Datos", { views: [{ state: "frozen", ySplit: 1 }] });
   datos.columns = [
     { header: "Cuenta", key: "cuenta", width: 20 },
@@ -166,7 +219,7 @@ export async function buildReportXlsx(snapshot: ReportSnapshot): Promise<Buffer>
 
   datos.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: datos.columns.length } };
 
-  // ── Hoja 3: Qué está funcionando ───────────────────────────────────────────
+  // ── Hoja 4: Qué está funcionando ───────────────────────────────────────────
   const stats = wb.addWorksheet("Qué está funcionando");
   stats.columns = [
     { header: "Dimensión", key: "dimension", width: 22 },

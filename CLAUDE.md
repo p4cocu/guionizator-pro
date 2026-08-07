@@ -178,9 +178,11 @@ tarjeta + barra flotante) y se genera un reporte descargable en **.xlsx y .pdf**
 - El guion se acota al cliente del reporte: adaptar entre marcas es válido a nivel
   base (`source_post_id` no lo impide), pero el guion de otra marca no va en este
   reporte.
-- `lib/reports/xlsx.ts` (exceljs): hojas *Plan de grabación*, *Datos*,
+- `lib/reports/xlsx.ts` (exceljs): hojas *Plan de grabación*, *Guiones*, *Datos*,
   *Qué está funcionando*. `lib/reports/pdf.ts` (pdfkit): portada, hallazgos y los
-  guiones completos.
+  guiones completos. El guion completo va en hoja propia y **no** como columna de
+  *Datos*: 200 palabras en una celda estiran la fila y arruinan la lectura de las
+  métricas. En *Plan de grabación* solo aparece el gancho (primera frase).
 - **pdfkit, no @react-pdf/renderer**: este código se bundlea en una Netlify
   Function y @react-pdf arrastra `yoga-layout` (WASM), frágil de empaquetar.
   Contrapartida: sin Space Grotesk (las fuentes vienen de Google vía `next/font`,
