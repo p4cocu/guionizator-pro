@@ -2,8 +2,10 @@
  * Resolución del token de Apify que debe usar un scrape.
  *
  * Cada cliente puede tener el suyo (cifrado en `clients.apify_token_cipher`)
- * para que cada marca pague su propio scraping. Si no lo tiene, cae al token
- * global `APIFY_API_TOKEN` — que es el caso de las marcas propias de Paco.
+ * para que cada marca pague su propio scraping. Si no lo tiene, solo el
+ * **super admin** (`SUPER_ADMIN_USER_ID`) cae al token global `APIFY_API_TOKEN`
+ * — que es el caso de las marcas propias de Paco. Cualquier otro usuario está
+ * obligado a cargar su propia key: nadie más gasta los créditos del dueño.
  *
  * SERVER-ONLY: descifra secretos. Se usa desde server actions y desde la
  * background function de Netlify (que necesita `SECRETS_KEY` en su entorno).
@@ -21,9 +23,20 @@ export class ApifyTokenError extends Error {
 
 export type ResolvedApifyToken = {
   token: string;
-  /** "client" = lo paga el cliente; "global" = lo paga la cuenta de Paco. */
+  /** "client" = lo paga el cliente; "global" = lo paga la cuenta del super admin. */
   source: "client" | "global";
 };
+
+/**
+ * ¿Este owner es el super admin? Solo él puede usar el token global.
+ * Se compara contra `SUPER_ADMIN_USER_ID` (el uuid de `auth.users`) porque la
+ * background function de Netlify no tiene sesión: lo único que conoce es el
+ * `owner_id` de la fila del scrape.
+ */
+function isSuperAdmin(ownerId: string | null): boolean {
+  const superAdminId = process.env.SUPER_ADMIN_USER_ID?.trim();
+  return Boolean(superAdminId && ownerId && ownerId === superAdminId);
+}
 
 /**
  * Devuelve el token a usar para `clientId`, o lanza `ApifyTokenError` con un
@@ -37,7 +50,7 @@ export async function resolveApifyToken(
 ): Promise<ResolvedApifyToken> {
   const { data, error } = await supabase
     .from("clients")
-    .select("nombre, apify_token_cipher, apify_token_valid")
+    .select("nombre, owner_id, apify_token_cipher, apify_token_valid")
     .eq("id", clientId)
     .maybeSingle();
 
@@ -61,6 +74,14 @@ export async function resolveApifyToken(
           : "No se pudo leer el token de Apify de este cliente.",
       );
     }
+  }
+
+  // Sin token propio: el global es exclusivo del super admin. Un usuario común
+  // debe cargar su key sí o sí — no puede gastar los créditos del dueño.
+  if (!isSuperAdmin((data.owner_id as string | null) ?? null)) {
+    throw new ApifyTokenError(
+      "Este cliente no tiene token de Apify. Cárgalo en su perfil para poder buscar competencia.",
+    );
   }
 
   const global = process.env.APIFY_API_TOKEN;

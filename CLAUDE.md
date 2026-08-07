@@ -140,11 +140,16 @@ a mano: `apify_token_cipher`, `apify_token_last4`, `apify_token_valid`,
   Netlify**; si cambia, los tokens guardados dejan de descifrarse y hay que
   volver a cargarlos.
 - **Resolución**: `lib/competencia/apifyToken.ts` → `resolveApifyToken(supabase, clientId)`.
-  Cadena: token del cliente → `APIFY_API_TOKEN` global. **No** hay fallback
-  silencioso al global cuando el cliente sí tiene token: si el suyo está roto,
-  falla con mensaje claro en vez de cobrarle el scrape a la cuenta equivocada.
-  `runScrapeJob` lo resuelve solo (ya no recibe el token como parámetro) y
-  `startScrape` lo valida antes de crear la fila del scrape.
+  Cadena: token del cliente → `APIFY_API_TOKEN` global, **y el global es exclusivo
+  del super admin** (`SUPER_ADMIN_USER_ID` = uuid de `auth.users`, se compara contra
+  `clients.owner_id`). Cualquier otro usuario que no cargue su key ve un error, no
+  gasta los créditos del dueño. Si `SUPER_ADMIN_USER_ID` no está definida, **nadie**
+  usa el global (falla cerrado a propósito). Se compara por `owner_id` y no por
+  sesión porque la background function de Netlify no tiene sesión de usuario.
+  **No** hay fallback silencioso al global cuando el cliente sí tiene token: si el
+  suyo está roto, falla con mensaje claro en vez de cobrarle el scrape a la cuenta
+  equivocada. `runScrapeJob` lo resuelve solo (ya no recibe el token como parámetro)
+  y `startScrape` lo valida antes de crear la fila del scrape.
 - **Nunca al browser**: las server actions (`saveApifyToken`, `checkApifyToken`,
   `removeApifyToken` en `clientes/actions.ts`) devuelven solo `last4`/estado.
   `saveApifyToken` valida contra `GET /v2/users/me` de Apify **antes** de guardar,
@@ -184,7 +189,8 @@ knowledge/              # fuente original de la base de conocimiento
 
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `ANTHROPIC_API_KEY` (server-only), `NEXT_PUBLIC_SITE_URL`,
-`APIFY_API_TOKEN` (global/fallback), `SECRETS_KEY` (cifrado de tokens por cliente).
+`APIFY_API_TOKEN` (global/fallback), `SECRETS_KEY` (cifrado de tokens por cliente),
+`SUPER_ADMIN_USER_ID` (único uuid que puede usar el token global de Apify).
 
 ## Comandos
 

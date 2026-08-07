@@ -32,6 +32,7 @@ export type ScriptRow = {
   status: ScriptStatus;
   recording_type: RecordingType | null;
   source_post_permalink: string | null;
+  source_post_id: string | null;
   featured: boolean;
   clients: { nombre: string; marca: string | null } | null;
   has_resource?: boolean;
@@ -87,6 +88,7 @@ export async function saveScriptSilent(data: {
   content: Record<string, unknown>;
   brain_version_id: string | null;
   source_post_permalink?: string | null;
+  source_post_id?: string | null;
 }): Promise<string> {
   const { supabase, user } = await getAuthUser();
 
@@ -102,6 +104,7 @@ export async function saveScriptSilent(data: {
       content: data.content,
       brain_version_id: data.brain_version_id,
       source_post_permalink: data.source_post_permalink ?? null,
+      source_post_id: data.source_post_id ?? null,
     })
     .select("id")
     .single();
@@ -126,6 +129,7 @@ export async function saveScriptWithNewIdea(data: {
   content: Record<string, unknown>;
   brain_version_id: string | null;
   source_post_permalink?: string | null;
+  source_post_id?: string | null;
 }): Promise<string> {
   const { supabase, user } = await getAuthUser();
 
@@ -141,6 +145,7 @@ export async function saveScriptWithNewIdea(data: {
       content: data.content,
       brain_version_id: data.brain_version_id,
       source_post_permalink: data.source_post_permalink ?? null,
+      source_post_id: data.source_post_id ?? null,
     })
     .select("id")
     .single();
@@ -420,6 +425,9 @@ export async function saveScriptVersion(
       version_number: nextVersion,
       is_latest: true,
       source_post_permalink: (current as ScriptRow).source_post_permalink ?? null,
+      // La liga al post original se arrastra entre versiones: si no, editar un
+      // guion adaptado lo desconectaría del post en el reporte.
+      source_post_id: (current as ScriptRow).source_post_id ?? null,
     })
     .select("id")
     .single();

@@ -30,22 +30,19 @@ Migración: `supabase/migrations/0001_apify_token_por_cliente.sql`.
 Las de las fases B y C se escriben como `0002…` / `0003…` cuando se implementen
 (el SQL de abajo es el borrador, no la migración final).
 
-### Fase B — Vínculo confiable guion ↔ post
+### Fase B — Vínculo confiable guion ↔ post  ✅ hecha (2026-08-07)
 
-Hoy el guion adaptado se liga al post de competencia **solo por string**
-(`scripts.source_post_permalink`, ver `AdaptarModal.tsx`). Para que el reporte
-pueda decir "este post → este guion" sin adivinar:
+`scripts.source_post_id` como FK real a `competitor_posts` (`on delete set null`,
+porque el cron de 40 días borra posts y el guion debe sobrevivir conservando
+`source_post_permalink`). Se llena en las dos rutas de `AdaptarModal` — la
+"ligera" guarda directo, la "completa" manda el id como query param a
+`/guiones/nuevo` — y `saveScriptVersion` la arrastra entre versiones para que
+editar un guion adaptado no lo desconecte del post.
 
-```sql
-alter table scripts add column source_post_id uuid
-  references competitor_posts(id) on delete set null;
-create index scripts_source_post_id_idx on scripts(source_post_id);
-```
-
-`on delete set null` porque el cron de 40 días borra posts; el guion sobrevive y
-conserva el permalink. Hay que llenarlo en las **dos** rutas de `AdaptarModal`:
-la "ligera" (guarda directo) y la "completa" (pasa por `/guiones/nuevo`, así que
-el id viaja como query param).
+Migración: `supabase/migrations/0002_scripts_source_post_id.sql`, que además
+**hace backfill** de los guiones adaptados viejos cruzando por permalink
+(acotado por `owner_id` + `client_id`). Los posts ya purgados por el cron no se
+pueden recuperar: esos guiones quedan con `source_post_id` en NULL.
 
 ### Fase C — Generación del reporte
 

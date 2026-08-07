@@ -28,3 +28,5 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | # | Archivo | Aplicada en Supabase |
 |---|---|---|
 | 0001 | `0001_apify_token_por_cliente.sql` | ✅ 2026-08-07 |
+| 0002 | `0002_scripts_source_post_id.sql` | ✅ 2026-08-07 |
+| 0003 | `0003_backfill_source_post_id_cross_client.sql` | ⬜ pendiente |
