@@ -44,7 +44,16 @@ Migración: `supabase/migrations/0002_scripts_source_post_id.sql`, que además
 (acotado por `owner_id` + `client_id`). Los posts ya purgados por el cron no se
 pueden recuperar: esos guiones quedan con `source_post_id` en NULL.
 
-### Fase C — Generación del reporte
+### Fase C — Generación del reporte  ✅ hecha (2026-08-07)
+
+Implementada según el diseño de abajo. Migración `0004_reports.sql`. Detalle en
+`CLAUDE.md` → "Reportes de competencia". Pendientes conocidos, ninguno bloqueante:
+el PDF usa Helvetica (no Space Grotesk) y la transcripción sigue siendo local, así
+que el reporte marca "¿Transcrito? No" en lo que no se procesó a mano.
+
+<details><summary>Diseño original</summary>
+
+
 
 Tabla `reports` (`owner_id`, `client_id`, `title`, `period_start/end`,
 `snapshot jsonb`, `created_at`) con RLS owner-only. El `snapshot` **congela las
@@ -68,6 +77,8 @@ el snapshot, una pieza menos de infraestructura.
 - Rutas `POST /api/reports`, `GET /api/reports/[id]/xlsx`, `GET /api/reports/[id]/pdf`
   — **con sesión de usuario, NO van a `PUBLIC_PATHS`**. Más una vista `/reportes`
   con el historial por cliente.
+
+</details>
 
 ### Fase D — Portal de cliente (login propio)
 

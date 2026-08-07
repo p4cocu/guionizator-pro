@@ -20,6 +20,7 @@ import {
 import { DIMENSIONS, labelFor, colorFor } from "@/lib/competencia/taxonomy";
 import AdaptarModal from "./AdaptarModal";
 import GanchoModal from "./GanchoModal";
+import ReporteModal from "./ReporteModal";
 import s from "./competencia.module.css";
 
 type Client = { id: string; nombre: string; marca: string | null };
@@ -103,6 +104,10 @@ export default function CompetenciaClient({ clients }: Props) {
   const [classifyingId, setClassifyingId] = useState<string | null>(null);
   const [bulkClassify, setBulkClassify] = useState<{ done: number; total: number } | null>(null);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
+  // Selección para el reporte. Se guarda por id (no por índice) para que
+  // reordenar o filtrar la lista no cambie lo seleccionado.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showReportModal, setShowReportModal] = useState(false);
   const [visibleCount, setVisibleCount] = useState(15);
 
   const PAGE_SIZE = 15;
@@ -141,6 +146,9 @@ export default function CompetenciaClient({ clients }: Props) {
       setAccountFilter("all");
       setTypeFilter("all");
       setVisibleCount(15);
+      // La selección es por cliente: al cambiar de marca se descarta, o el
+      // reporte saldría con posts que ya no pertenecen a esta vista.
+      setSelectedIds(new Set());
       const hrs = results.scrapedAt
         ? (Date.now() - new Date(results.scrapedAt).getTime()) / 3_600_000
         : null;
@@ -442,10 +450,28 @@ export default function CompetenciaClient({ clients }: Props) {
     });
   }
 
+  function toggleSelected(postId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(postId)) next.delete(postId);
+      else next.add(postId);
+      return next;
+    });
+  }
+
   function renderPostCard(p: CompetitorPost, i: number) {
+    const isSelected = selectedIds.has(p.id);
     return (
-      <div key={p.id} className={s.postCard}>
+      <div key={p.id} className={`${s.postCard} ${isSelected ? s.postCardSelected : ""}`}>
         <div className={s.postTop}>
+          <input
+            type="checkbox"
+            className={s.selectBox}
+            checked={isSelected}
+            onChange={() => toggleSelected(p.id)}
+            title="Incluir en el reporte"
+            aria-label={`Incluir el post de @${p.username} en el reporte`}
+          />
           <span className={s.rank}>#{i + 1}</span>
           <a
             className={s.user}
@@ -1059,6 +1085,42 @@ export default function CompetenciaClient({ clients }: Props) {
         <p className={s.empty}>
           Agregadas las cuentas, presiona <strong>Ejecutar búsqueda</strong> para traer su contenido.
         </p>
+      )}
+
+      {selectedIds.size > 0 && (
+        <div className={s.selectionBar}>
+          <span className={s.selectionCount}>
+            {selectedIds.size} post{selectedIds.size === 1 ? "" : "s"} seleccionado
+            {selectedIds.size === 1 ? "" : "s"}
+          </span>
+          <button
+            className="btn btn-ghost"
+            onClick={() => setSelectedIds(new Set())}
+            style={{ fontSize: 13 }}
+          >
+            Limpiar
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowReportModal(true)}
+            style={{ fontSize: 13 }}
+          >
+            Generar reporte
+          </button>
+        </div>
+      )}
+
+      {showReportModal && (
+        <ReporteModal
+          clientId={clientId}
+          clientName={
+            clients.find((c) => c.id === clientId)?.marca ||
+            clients.find((c) => c.id === clientId)?.nombre ||
+            "Cliente"
+          }
+          posts={posts.filter((p) => selectedIds.has(p.id))}
+          onClose={() => setShowReportModal(false)}
+        />
       )}
     </div>
   );

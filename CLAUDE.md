@@ -159,6 +159,38 @@ a mano: `apify_token_cipher`, `apify_token_last4`, `apify_token_valid`,
   al abrir el portal de clientes (Fase D en `pendientes.md`), mover la columna a
   una tabla sin policy de `select`.
 
+## Reportes de competencia (`/reportes`)
+
+Entregable para el cliente: se seleccionan posts en `/competencia` (checkbox por
+tarjeta + barra flotante) y se genera un reporte descargable en **.xlsx y .pdf**.
+
+- **Snapshot congelado** (`reports.snapshot`, jsonb). El reporte **no** consulta
+  las tablas al descargarse: `cleanup-competencia-scheduled` borra posts a los 40
+  días y un reporte "en vivo" se vaciaría solo. Los archivos se regeneran desde el
+  snapshot en cada descarga — no se guarda el binario (sin Storage, sin bucket).
+  Consecuencia práctica: transcribir o clasificar **después** de generar no se
+  refleja; hay que regenerar el reporte.
+- `lib/reports/snapshot.ts` arma las filas (post + clasificación IA + guion
+  adaptado vía `scripts.source_post_id`) y calcula outliers. La mediana de
+  comentarios se saca de **todos** los posts de esa cuenta en el cliente, no solo
+  de los seleccionados: con 3-4 posts elegidos a mano —y elegidos justo por
+  destacar— la mediana no significaría nada.
+- El guion se acota al cliente del reporte: adaptar entre marcas es válido a nivel
+  base (`source_post_id` no lo impide), pero el guion de otra marca no va en este
+  reporte.
+- `lib/reports/xlsx.ts` (exceljs): hojas *Plan de grabación*, *Datos*,
+  *Qué está funcionando*. `lib/reports/pdf.ts` (pdfkit): portada, hallazgos y los
+  guiones completos.
+- **pdfkit, no @react-pdf/renderer**: este código se bundlea en una Netlify
+  Function y @react-pdf arrastra `yoga-layout` (WASM), frágil de empaquetar.
+  Contrapartida: sin Space Grotesk (las fuentes vienen de Google vía `next/font`,
+  no hay TTF en el repo) — usa Helvetica.
+  ⚠️ Al tocar el pie de página: escribir por debajo del margen inferior hace que
+  pdfkit agregue una página en blanco por cada pie. Se neutraliza poniendo
+  `doc.page.margins.bottom = 0` mientras se escribe (ya está hecho).
+- Rutas `POST /api/reports`, `GET /api/reports/[id]/{xlsx,pdf}` — autenticadas por
+  sesión, **no** van en `PUBLIC_PATHS`.
+
 ## Estructura de carpetas
 
 ```

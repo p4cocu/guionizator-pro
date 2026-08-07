@@ -18,6 +18,7 @@ const NAV: NavItem[] = [
   { href: "/prompts", label: "Prompts", phase: "F4" },
   { href: "/instagram", label: "Instagram", phase: "F5" },
   { href: "/competencia", label: "Competencia", phase: "F6" },
+  { href: "/reportes", label: "Reportes", phase: "F10" },
   { href: "/tendencias", label: "Tendencias", phase: "F7" },
   { href: "/ganchos", label: "Baúl de Ganchos", phase: "F8" },
   { href: "/recursos", label: "Recursos", phase: "F9" },
