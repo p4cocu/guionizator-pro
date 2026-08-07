@@ -25,10 +25,13 @@
 -- cliente del reporte, no la FK.
 -- ============================================================================
 
+-- Nota: Postgres no tiene `min(uuid)`, así que el id no se puede agregar con
+-- min/max. Como el `having count(*) = 1` ya garantiza una sola fila candidata,
+-- `(array_agg(p.id))[1]` toma esa única fila sin necesidad de ordenarla.
 update scripts s
 set source_post_id = m.post_id
 from (
-  select s2.id as script_id, min(p.id) as post_id
+  select s2.id as script_id, (array_agg(p.id))[1] as post_id
   from scripts s2
   join competitor_posts p
     on p.permalink = s2.source_post_permalink
