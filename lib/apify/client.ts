@@ -19,6 +19,71 @@ export class ApifyError extends Error {
   }
 }
 
+/** Datos de la cuenta dueña de un token (para validarlo al guardarlo). */
+export type ApifyAccount = {
+  username: string | null;
+  plan: string | null;
+};
+
+/**
+ * Valida un token contra `GET /v2/users/me`. Si el token no sirve, Apify
+ * responde 401 y lanzamos ApifyError — así nunca guardamos un token muerto.
+ */
+export async function getApifyAccount(token: string): Promise<ApifyAccount> {
+  const res = await fetch(`${APIFY_BASE}/users/me`, {
+    headers: { Authorization: `Bearer ${token.trim()}` },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      throw new ApifyError("Apify rechazó el token (401). Revisa que esté completo.", res.status);
+    }
+    throw new ApifyError(`Apify respondió ${res.status} al validar el token.`, res.status);
+  }
+
+  const json = (await res.json()) as {
+    data?: { username?: string; plan?: { id?: string } | string };
+  };
+  const plan = json.data?.plan;
+  return {
+    username: json.data?.username ?? null,
+    plan: typeof plan === "string" ? plan : (plan?.id ?? null),
+  };
+}
+
+/** Consumo del ciclo mensual actual, para mostrar cuánto crédito le queda al cliente. */
+export type ApifyUsage = {
+  usedUsd: number | null;
+  limitUsd: number | null;
+  cycleEndsAt: string | null;
+};
+
+export async function getApifyUsage(token: string): Promise<ApifyUsage> {
+  const res = await fetch(`${APIFY_BASE}/users/me/limits`, {
+    headers: { Authorization: `Bearer ${token.trim()}` },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new ApifyError(`Apify respondió ${res.status} al consultar el consumo.`, res.status);
+  }
+
+  const json = (await res.json()) as {
+    data?: {
+      current?: { monthlyUsageUsd?: number };
+      limits?: { maxMonthlyUsageUsd?: number };
+      monthlyUsageCycle?: { endAt?: string };
+    };
+  };
+
+  return {
+    usedUsd: json.data?.current?.monthlyUsageUsd ?? null,
+    limitUsd: json.data?.limits?.maxMonthlyUsageUsd ?? null,
+    cycleEndsAt: json.data?.monthlyUsageCycle?.endAt ?? null,
+  };
+}
+
 /** Item crudo del dataset del actor (campos que nos interesan). */
 type RawApifyPost = {
   type?: string; // "Image" | "Video" | "Sidecar"

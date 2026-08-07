@@ -4,6 +4,7 @@ import ClienteForm from "../ClienteForm";
 import ResearchSection from "./ResearchSection";
 import ProductsSection from "./ProductsSection";
 import InstagramSection from "./InstagramSection";
+import ApifySection from "./ApifySection";
 import DeleteClienteButton from "./DeleteClienteButton";
 
 type Props = { params: Promise<{ id: string }> };
@@ -80,6 +81,15 @@ export default async function ClienteDetailPage({ params }: Props) {
       />
       <div style={{ maxWidth: 760 }}>
         <ProductsSection clientId={id} products={products ?? []} />
+        {/* Solo el estado enmascarado: `apify_token_cipher` NUNCA cruza al cliente. */}
+        <ApifySection
+          clientId={id}
+          initial={{
+            last4: cliente.apify_token_last4 ?? null,
+            valid: cliente.apify_token_valid ?? false,
+            checkedAt: cliente.apify_token_checked_at ?? null,
+          }}
+        />
         <InstagramSection clientId={id} account={igAccount ?? null} />
         <ResearchSection clientId={id} entries={research ?? []} />
         <DeleteClienteButton clienteId={id} />

@@ -9,8 +9,12 @@
  * el scrape por id y saca el owner_id/client_id de la fila. Protegida con
  * SCRAPE_FN_SECRET para que nadie más pueda gastar créditos de Apify.
  *
+ * El token de Apify lo resuelve `runScrapeJob` por cliente (propio cifrado, o
+ * el global) — por eso aquí hace falta SECRETS_KEY para poder descifrarlo.
+ *
  * Variables de entorno requeridas en Netlify:
- *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, APIFY_API_TOKEN, SCRAPE_FN_SECRET
+ *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SCRAPE_FN_SECRET, SECRETS_KEY
+ *   APIFY_API_TOKEN (opcional: fallback para clientes sin token propio)
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -42,8 +46,7 @@ export const handler = async (event: NetlifyEvent) => {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const apifyToken = process.env.APIFY_API_TOKEN;
-  if (!supabaseUrl || !serviceKey || !apifyToken) {
+  if (!supabaseUrl || !serviceKey) {
     return { statusCode: 500, body: "Missing server configuration" };
   }
 
@@ -51,6 +54,6 @@ export const handler = async (event: NetlifyEvent) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const result = await runScrapeJob(supabase, scrapeId, apifyToken);
+  const result = await runScrapeJob(supabase, scrapeId);
   return { statusCode: result.ok ? 200 : 500, body: JSON.stringify(result) };
 };

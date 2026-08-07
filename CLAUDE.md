@@ -42,11 +42,16 @@ Vive en `guionizator.pacocuevasia.com`.
 ## Columnas tipo-enum y migraciones (⚠️ leer antes de tocar estados)
 
 Varias columnas tienen un **`CHECK constraint` en Supabase** que restringe sus valores.
-Las migraciones se aplican **a mano en el SQL Editor de Supabase** (no hay carpeta de
-migraciones versionada). **Regla dura:** agregar/renombrar un valor en el tipo de
-TypeScript **exige** el `ALTER TABLE … DROP/ADD CONSTRAINT` correspondiente **en el mismo
-cambio** — si no, el `UPDATE`/`INSERT` revienta con error de servidor en runtime.
-Cuando toques un valor de estos, dilo explícitamente y entrega el SQL a Paco.
+Las migraciones se aplican **a mano en el SQL Editor de Supabase** (no hay CLI ni
+pipeline). **Todo cambio de esquema se escribe como archivo numerado en
+`supabase/migrations/`** (`NNNN_descripcion.sql`, idempotente, con comentario de qué
+cambia y qué código depende de ella) — ver `supabase/migrations/README.md`, que además
+lleva la tabla de cuáles ya se aplicaron. El esquema anterior a `0001` se aplicó ad-hoc
+antes de que existiera la carpeta y no está reconstruido ahí.
+**Regla dura:** agregar/renombrar un valor en el tipo de TypeScript **exige** el
+`ALTER TABLE … DROP/ADD CONSTRAINT` correspondiente **en el mismo cambio** — si no, el
+`UPDATE`/`INSERT` revienta con error de servidor en runtime. Cuando toques un valor de
+estos, dilo explícitamente y entrega la migración a Paco.
 
 | Tabla / columna | Valores permitidos (deben coincidir con el `CHECK`) |
 |---|---|
@@ -121,6 +126,34 @@ porque no lanzó excepción).
   Netlify bloquea (404) cualquier invocación externa a una función con `schedule`
   configurado, así que no necesita secreto propio como `scrape-competencia-background`.
 
+## Token de Apify por cliente (secretos cifrados)
+
+Cada cliente puede tener **su propio token de Apify** para que cada marca pague su
+scraping de competencia (pensado para marcas externas; las marcas propias de Paco
+usan el global). Columnas en `clients` — sin `CHECK`, pero requieren `ALTER TABLE`
+a mano: `apify_token_cipher`, `apify_token_last4`, `apify_token_valid`,
+`apify_token_checked_at`.
+
+- **Cifrado**: `lib/crypto/secrets.ts` — AES-256-GCM con `SECRETS_KEY`
+  (32 bytes en base64, `openssl rand -base64 32`). Formato guardado:
+  `v1:<iv>:<tag>:<ciphertext>`. **El mismo valor debe existir en local y en
+  Netlify**; si cambia, los tokens guardados dejan de descifrarse y hay que
+  volver a cargarlos.
+- **Resolución**: `lib/competencia/apifyToken.ts` → `resolveApifyToken(supabase, clientId)`.
+  Cadena: token del cliente → `APIFY_API_TOKEN` global. **No** hay fallback
+  silencioso al global cuando el cliente sí tiene token: si el suyo está roto,
+  falla con mensaje claro en vez de cobrarle el scrape a la cuenta equivocada.
+  `runScrapeJob` lo resuelve solo (ya no recibe el token como parámetro) y
+  `startScrape` lo valida antes de crear la fila del scrape.
+- **Nunca al browser**: las server actions (`saveApifyToken`, `checkApifyToken`,
+  `removeApifyToken` en `clientes/actions.ts`) devuelven solo `last4`/estado.
+  `saveApifyToken` valida contra `GET /v2/users/me` de Apify **antes** de guardar,
+  así lo persistido siempre funcionó alguna vez. UI: `clientes/[id]/ApifySection.tsx`.
+- ⚠️ Hoy el dueño puede leer `apify_token_cipher` desde el browser con la anon key
+  (RLS `owner_id = auth.uid()`). Aceptable mientras el único usuario sea Paco;
+  al abrir el portal de clientes (Fase D en `pendientes.md`), mover la columna a
+  una tabla sin policy de `select`.
+
 ## Estructura de carpetas
 
 ```
@@ -150,7 +183,8 @@ knowledge/              # fuente original de la base de conocimiento
 ## Variables de entorno (`.env.local`, ver `.env.example`)
 
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`ANTHROPIC_API_KEY` (server-only), `NEXT_PUBLIC_SITE_URL`.
+`ANTHROPIC_API_KEY` (server-only), `NEXT_PUBLIC_SITE_URL`,
+`APIFY_API_TOKEN` (global/fallback), `SECRETS_KEY` (cifrado de tokens por cliente).
 
 ## Comandos
 

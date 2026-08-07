@@ -3,12 +3,14 @@
  *
  * Es agnóstica de quién la llama: recibe un cliente de Supabase ya autenticado
  * (sesión del usuario en dev, o service-role en la background function de prod)
- * y el id del scrape a procesar. Reúne las cuentas del cliente, corre Apify y
- * guarda los posts. Marca el estado del scrape en cada paso.
+ * y el id del scrape a procesar. Reúne las cuentas del cliente, resuelve qué
+ * token de Apify le toca a ese cliente, corre Apify y guarda los posts. Marca
+ * el estado del scrape en cada paso.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { scrapeCompetitorPosts } from "../apify/client";
+import { resolveApifyToken } from "./apifyToken";
 
 /** Extrae el shortcode de un permalink de Instagram (/p/, /reel/, /tv/). */
 function extractShortcode(permalink: string | null | undefined): string | null {
@@ -20,7 +22,6 @@ function extractShortcode(permalink: string | null | undefined): string | null {
 export async function runScrapeJob(
   supabase: SupabaseClient,
   scrapeId: string,
-  apifyToken: string,
 ): Promise<{ ok: true; inserted: number } | { ok: false; error: string }> {
   // 1. Cargar el scrape
   const { data: scrape, error: scrapeErr } = await supabase
@@ -64,7 +65,15 @@ export async function runScrapeJob(
     idByUsername.set((c.username as string).toLowerCase(), c.id as string);
   }
 
-  // 4. Correr Apify
+  // 4. Resolver el token de Apify de este cliente (propio o global)
+  let apifyToken: string;
+  try {
+    ({ token: apifyToken } = await resolveApifyToken(supabase, scrape.client_id as string));
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "No se pudo resolver el token de Apify.");
+  }
+
+  // 5. Correr Apify
   let posts;
   try {
     posts = await scrapeCompetitorPosts({
@@ -77,7 +86,7 @@ export async function runScrapeJob(
     return fail(e instanceof Error ? e.message : "Falló el scraping en Apify.");
   }
 
-  // 5. Guardar posts (upsert por (owner_id, client_id, shortcode)): si el post ya
+  // 6. Guardar posts (upsert por (owner_id, client_id, shortcode)): si el post ya
   //    existe se ACTUALIZAN sus métricas (likes, comentarios, vistas, followers) con
   //    los datos más recientes en vez de duplicarlo; si es nuevo se inserta.
   const now = new Date().toISOString();
@@ -106,7 +115,7 @@ export async function runScrapeJob(
     if (insErr) return fail(insErr.message);
   }
 
-  // 5b. Limpiar posts con más de 40 días de publicados (mismo umbral que la
+  // 6b. Limpiar posts con más de 40 días de publicados (mismo umbral que la
   // Netlify Scheduled Function `cleanup-competencia-scheduled`, que corre a
   // diario e independiente de si se dispara una búsqueda). Este paso aquí
   // solo cubre el caso de "purgar ya" al cliente que se acaba de scrapear.
@@ -123,7 +132,7 @@ export async function runScrapeJob(
     .not("posted_at", "is", null);
   // Error ignorado (best-effort): no fallamos el scrape por esto
 
-  // 6. Actualizar followers de cada cuenta (best-effort, último valor conocido)
+  // 7. Actualizar followers de cada cuenta (best-effort, último valor conocido)
   const followersByUser = new Map<string, number>();
   for (const p of posts) {
     if (typeof p.followers === "number") followersByUser.set(p.username, p.followers);
@@ -138,7 +147,7 @@ export async function runScrapeJob(
     }
   }
 
-  // 7. Marcar done
+  // 8. Marcar done
   await supabase
     .from("competitor_scrapes")
     .update({ status: "done", error: null, updated_at: now })

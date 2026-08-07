@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { runScrapeJob } from "@/lib/competencia/scrape";
+import { resolveApifyToken } from "@/lib/competencia/apifyToken";
 import Anthropic from "@anthropic-ai/sdk";
 import { MODEL_FAST } from "@/lib/ai/anthropic";
 import {
@@ -119,8 +120,13 @@ export async function startScrape(
 ): Promise<StartScrapeResult> {
   const { supabase, user } = await getAuthUser();
 
-  const token = process.env.APIFY_API_TOKEN;
-  if (!token) return { ok: false, error: "Falta APIFY_API_TOKEN en el servidor." };
+  // Pre-flight del token (propio del cliente o global). Se valida ANTES de crear
+  // la fila del scrape para no dejar registros que nacen muertos en "error".
+  try {
+    await resolveApifyToken(supabase, clientId);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Falta el token de Apify." };
+  }
 
   // Validar que haya cuentas cargadas
   const { count } = await supabase
@@ -174,7 +180,7 @@ export async function startScrape(
   }
 
   // Dev: correr síncrono con la sesión del usuario
-  const result = await runScrapeJob(supabase, scrapeId, token);
+  const result = await runScrapeJob(supabase, scrapeId);
   if (!result.ok) return { ok: false, error: result.error };
   return { ok: true, scrapeId, mode: "sync" };
 }
