@@ -13,7 +13,12 @@
  * SERVER-ONLY.
  */
 
-import PDFDocument from "pdfkit";
+// Se importa el build STANDALONE a propósito: el entry normal de pdfkit lee sus
+// métricas de fuente (.afm) del disco con `fs.readFileSync(__dirname + …)`, y al
+// bundlear esta ruta en la Netlify Function esa ruta ya no existe → ENOENT en
+// runtime (pasó en producción el 2026-08-07). El standalone las trae embebidas.
+// Ver types/pdfkit-standalone.d.ts.
+import PDFDocument from "pdfkit/js/pdfkit.standalone.js";
 import type { ReportRow, ReportSnapshot } from "./snapshot";
 
 // Paleta de marca en hex (tokens de app/globals.css).
