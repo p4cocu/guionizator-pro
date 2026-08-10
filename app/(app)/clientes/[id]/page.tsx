@@ -55,7 +55,9 @@ export default async function ClienteDetailPage({ params }: Props) {
       .order("created_at", { ascending: true }),
     supabase
       .from("instagram_accounts")
-      .select("id, ig_user_id, username, token_expires_at, created_at")
+      .select(
+        "id, ig_user_id, username, token_expires_at, created_at, last_refresh_attempt_at, last_refresh_error",
+      )
       .eq("client_id", id)
       .eq("owner_id", user.id)
       .maybeSingle(),

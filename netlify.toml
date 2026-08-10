@@ -21,3 +21,10 @@
 # el ingest de Recursos).
 [functions."cleanup-competencia-scheduled"]
   schedule = "@daily"
+
+# Renovación diaria de los tokens de Instagram que vencen dentro de 7 días
+# (netlify/functions/refresh-instagram-tokens-scheduled.ts). El long-lived token
+# dura ~60 días: sin esto, si nadie aprieta "Renovar token" en el perfil del
+# cliente, la cuenta deja de traer métricas. Requiere SUPABASE_SERVICE_ROLE_KEY.
+[functions."refresh-instagram-tokens-scheduled"]
+  schedule = "@daily"

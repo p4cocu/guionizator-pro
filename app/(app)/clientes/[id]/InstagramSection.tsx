@@ -16,6 +16,9 @@ type Account = {
   username: string | null;
   token_expires_at: string | null;
   created_at: string;
+  /** Los escribe el cron diario refresh-instagram-tokens-scheduled. */
+  last_refresh_attempt_at?: string | null;
+  last_refresh_error?: string | null;
 } | null;
 
 type Props = {
@@ -33,6 +36,11 @@ export default function InstagramSection({ clientId, account }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [media, setMedia] = useState<IgMedia[] | null>(null);
+  // Falla del cron diario. Se limpia en cuanto un refresh manual sale bien
+  // (el prop viene del server component y no se revalida solo).
+  const [autoError, setAutoError] = useState<string | null>(
+    account?.last_refresh_error ?? null,
+  );
   const [isPending, start] = useTransition();
 
   const expiresIn = account ? daysUntil(account.token_expires_at) : null;
@@ -69,6 +77,7 @@ export default function InstagramSection({ clientId, account }: Props) {
     start(async () => {
       try {
         await refreshInstagramToken(account.id);
+        setAutoError(null);
         setOk("Token renovado por ~60 días más.");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error al renovar token");
@@ -136,9 +145,20 @@ export default function InstagramSection({ clientId, account }: Props) {
                 }}
               >
                 Token vence en {expiresIn} día{expiresIn === 1 ? "" : "s"}
+                {" · se renueva solo"}
               </span>
             )}
           </div>
+
+          {autoError && (
+            <p
+              className={s.formError}
+              style={{ marginTop: 0, marginBottom: 12, fontSize: 12 }}
+            >
+              La renovación automática falló: {autoError} — renová el token a
+              mano o reconectá la cuenta.
+            </p>
+          )}
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button

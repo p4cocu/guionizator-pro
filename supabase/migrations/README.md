@@ -31,3 +31,4 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0002 | `0002_scripts_source_post_id.sql` | ✅ 2026-08-07 |
 | 0003 | `0003_backfill_source_post_id_cross_client.sql` | ✅ 2026-08-07 |
 | 0004 | `0004_reports.sql` | ✅ 2026-08-07 |
+| 0005 | `0005_instagram_refresh_estado.sql` | ✅ 2026-08-10 |

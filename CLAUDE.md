@@ -125,6 +125,15 @@ porque no lanzó excepción).
   recién scrapeado — el cron cubre a los que no se vuelven a buscar.
   Netlify bloquea (404) cualquier invocación externa a una función con `schedule`
   configurado, así que no necesita secreto propio como `scrape-competencia-background`.
+- **`refresh-instagram-tokens-scheduled`**
+  (`netlify/functions/refresh-instagram-tokens-scheduled.ts`, cron `@daily`) —
+  renueva los long-lived tokens de `instagram_accounts` que vencen dentro de
+  **7 días** (o que no tienen `token_expires_at`), para todos los owners. Salta
+  las cuentas renovadas hace menos de 24h (Instagram rechaza refrescar un token
+  más nuevo que eso). Usa service role. Un fallo por cuenta no frena al resto:
+  queda en `instagram_accounts.last_refresh_error` y se muestra en el perfil del
+  cliente (`InstagramSection`), junto con `last_refresh_attempt_at` — migración
+  `0005`. El botón manual "Renovar token" sigue existiendo y limpia ese error.
 
 ## Token de Apify por cliente (secretos cifrados)
 
@@ -256,17 +265,15 @@ Flujo **Instagram Login** (`graph.instagram.com`, NO Facebook Login). Tabla
 `app/(app)/instagram/` (dashboard + actions), panel de conexión en perfil de cliente.
 Etapas B (publicar) y C (programar) en **stand-by indefinido**.
 
-### ⚠️ Pendiente de infraestructura — Auto-refresh del token de Instagram
+### Auto-refresh del token de Instagram (resuelto)
 
-El long-lived token de Instagram **caduca a los ~60 días**. Hoy se renueva con un
-**botón manual** ("Renovar token" en el perfil del cliente). Esto es frágil: si Paco
-no entra a renovar, las cuentas dejan de traer métricas.
+El long-lived token **caduca a los ~60 días**. Se renueva solo con el cron diario
+`refresh-instagram-tokens-scheduled` (ver "Jobs programados" arriba); el botón
+manual "Renovar token" del perfil del cliente queda como respaldo.
 
-**RECORDATORIO PARA CLAUDE:** cuando Paco vaya a modificar la infraestructura del
-proyecto (cron jobs, Netlify Functions, scheduled functions, edge functions, o
-cualquier cambio de backend/infra), **recomendar proactivamente** automatizar el
-refresh con un cron (ej. Netlify Scheduled Function diaria) que llame a
-`refreshInstagramToken` para las cuentas cuyo `token_expires_at` esté dentro de los
-próximos ~7 días. No forzarlo fuera de ese contexto (Etapa B/C en stand-by).
-El patrón de Scheduled Function ya existe en el repo — copiar la estructura de
-`cleanup-competencia-scheduled` (ver "Jobs programados" arriba).
+Columnas de diagnóstico en `instagram_accounts` (sin `CHECK`, migración `0005`):
+`last_refresh_attempt_at` (último intento del cron, salga bien o mal) y
+`last_refresh_error` (mensaje del último fallo, `NULL` si el último salió bien).
+Si el cron empieza a fallar, el aviso aparece en el perfil del cliente — no hay
+alerta por fuera de la app, así que el único síntoma visible es ese cartel más el
+contador "Token vence en N días" en amarillo.

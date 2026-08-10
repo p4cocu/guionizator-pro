@@ -92,7 +92,9 @@ export async function getInstagramAccountForClient(clientId: string) {
   const { supabase, user } = await getAuthUser();
   const { data } = await supabase
     .from("instagram_accounts")
-    .select("id, ig_user_id, username, token_expires_at, created_at")
+    .select(
+      "id, ig_user_id, username, token_expires_at, created_at, last_refresh_attempt_at, last_refresh_error",
+    )
     .eq("owner_id", user.id)
     .eq("client_id", clientId)
     .maybeSingle();
@@ -345,6 +347,10 @@ export async function refreshInstagramToken(accountId: string) {
       token_expires_at: expiryFromNow(refreshed.expires_in / 86400),
       last_refreshed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      // Limpia el error que haya dejado el cron diario
+      // (refresh-instagram-tokens-scheduled): este refresh sí funcionó.
+      last_refresh_attempt_at: new Date().toISOString(),
+      last_refresh_error: null,
     })
     .eq("id", accountId);
   if (error) throw new Error(error.message);

@@ -93,19 +93,6 @@ policy de `select`: hoy el dueño puede leer esa columna desde el browser con la
 anon key (aceptable mientras el único usuario es Paco, no cuando entren
 terceros).
 
-## Auto-refresh del token de Instagram
-
-El long-lived token de Instagram caduca a los ~60 días. Hoy se renueva con un
-**botón manual** ("Renovar token" en el perfil del cliente) — si Paco no entra
-a renovar, las cuentas dejan de traer métricas. Ver detalle en `CLAUDE.md` →
-"Integración Instagram" → "⚠️ Pendiente de infraestructura".
-
-Propuesta: Netlify Scheduled Function diaria que llame a `refreshInstagramToken`
-para las cuentas cuyo `token_expires_at` esté dentro de los próximos ~7 días.
-El patrón ya existe en el repo — copiar la estructura de
-`netlify/functions/cleanup-competencia-scheduled.ts` (ver "Jobs programados"
-en `CLAUDE.md`).
-
 ## Reintento automático si falla el parseo del guion de producción
 
 Un día Paco apretó "Generar guión de producción" y salió el error **"Error al
@@ -126,6 +113,21 @@ chico y de bajo riesgo — vive en
 `app/api/ai/production-blocks/route.ts` (mismo patrón se repite en varios
 endpoints de `app/api/ai/`, ej. `script/route.ts`, `structures/route.ts`,
 `inline-edit/route.ts`, etc., así que si se hace, conviene aplicarlo parejo).
+
+## ✅ Resuelto — Auto-refresh del token de Instagram
+
+Implementado 2026-08-10. El token long-lived (~60 días) ya no depende de que
+Paco entre a apretar "Renovar token". Ver detalle en `CLAUDE.md` → "Jobs
+programados".
+
+- `netlify/functions/refresh-instagram-tokens-scheduled.ts` corre a diario
+  (`@daily` en `netlify.toml`): renueva las cuentas que vencen dentro de 7 días,
+  en todos los owners. Salta las renovadas hace menos de 24h (Instagram las
+  rechaza).
+- Si falla una cuenta, el resto sigue: el error queda en
+  `instagram_accounts.last_refresh_error` y se muestra en el perfil del cliente.
+  Migración `0005_instagram_refresh_estado.sql`.
+- El botón manual sigue funcionando y limpia el error registrado.
 
 ## ✅ Resuelto — Limpieza automática de posts viejos de Competencia
 
