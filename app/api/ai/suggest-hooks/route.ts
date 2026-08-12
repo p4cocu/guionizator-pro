@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { generateWithBrain, MODEL_FAST } from "@/lib/ai/anthropic";
+import { MODEL_FAST } from "@/lib/ai/anthropic";
+import { AiJsonError, generateJson } from "@/lib/ai/json";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -69,24 +70,24 @@ Responde ÚNICAMENTE con JSON válido (sin markdown). Formato exacto:
   {"hook_id": "uuid-del-baul-o-null", "hook_text": "texto adaptado del gancho para este guion", "razon": "por qué encaja aquí"}
 ]`;
 
-    const result = await generateWithBrain({
-      userMessage,
-      model: MODEL_FAST,
-      maxTokens: 1024,
-    });
-
     let suggestions: { hook_id: string | null; hook_text: string; razon: string }[];
     try {
-      const cleaned = result.text
-        .replace(/^```(?:json)?\n?/m, "")
-        .replace(/\n?```$/m, "")
-        .trim();
-      suggestions = JSON.parse(cleaned);
-    } catch {
-      return NextResponse.json(
-        { error: "Error al parsear respuesta de IA", raw: result.text },
-        { status: 500 }
-      );
+      ({ data: suggestions } = await generateJson<
+        { hook_id: string | null; hook_text: string; razon: string }[]
+      >({
+        label: "suggest-hooks",
+        userMessage,
+        model: MODEL_FAST,
+        maxTokens: 1024,
+      }));
+    } catch (e) {
+      if (e instanceof AiJsonError) {
+        return NextResponse.json(
+          { error: "Error al parsear respuesta de IA", raw: e.rawText },
+          { status: 500 }
+        );
+      }
+      throw e;
     }
 
     return NextResponse.json({ suggestions });

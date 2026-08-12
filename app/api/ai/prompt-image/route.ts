@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
 import fs from "fs";
 import path from "path";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 function readKnowledge(filePath: string): string {
   try {
@@ -105,29 +103,20 @@ export async function POST(req: NextRequest) {
       body.style_tokens,
     );
 
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
-    });
-
-    const rawText =
-      response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("") ?? "";
-
     let result: { prompt_en: string; description_es: string };
     try {
-      result = JSON.parse(rawText.trim());
-    } catch {
-      const match = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (match) {
-        result = JSON.parse(match[1].trim());
-      } else {
+      result = await generateJsonPlain<{ prompt_en: string; description_es: string }>({
+        label: "prompt-image",
+        model: "claude-sonnet-4-6",
+        maxTokens: 1024,
+        system: SYSTEM_PROMPT,
+        userMessage,
+      });
+    } catch (e) {
+      if (e instanceof AiJsonError) {
         return NextResponse.json({ error: "IA no devolvió JSON válido" }, { status: 500 });
       }
+      throw e;
     }
 
     return NextResponse.json(result);

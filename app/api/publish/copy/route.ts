@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { generateWithBrain, MODEL_DEFAULT } from "@/lib/ai/anthropic";
+import { MODEL_DEFAULT } from "@/lib/ai/anthropic";
+import { AiJsonError, generateJson } from "@/lib/ai/json";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -89,19 +90,20 @@ Devuelve EXACTAMENTE este formato JSON (sin markdown, sin explicaciones):
   "hashtags": "#hashtag1 #hashtag2 #hashtag3 ... (máximo 15 hashtags relevantes)"
 }${feedbackLine}`;
 
-  const result = await generateWithBrain({
-    userMessage,
-    clientContext,
-    model: MODEL_DEFAULT,
-    maxTokens: 1024,
-  });
-
   let parsed: { caption: string; hashtags: string };
   try {
-    const clean = result.text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    parsed = JSON.parse(clean);
-  } catch {
-    return NextResponse.json({ error: "Claude no devolvió JSON válido", raw: result.text }, { status: 500 });
+    ({ data: parsed } = await generateJson<{ caption: string; hashtags: string }>({
+      label: "publish-copy",
+      userMessage,
+      clientContext,
+      model: MODEL_DEFAULT,
+      maxTokens: 1024,
+    }));
+  } catch (e) {
+    if (e instanceof AiJsonError) {
+      return NextResponse.json({ error: "Claude no devolvió JSON válido", raw: e.rawText }, { status: 500 });
+    }
+    throw e;
   }
 
   return NextResponse.json({ caption: parsed.caption, hashtags: parsed.hashtags });

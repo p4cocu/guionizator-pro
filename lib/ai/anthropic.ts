@@ -11,6 +11,9 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+/** Cliente compartido para las llamadas que no pasan por el cerebro. */
+export const anthropic = client;
+
 function readDefaultBrain(): string {
   const brainPath = path.join(process.cwd(), "brain", "system-prompt.md");
   return fs.readFileSync(brainPath, "utf-8");
@@ -26,6 +29,8 @@ export interface GenerateOptions {
 
 export interface GenerateResult {
   text: string;
+  /** `"max_tokens"` = la respuesta se cortó (causa típica de JSON inválido). */
+  stopReason: string | null;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -80,6 +85,7 @@ export async function generateWithBrain(
 
   return {
     text,
+    stopReason: response.stop_reason ?? null,
     inputTokens: usage.input_tokens,
     outputTokens: usage.output_tokens,
     cacheReadTokens: usage.cache_read_input_tokens ?? 0,

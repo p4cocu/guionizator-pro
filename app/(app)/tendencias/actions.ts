@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
 import { MODEL_FAST } from "@/lib/ai/anthropic";
 
 export type TendenciaStatus = "pendiente" | "en_guion" | "descartada";
@@ -91,19 +91,13 @@ export type ImportResult =
 export async function importarReporte(mdText: string): Promise<ImportResult> {
   if (!mdText.trim()) return { ok: false, error: "El reporte está vacío." };
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { ok: false, error: "Falta ANTHROPIC_API_KEY." };
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return { ok: false, error: "Falta ANTHROPIC_API_KEY." };
+  }
 
   const { supabase, user } = await getAuthUser();
 
-  const ai = new Anthropic({ apiKey });
-  const response = await ai.messages.create({
-    model: MODEL_FAST,
-    max_tokens: 4096,
-    messages: [
-      {
-        role: "user",
-        content: `Extrae todas las noticias/tendencias de este reporte y devuelve ÚNICAMENTE un array JSON válido, sin explicaciones ni markdown.
+  const userMessage = `Extrae todas las noticias/tendencias de este reporte y devuelve ÚNICAMENTE un array JSON válido, sin explicaciones ni markdown.
 
 Formato de cada elemento:
 {
@@ -118,23 +112,25 @@ Formato de cada elemento:
 }
 
 REPORTE:
-${mdText}`,
-      },
-    ],
-  });
-
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
+${mdText}`;
 
   let entries: AddTendenciaInput[];
   try {
-    const match = text.match(/\[[\s\S]*\]/);
-    entries = JSON.parse(match ? match[0] : text);
-  } catch {
-    return {
-      ok: false,
-      error: "No se pudo parsear el reporte. Verifica el formato.",
-    };
+    entries = await generateJsonPlain<AddTendenciaInput[]>({
+      label: "importar-reporte",
+      model: MODEL_FAST,
+      maxTokens: 4096,
+      userMessage,
+    });
+  } catch (e) {
+    if (e instanceof AiJsonError) {
+      return {
+        ok: false,
+        error: "No se pudo parsear el reporte. Verifica el formato.",
+      };
+    }
+    console.error("[importar-reporte] Error:", e);
+    return { ok: false, error: "Error al conectar con la IA. Intenta de nuevo." };
   }
 
   if (!Array.isArray(entries) || entries.length === 0) {

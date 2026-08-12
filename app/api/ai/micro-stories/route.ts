@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { generateWithBrain, MODEL_FAST } from "@/lib/ai/anthropic";
+import { MODEL_FAST } from "@/lib/ai/anthropic";
+import { AiJsonError, generateJson } from "@/lib/ai/json";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -43,18 +44,19 @@ Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional):
   ]
 }`;
 
-    const result = await generateWithBrain({
-      userMessage,
-      model: MODEL_FAST,
-      maxTokens: 800,
-    });
-
     let parsed;
     try {
-      const cleaned = result.text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
-      parsed = JSON.parse(cleaned);
-    } catch {
-      return NextResponse.json({ error: "Error al parsear respuesta de IA", raw: result.text }, { status: 500 });
+      ({ data: parsed } = await generateJson({
+        label: "micro-stories",
+        userMessage,
+        model: MODEL_FAST,
+        maxTokens: 800,
+      }));
+    } catch (e) {
+      if (e instanceof AiJsonError) {
+        return NextResponse.json({ error: "Error al parsear respuesta de IA", raw: e.rawText }, { status: 500 });
+      }
+      throw e;
     }
 
     return NextResponse.json(parsed);

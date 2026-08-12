@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
 import fs from "fs";
 import path from "path";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 function readFile(filePath: string): string {
   try {
@@ -272,29 +270,24 @@ export async function POST(req: NextRequest) {
       body.weekly_theme ?? null,
     );
 
-    const response = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
-    });
+    type CalendarResult = {
+      weeks: { week_number: number; theme: string; entries: unknown[] }[];
+    };
 
-    const rawText =
-      response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("");
-
-    let result: { weeks: { week_number: number; theme: string; entries: unknown[] }[] };
+    let result: CalendarResult;
     try {
-      result = JSON.parse(rawText.trim());
-    } catch {
-      const match = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (match) {
-        result = JSON.parse(match[1].trim());
-      } else {
+      result = await generateJsonPlain<CalendarResult>({
+        label: "calendar",
+        model: "claude-haiku-4-5-20251001",
+        maxTokens: 4096,
+        system: systemPrompt,
+        userMessage,
+      });
+    } catch (e) {
+      if (e instanceof AiJsonError) {
         return NextResponse.json({ error: "IA no devolvió JSON válido" }, { status: 500 });
       }
+      throw e;
     }
 
     return NextResponse.json(result);

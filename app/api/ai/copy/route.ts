@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const COPY_SYSTEM = `Eres un experto en copywriting para redes sociales en español latinoamericano.
 Tu tarea es transformar guiones de video/carrusel en copies optimizados para publicaciones en redes sociales.
@@ -80,29 +78,20 @@ export async function POST(req: NextRequest) {
 
     const userPrompt = buildPrompt(platform, script_content, script_type);
 
-    const response = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 1024,
-      system: COPY_SYSTEM,
-      messages: [{ role: "user", content: userPrompt }],
-    });
-
-    const rawText =
-      response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("") ?? "";
-
     let result: { copy: string; hashtags: string };
     try {
-      result = JSON.parse(rawText.trim());
-    } catch {
-      const match = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (match) {
-        result = JSON.parse(match[1].trim());
-      } else {
+      result = await generateJsonPlain<{ copy: string; hashtags: string }>({
+        label: "copy",
+        model: "claude-haiku-4-5-20251001",
+        maxTokens: 1024,
+        system: COPY_SYSTEM,
+        userMessage: userPrompt,
+      });
+    } catch (e) {
+      if (e instanceof AiJsonError) {
         return NextResponse.json({ error: "IA no devolvió JSON válido" }, { status: 500 });
       }
+      throw e;
     }
 
     return NextResponse.json(result);

@@ -1,4 +1,5 @@
-import { generateWithBrain, MODEL_DEFAULT } from "@/lib/ai/anthropic";
+import { MODEL_DEFAULT } from "@/lib/ai/anthropic";
+import { AiJsonError, generateJson } from "@/lib/ai/json";
 
 export const RESOURCE_CATEGORIES = [
   "Prompt Claude",
@@ -157,22 +158,18 @@ ${clientsBlock}
 
 Responde SOLO con el JSON.`;
 
-  const result = await generateWithBrain({
-    userMessage,
-    brainContent: CLASSIFIER_SYSTEM,
-    model: MODEL_DEFAULT,
-    maxTokens: 1024,
-  });
-
   let parsed: Record<string, unknown> = {};
   try {
-    const cleaned = result.text
-      .replace(/^```(?:json)?\n?/m, "")
-      .replace(/\n?```$/m, "")
-      .trim();
-    parsed = JSON.parse(cleaned);
-  } catch {
-    // Fallback mínimo si la IA no devolvió JSON válido
+    ({ data: parsed } = await generateJson({
+      label: "classify-resource",
+      userMessage,
+      brainContent: CLASSIFIER_SYSTEM,
+      model: MODEL_DEFAULT,
+      maxTokens: 1024,
+    }));
+  } catch (e) {
+    // Fallback mínimo si la IA no devolvió JSON válido ni en el reintento
+    if (!(e instanceof AiJsonError)) throw e;
     parsed = {};
   }
 

@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { MODEL_FAST } from "@/lib/ai/anthropic";
+import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
 
 export type HookCategory =
   | "pregunta_impactante"
@@ -45,18 +45,11 @@ export async function extractHook(transcription: string): Promise<ExtractResult>
     return { ok: false, error: "La transcripción está vacía." };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { ok: false, error: "Falta ANTHROPIC_API_KEY." };
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return { ok: false, error: "Falta ANTHROPIC_API_KEY." };
+  }
 
-  const ai = new Anthropic({ apiKey });
-
-  const response = await ai.messages.create({
-    model: MODEL_FAST,
-    max_tokens: 1024,
-    messages: [
-      {
-        role: "user",
-        content: `Eres experto en hooks de video para Instagram Reels en español latinoamericano.
+  const userMessage = `Eres experto en hooks de video para Instagram Reels en español latinoamericano.
 
 Analiza esta transcripción y extrae el gancho de apertura (primeras 1-3 oraciones, máx 5 segundos).
 
@@ -72,28 +65,31 @@ Devuelve ÚNICAMENTE este JSON (sin markdown, sin explicaciones):
 Ejemplo de plantilla: "¿Sabías que [PORCENTAJE]% de [AUDIENCIA] nunca [ACCIÓN]? Esto cambia todo."
 
 TRANSCRIPCIÓN:
-${transcription.slice(0, 3000)}`,
-      },
-    ],
-  });
-
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+${transcription.slice(0, 3000)}`;
 
   try {
-    const match = text.match(/\{[\s\S]*\}/);
-    const parsed = JSON.parse(match ? match[0] : text) as {
+    const parsed = await generateJsonPlain<{
       hook_original: string;
       category: string;
       hook_template: string;
-    };
+    }>({
+      label: "extract-hook",
+      model: MODEL_FAST,
+      maxTokens: 1024,
+      userMessage,
+    });
     return {
       ok: true,
       hook_original: parsed.hook_original?.trim() ?? "",
       category: parsed.category?.trim() ?? "curiosidad",
       hook_template: parsed.hook_template?.trim() ?? "",
     };
-  } catch {
-    return { ok: false, error: "Claude no devolvió un formato válido. Intenta de nuevo." };
+  } catch (e) {
+    if (e instanceof AiJsonError) {
+      return { ok: false, error: "Claude no devolvió un formato válido. Intenta de nuevo." };
+    }
+    console.error("[extract-hook] Error:", e);
+    return { ok: false, error: "Error al conectar con la IA. Intenta de nuevo." };
   }
 }
 

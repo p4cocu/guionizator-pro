@@ -93,26 +93,26 @@ policy de `select`: hoy el dueño puede leer esa columna desde el browser con la
 anon key (aceptable mientras el único usuario es Paco, no cuando entren
 terceros).
 
-## Reintento automático si falla el parseo del guion de producción
+## ✅ Resuelto — Reintento automático si falla el parseo de la IA
 
-Un día Paco apretó "Generar guión de producción" y salió el error **"Error al
-parsear respuesta de IA"**. Volvió a apretar el mismo botón en el mismo guion
-y esa vez sí funcionó.
+Implementado 2026-08-12. Ver detalle en `CLAUDE.md` → "Respuestas JSON de la IA".
 
-**Qué pasa en criollo:** cuando la IA arma el guion de producción, le pedimos
-que responda en un formato de datos muy estricto (JSON) para poder mostrarlo
-en pantalla. Casi siempre lo hace bien, pero de vez en cuando "ensucia" un
-poco la respuesta (agrega alguna palabra de más, corta el texto antes de
-terminar, etc.) y ahí la app no logra leerlo — no es que se haya roto nada,
-es más como un tropezón puntual de la IA. Por eso reintentar manualmente
-resuelve el 99% de los casos.
+El síntoma era: Paco apretaba "Generar guión de producción", salía **"Error al
+parsear respuesta de IA"**, volvía a apretar el mismo botón y funcionaba. La IA
+"ensuciaba" la respuesta (una palabra de más, un fence raro, el texto cortado) y
+la app no la sabía leer — un tropezón puntual, no un bug.
 
-**Propuesta:** que la app reintente sola una vez (sin que Paco tenga que
-volver a apretar el botón) si la primera respuesta no se puede leer. Cambio
-chico y de bajo riesgo — vive en
-`app/api/ai/production-blocks/route.ts` (mismo patrón se repite en varios
-endpoints de `app/api/ai/`, ej. `script/route.ts`, `structures/route.ts`,
-`inline-edit/route.ts`, etc., así que si se hace, conviene aplicarlo parejo).
+Ahora la app hace sola lo que Paco hacía a mano:
+
+- `lib/ai/json.ts` — parseo tolerante (`extractJson`) + **un reintento
+  automático** avisándole a la IA qué falló. Si la respuesta se cortó por
+  longitud, el reintento sube `max_tokens`.
+- Aplicado parejo a los **16 endpoints de `app/api/ai/`**, más
+  `app/api/publish/copy`, `lib/resources/classify.ts` y las server actions de
+  Ganchos, Tendencias y Competencia (esta última tenía su propio reintento a
+  ciegas; ahora usa el compartido, que además le dice al modelo qué corregir).
+- Los mensajes de error que ve el usuario no cambiaron: solo aparecen si los
+  **dos** intentos fallan.
 
 ## ✅ Resuelto — Auto-refresh del token de Instagram
 

@@ -202,6 +202,35 @@ tarjeta + barra flotante) y se genera un reporte descargable en **.xlsx y .pdf**
 - Rutas `POST /api/reports`, `GET /api/reports/[id]/{xlsx,pdf}` — autenticadas por
   sesión, **no** van en `PUBLIC_PATHS`.
 
+## Respuestas JSON de la IA (`lib/ai/json.ts`)
+
+Todo endpoint que le pide JSON a Claude pasa por `lib/ai/json.ts` — **nunca
+`JSON.parse()` pelado sobre `result.text`**. El helper hace dos cosas:
+
+1. **Parseo tolerante** (`extractJson`): aguanta fences de markdown, una frase
+   antes o después del JSON y comas colgantes.
+2. **Un reintento automático** si aun así no parsea, reenviando el mismo prompt
+   con un bloque de corrección que dice qué falló. Si el primer intento se cortó
+   por `max_tokens` (`stopReason`), el reintento duplica el presupuesto (techo
+   8192) y pide brevedad. Tras 2 intentos tira `AiJsonError` con el texto crudo.
+
+Dos entradas según cómo se llame al modelo:
+`generateJson()` (envuelve `generateWithBrain`, devuelve `{ data, result }` — el
+`result` trae el uso de tokens) y `generateJsonPlain()` (system prompt propio,
+sin cerebro; `system` es opcional). En el handler:
+
+```ts
+} catch (e) {
+  if (e instanceof AiJsonError) return NextResponse.json({ error: "...", raw: e.rawText }, { status: 500 });
+  throw e;
+}
+```
+
+⚠️ El reintento **duplica la latencia** del peor caso. En rutas síncronas
+pegadas al límite de Netlify (~26-30s) —`cover`, `calendar`— un segundo intento
+puede terminar en 504 en vez de en mensaje de error. Si eso aparece, la salida
+es mover esa ruta a background function, no sacar el reintento.
+
 ## Estructura de carpetas
 
 ```

@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const SYSTEM_PROMPT = `Eres un director creativo especialista en producción de videos cortos (Reels de Instagram).
 Tu tarea es analizar la voz en off de un guion y proponer ideas visuales específicas para cada escena.
@@ -72,29 +70,20 @@ Devuelve ÚNICAMENTE este JSON:
 }`;
     }
 
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2048,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
-    });
-
-    const rawText =
-      response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("");
-
     let result: unknown;
     try {
-      result = JSON.parse(rawText.trim());
-    } catch {
-      const match = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (match) {
-        result = JSON.parse(match[1].trim());
-      } else {
+      result = await generateJsonPlain({
+        label: "scene-ideas",
+        model: "claude-sonnet-4-6",
+        maxTokens: 2048,
+        system: SYSTEM_PROMPT,
+        userMessage,
+      });
+    } catch (e) {
+      if (e instanceof AiJsonError) {
         return NextResponse.json({ error: "IA no devolvió JSON válido" }, { status: 500 });
       }
+      throw e;
     }
 
     return NextResponse.json(result);

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { generateWithBrain, MODEL_DEFAULT } from "@/lib/ai/anthropic";
+import {
+  generateWithBrain,
+  MODEL_DEFAULT,
+  type GenerateResult,
+} from "@/lib/ai/anthropic";
+import { AiJsonError, generateJson } from "@/lib/ai/json";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -58,27 +63,24 @@ ${JSON.stringify(content, null, 2)}
 
 Aplica el cambio indicado y devuelve ÚNICAMENTE el JSON actualizado del guion. Sin explicaciones, sin markdown, solo el JSON puro con exactamente la misma estructura.`;
 
-    const result = await generateWithBrain({
-      userMessage,
-      brainContent: activeBrain?.content ?? undefined,
-      model: model ?? MODEL_DEFAULT,
-      maxTokens: 4096,
-    });
-
-    // Extraer JSON de la respuesta (puede venir con o sin bloques ```json```)
     let parsed: Record<string, unknown>;
+    let result: GenerateResult;
     try {
-      parsed = JSON.parse(result.text.trim());
-    } catch {
-      const match = result.text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (match) {
-        parsed = JSON.parse(match[1].trim());
-      } else {
+      ({ data: parsed, result } = await generateJson({
+        label: "edit_script",
+        userMessage,
+        brainContent: activeBrain?.content ?? undefined,
+        model: model ?? MODEL_DEFAULT,
+        maxTokens: 4096,
+      }));
+    } catch (e) {
+      if (e instanceof AiJsonError) {
         return NextResponse.json(
-          { error: "La IA no devolvió un JSON válido" },
+          { error: "La IA no devolvió un JSON válido", raw: e.rawText },
           { status: 500 }
         );
       }
+      throw e;
     }
 
     return NextResponse.json({

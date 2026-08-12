@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { generateWithBrain, MODEL_DEFAULT, MODEL_FAST } from "@/lib/ai/anthropic";
+import { MODEL_DEFAULT, MODEL_FAST } from "@/lib/ai/anthropic";
+import { AiJsonError, generateJson } from "@/lib/ai/json";
 import { loadClientKnowledge } from "@/lib/ai/clientKnowledge";
 
 export const runtime = "nodejs";
@@ -190,20 +191,21 @@ export async function POST(req: NextRequest) {
     const model = type === "carousel" ? MODEL_FAST : MODEL_DEFAULT;
     const maxTokens = type === "carousel" ? 3000 : 4096;
 
-    const result = await generateWithBrain({
-      userMessage,
-      brainContent: activeBrain?.content ?? undefined,
-      clientContext,
-      model,
-      maxTokens,
-    });
-
     let parsed;
     try {
-      const cleaned = result.text.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
-      parsed = JSON.parse(cleaned);
-    } catch {
-      return NextResponse.json({ error: "Error al parsear respuesta de IA", raw: result.text }, { status: 500 });
+      ({ data: parsed } = await generateJson({
+        label: "adapt-competitor",
+        userMessage,
+        brainContent: activeBrain?.content ?? undefined,
+        clientContext,
+        model,
+        maxTokens,
+      }));
+    } catch (e) {
+      if (e instanceof AiJsonError) {
+        return NextResponse.json({ error: "Error al parsear respuesta de IA", raw: e.rawText }, { status: 500 });
+      }
+      throw e;
     }
 
     const structure_name =

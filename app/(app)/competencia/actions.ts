@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { runScrapeJob } from "@/lib/competencia/scrape";
 import { resolveApifyToken } from "@/lib/competencia/apifyToken";
-import Anthropic from "@anthropic-ai/sdk";
 import { MODEL_FAST } from "@/lib/ai/anthropic";
+import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
 import {
   buildTaxonomyPrompt,
   HOOK_TYPE_SLUGS,
@@ -453,9 +453,9 @@ export async function classifyPost(postId: string): Promise<ClassifyResult> {
     return { ok: false, error: "El post no tiene transcripción ni descripción para analizar." };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { ok: false, error: "Falta ANTHROPIC_API_KEY." };
-  const ai = new Anthropic({ apiKey });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return { ok: false, error: "Falta ANTHROPIC_API_KEY." };
+  }
 
   const prompt = `Eres analista experto en contenido de Instagram (Reels y carruseles) en español latinoamericano, formado en la metodología de Andrea Estratega (Fórmula 100K).
 
@@ -474,26 +474,20 @@ Devuelve ÚNICAMENTE este JSON (sin markdown, sin explicaciones fuera del JSON):
 ${caption ? `DESCRIPCIÓN / CAPTION:\n${caption.slice(0, 800)}\n\n` : ""}TRANSCRIPCIÓN:
 ${transcription.slice(0, 4000) || "(sin transcripción; clasifica con base en la descripción)"}`;
 
-  async function askOnce(): Promise<Record<string, unknown> | null> {
-    const response = await ai.messages.create({
+  // El reintento ante JSON inválido lo maneja `generateJsonPlain`.
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = await generateJsonPlain({
+      label: "classify-post",
       model: MODEL_FAST,
-      max_tokens: 512,
-      messages: [{ role: "user", content: prompt }],
+      maxTokens: 512,
+      userMessage: prompt,
     });
-    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
-    try {
-      const match = text.match(/\{[\s\S]*\}/);
-      return JSON.parse(match ? match[0] : text) as Record<string, unknown>;
-    } catch {
-      return null;
+  } catch (e) {
+    if (e instanceof AiJsonError) {
+      return { ok: false, error: "La IA no devolvió un formato válido. Intenta de nuevo." };
     }
-  }
-
-  // Reintento: hasta 2 intentos si el parseo falla (atiende el pendiente de retry de IA).
-  let parsed = await askOnce();
-  if (!parsed) parsed = await askOnce();
-  if (!parsed) {
-    return { ok: false, error: "La IA no devolvió un formato válido. Intenta de nuevo." };
+    throw e;
   }
 
   const classification: Classification = {
