@@ -82,6 +82,11 @@ el snapshot, una pieza menos de infraestructura.
 
 ### Fase D — Portal de cliente (login propio)
 
+📄 **Plan detallado y aprobado (2026-08-12): [`docs/fase-d-portal-cliente.md`](docs/fase-d-portal-cliente.md)**
+— modelo de datos, RLS por membresía, secciones configurables por cliente
+(`enabled_features`), generación con IA como add-on de pago, invitaciones por
+email y orden de implementación en 6 etapas. Lo de abajo es el esbozo original.
+
 Lo que hoy no existe: la app es de un solo usuario, todas las RLS son
 `owner_id = auth.uid()`. Darle login a un externo hoy le mostraría todo (las
 marcas de Paco, el cerebro, los guiones). Requiere `client_members`
