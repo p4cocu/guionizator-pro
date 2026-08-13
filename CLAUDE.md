@@ -320,6 +320,23 @@ leer `client_secrets`).
 - `npm run dev` — desarrollo local (http://localhost:3000)
 - `npm run build` — build de producción
 - `npm run lint` — linter
+- `netlify build && netlify deploy --prod` — deploy manual (el único que hay)
+
+### ⚠️ Deploy: dos formas de romper producción sin tocar una línea de código
+
+Pasó el 2026-08-13, con el deploy de la etapa 1 de Fase D:
+
+1. **Nunca `netlify deploy --prod --no-build`.** Con ese flag el CLI publica el
+   `publish` de `netlify.toml` (`.next`) tal cual, sin las mutaciones del
+   `@netlify/plugin-nextjs` que colocan los estáticos en `/_next/static/*`. El
+   SSR sigue respondiendo (la página "carga"), pero **todo el CSS y el JS dan
+   404**: el sitio se ve como texto plano y nada interactivo funciona. Se
+   diagnostica en 10 segundos: `curl -s <url>/login | grep -o '/_next/static/[^"]*\.css'`
+   y pedir ese archivo — si da 404, es esto.
+2. **Nunca `rm -rf .netlify`.** Ahí vive `state.json` con el vínculo al sitio.
+   Sin él, `netlify deploy --prod` **crea un sitio nuevo** y publica ahí (con un
+   nombre autogenerado), dejando producción intacta pero al operador convencido
+   de que deployó. Si pasa: `netlify unlink && netlify link --name guionizator-pro`.
 
 ## Estado por fases
 
