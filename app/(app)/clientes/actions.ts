@@ -288,7 +288,12 @@ export async function checkApifyToken(clientId: string): Promise<CheckApifyToken
   try {
     account = await getApifyAccount(stored.token);
   } catch (e) {
-    await markApifyTokenChecked(clientId, user.id, false);
+    // Idem: el mensaje que importa es el de Apify, no el de esta escritura.
+    try {
+      await markApifyTokenChecked(clientId, user.id, false);
+    } catch {
+      /* se reporta el error de Apify de todas formas */
+    }
     revalidatePath(`/clientes/${clientId}`);
     return {
       ok: false,
@@ -304,7 +309,20 @@ export async function checkApifyToken(clientId: string): Promise<CheckApifyToken
     usage = null;
   }
 
-  const checkedAt = await markApifyTokenChecked(clientId, user.id, true);
+  // Marcar el resultado no puede tumbar la pantalla: si esta escritura falla
+  // (p. ej. falta SUPABASE_SERVICE_ROLE_KEY en el entorno), el token igual es
+  // válido y el usuario tiene que ver el motivo, no "This page couldn't load".
+  let checkedAt: string;
+  try {
+    checkedAt = await markApifyTokenChecked(clientId, user.id, true);
+  } catch (e) {
+    return {
+      ok: false,
+      error: `El token es válido, pero no se pudo guardar la verificación: ${
+        e instanceof Error ? e.message : "error desconocido"
+      }`,
+    };
+  }
 
   revalidatePath(`/clientes/${clientId}`);
   return {
