@@ -32,8 +32,8 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0003 | `0003_backfill_source_post_id_cross_client.sql` | ✅ 2026-08-07 |
 | 0004 | `0004_reports.sql` | ✅ 2026-08-07 |
 | 0005 | `0005_instagram_refresh_estado.sql` | ✅ 2026-08-10 |
-| 0006 | `0006_portal_cliente.sql` | ⏳ pendiente |
-| 0007 | `0007_drop_apify_cols_de_clients.sql` | ⏳ pendiente — **después** del deploy (ver abajo) |
+| 0006 | `0006_portal_cliente.sql` | ✅ 2026-08-13 |
+| 0007 | `0007_drop_apify_cols_de_clients.sql` | ✅ 2026-08-13 (después del deploy) |
 
 ### 0006 + 0007 van separadas a propósito
 
