@@ -11,8 +11,8 @@ import {
   readApifyToken,
   removeApifyTokenSecret,
   saveApifyTokenSecret,
-  type ApifyTokenState,
 } from "@/lib/competencia/apifyToken";
+import type { ApifyTokenState } from "@/lib/competencia/apifyToken";
 
 export type ClienteFormData = {
   nombre: string;
@@ -195,7 +195,11 @@ export async function deleteProduct(productId: string, clientId: string) {
 // (lib/competencia/apifyToken.ts), chequeando el `owner_id` a mano porque ese
 // cliente saltea la RLS.
 
-export type { ApifyTokenState };
+// ⚠️ NO reexportar `ApifyTokenState` desde acá. Un `export type { … }` en un
+// archivo "use server" sobrevive al bundle como referencia a un binding que en
+// runtime no existe, y la página revienta al cargar con
+// `ReferenceError: ApifyTokenState is not defined`. Quien lo necesite, que lo
+// importe de `@/lib/competencia/apifyToken`.
 
 export type ApifyUsageInfo = {
   usedUsd: number | null;

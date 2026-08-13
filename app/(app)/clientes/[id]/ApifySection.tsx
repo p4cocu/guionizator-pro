@@ -5,9 +5,9 @@ import {
   checkApifyToken,
   removeApifyToken,
   saveApifyToken,
-  type ApifyTokenState,
   type ApifyUsageInfo,
 } from "../actions";
+import type { ApifyTokenState } from "@/lib/competencia/apifyToken";
 import s from "../clientes.module.css";
 
 type Props = {
