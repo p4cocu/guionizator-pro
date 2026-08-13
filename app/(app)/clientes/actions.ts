@@ -4,12 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ApifyError, getApifyAccount, getApifyUsage } from "@/lib/apify/client";
+import { isSecretsKeyConfigured } from "@/lib/crypto/secrets";
 import {
-  decryptSecret,
-  encryptSecret,
-  isSecretsKeyConfigured,
-  lastFour,
-} from "@/lib/crypto/secrets";
+  ApifyTokenError,
+  markApifyTokenChecked,
+  readApifyToken,
+  removeApifyTokenSecret,
+  saveApifyTokenSecret,
+  type ApifyTokenState,
+} from "@/lib/competencia/apifyToken";
 
 export type ClienteFormData = {
   nombre: string;
@@ -186,12 +189,13 @@ export async function deleteProduct(productId: string, clientId: string) {
 // browser: la UI solo ve los últimos 4 caracteres. Sirve para que cada marca
 // pague su propio scraping de competencia. Sin token propio, el cliente usa el
 // global `APIFY_API_TOKEN` (el caso de las marcas de Paco).
+//
+// Desde la migración `0006` el secreto vive en `client_secrets`, tabla sin
+// grants para el browser: se lee y escribe con service role
+// (lib/competencia/apifyToken.ts), chequeando el `owner_id` a mano porque ese
+// cliente saltea la RLS.
 
-export type ApifyTokenState = {
-  last4: string | null;
-  valid: boolean;
-  checkedAt: string | null;
-};
+export type { ApifyTokenState };
 
 export type ApifyUsageInfo = {
   usedUsd: number | null;
@@ -220,7 +224,7 @@ export async function saveApifyToken(
     };
   }
 
-  const { supabase, user } = await getAuthUser();
+  const { user } = await getAuthUser();
 
   let account;
   try {
@@ -232,45 +236,24 @@ export async function saveApifyToken(
     };
   }
 
-  const checkedAt = new Date().toISOString();
-  const last4 = lastFour(token);
-
-  const { error } = await supabase
-    .from("clients")
-    .update({
-      apify_token_cipher: encryptSecret(token),
-      apify_token_last4: last4,
-      apify_token_valid: true,
-      apify_token_checked_at: checkedAt,
-    })
-    .eq("id", clientId)
-    .eq("owner_id", user.id);
-
-  if (error) return { ok: false, error: error.message };
+  let state: ApifyTokenState;
+  try {
+    state = await saveApifyTokenSecret(clientId, user.id, token);
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo guardar el token.",
+    };
+  }
 
   revalidatePath(`/clientes/${clientId}`);
-  return {
-    ok: true,
-    username: account.username,
-    state: { last4, valid: true, checkedAt },
-  };
+  return { ok: true, username: account.username, state };
 }
 
 export async function removeApifyToken(clientId: string): Promise<void> {
-  const { supabase, user } = await getAuthUser();
+  const { user } = await getAuthUser();
 
-  const { error } = await supabase
-    .from("clients")
-    .update({
-      apify_token_cipher: null,
-      apify_token_last4: null,
-      apify_token_valid: false,
-      apify_token_checked_at: null,
-    })
-    .eq("id", clientId)
-    .eq("owner_id", user.id);
-
-  if (error) throw new Error(error.message);
+  await removeApifyTokenSecret(clientId, user.id);
 
   revalidatePath(`/clientes/${clientId}`);
 }
@@ -285,40 +268,27 @@ export type CheckApifyTokenResult =
  * con un mensaje claro en vez de a mitad del run.
  */
 export async function checkApifyToken(clientId: string): Promise<CheckApifyTokenResult> {
-  const { supabase, user } = await getAuthUser();
+  const { user } = await getAuthUser();
 
-  const { data } = await supabase
-    .from("clients")
-    .select("apify_token_cipher, apify_token_last4")
-    .eq("id", clientId)
-    .eq("owner_id", user.id)
-    .maybeSingle();
-
-  const cipher = (data?.apify_token_cipher as string | null) ?? null;
-  if (!cipher) return { ok: false, error: "Este cliente no tiene token de Apify guardado." };
-
-  let token: string;
+  let stored: Awaited<ReturnType<typeof readApifyToken>>;
   try {
-    token = decryptSecret(cipher);
+    stored = await readApifyToken(clientId, user.id);
   } catch (e) {
     return {
       ok: false,
-      error: e instanceof Error ? e.message : "No se pudo leer el token guardado.",
+      error:
+        e instanceof ApifyTokenError || e instanceof Error
+          ? e.message
+          : "No se pudo leer el token guardado.",
     };
   }
-
-  const checkedAt = new Date().toISOString();
-  const last4 = (data?.apify_token_last4 as string | null) ?? null;
+  if (!stored) return { ok: false, error: "Este cliente no tiene token de Apify guardado." };
 
   let account;
   try {
-    account = await getApifyAccount(token);
+    account = await getApifyAccount(stored.token);
   } catch (e) {
-    await supabase
-      .from("clients")
-      .update({ apify_token_valid: false, apify_token_checked_at: checkedAt })
-      .eq("id", clientId)
-      .eq("owner_id", user.id);
+    await markApifyTokenChecked(clientId, user.id, false);
     revalidatePath(`/clientes/${clientId}`);
     return {
       ok: false,
@@ -329,22 +299,18 @@ export async function checkApifyToken(clientId: string): Promise<CheckApifyToken
   // El consumo es informativo: si falla, no invalidamos nada.
   let usage: ApifyUsageInfo | null = null;
   try {
-    usage = await getApifyUsage(token);
+    usage = await getApifyUsage(stored.token);
   } catch {
     usage = null;
   }
 
-  await supabase
-    .from("clients")
-    .update({ apify_token_valid: true, apify_token_checked_at: checkedAt })
-    .eq("id", clientId)
-    .eq("owner_id", user.id);
+  const checkedAt = await markApifyTokenChecked(clientId, user.id, true);
 
   revalidatePath(`/clientes/${clientId}`);
   return {
     ok: true,
     username: account.username,
     usage,
-    state: { last4, valid: true, checkedAt },
+    state: { last4: stored.last4, valid: true, checkedAt },
   };
 }

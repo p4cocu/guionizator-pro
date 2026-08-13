@@ -123,7 +123,7 @@ export async function startScrape(
   // Pre-flight del token (propio del cliente o global). Se valida ANTES de crear
   // la fila del scrape para no dejar registros que nacen muertos en "error".
   try {
-    await resolveApifyToken(supabase, clientId);
+    await resolveApifyToken(clientId, { expectedOwnerId: user.id });
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Falta el token de Apify." };
   }

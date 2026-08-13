@@ -68,7 +68,7 @@ export async function runScrapeJob(
   // 4. Resolver el token de Apify de este cliente (propio o global)
   let apifyToken: string;
   try {
-    ({ token: apifyToken } = await resolveApifyToken(supabase, scrape.client_id as string));
+    ({ token: apifyToken } = await resolveApifyToken(scrape.client_id as string));
   } catch (e) {
     return fail(e instanceof Error ? e.message : "No se pudo resolver el token de Apify.");
   }

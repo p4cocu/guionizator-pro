@@ -1,5 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import {
+  EMPTY_APIFY_TOKEN_STATE,
+  getApifyTokenState,
+  type ApifyTokenState,
+} from "@/lib/competencia/apifyToken";
 import ClienteForm from "../ClienteForm";
 import ResearchSection from "./ResearchSection";
 import ProductsSection from "./ProductsSection";
@@ -29,11 +34,21 @@ export default async function ClienteDetailPage({ params }: Props) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // El estado del token de Apify ya no sale de `clients`: vive en
+  // `client_secrets`, que solo se lee con service role (migración 0006). Si la
+  // key no está configurada, mostramos la sección vacía en vez de tumbar todo
+  // el perfil del cliente.
+  const apifyState: Promise<ApifyTokenState> = getApifyTokenState(id, user.id).catch((e) => {
+    console.error("[clientes/[id]] no se pudo leer el estado del token de Apify:", e);
+    return EMPTY_APIFY_TOKEN_STATE;
+  });
+
   const [
     { data: cliente },
     { data: research },
     { data: products },
     { data: igAccount },
+    apify,
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -61,6 +76,7 @@ export default async function ClienteDetailPage({ params }: Props) {
       .eq("client_id", id)
       .eq("owner_id", user.id)
       .maybeSingle(),
+    apifyState,
   ]);
 
   if (!cliente) notFound();
@@ -84,14 +100,7 @@ export default async function ClienteDetailPage({ params }: Props) {
       <div style={{ maxWidth: 760 }}>
         <ProductsSection clientId={id} products={products ?? []} />
         {/* Solo el estado enmascarado: `apify_token_cipher` NUNCA cruza al cliente. */}
-        <ApifySection
-          clientId={id}
-          initial={{
-            last4: cliente.apify_token_last4 ?? null,
-            valid: cliente.apify_token_valid ?? false,
-            checkedAt: cliente.apify_token_checked_at ?? null,
-          }}
-        />
+        <ApifySection clientId={id} initial={apify} />
         <InstagramSection clientId={id} account={igAccount ?? null} />
         <ResearchSection clientId={id} entries={research ?? []} />
         <DeleteClienteButton clienteId={id} />

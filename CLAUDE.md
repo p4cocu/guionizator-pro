@@ -139,9 +139,19 @@ porque no lanzó excepción).
 
 Cada cliente puede tener **su propio token de Apify** para que cada marca pague su
 scraping de competencia (pensado para marcas externas; las marcas propias de Paco
-usan el global). Columnas en `clients` — sin `CHECK`, pero requieren `ALTER TABLE`
-a mano: `apify_token_cipher`, `apify_token_last4`, `apify_token_valid`,
-`apify_token_checked_at`.
+usan el global). Desde la migración `0006` viven en la tabla **`client_secrets`**
+(`client_id` PK, `owner_id`, `apify_token_cipher`, `apify_token_last4`,
+`apify_token_valid`, `apify_token_checked_at`, `updated_at`), **no** en `clients`.
+
+⚠️ `client_secrets` tiene RLS activa **sin ninguna policy** y `revoke all … from
+anon, authenticated`: solo se lee y escribe con **service role** desde el
+servidor (`lib/supabase/service.ts` → `createServiceClient()`). Como ese cliente
+saltea la RLS, **toda** consulta filtra `owner_id` a mano. Los helpers están en
+`lib/competencia/apifyToken.ts` (`getApifyTokenState`, `saveApifyTokenSecret`,
+`removeApifyTokenSecret`, `markApifyTokenChecked`, `readApifyToken`,
+`resolveApifyToken`) — las server actions de `clientes/actions.ts` no tocan la
+tabla directo. Esto obliga a tener `SUPABASE_SERVICE_ROLE_KEY` **también en
+local**, no solo en Netlify.
 
 - **Cifrado**: `lib/crypto/secrets.ts` — AES-256-GCM con `SECRETS_KEY`
   (32 bytes en base64, `openssl rand -base64 32`). Formato guardado:
@@ -163,10 +173,10 @@ a mano: `apify_token_cipher`, `apify_token_last4`, `apify_token_valid`,
   `removeApifyToken` en `clientes/actions.ts`) devuelven solo `last4`/estado.
   `saveApifyToken` valida contra `GET /v2/users/me` de Apify **antes** de guardar,
   así lo persistido siempre funcionó alguna vez. UI: `clientes/[id]/ApifySection.tsx`.
-- ⚠️ Hoy el dueño puede leer `apify_token_cipher` desde el browser con la anon key
-  (RLS `owner_id = auth.uid()`). Aceptable mientras el único usuario sea Paco;
-  al abrir el portal de clientes (Fase D en `pendientes.md`), mover la columna a
-  una tabla sin policy de `select`.
+- `resolveApifyToken(clientId, { expectedOwnerId })` — el segundo parámetro lo
+  pasan los llamadores con sesión (server actions); la background function no,
+  porque ya arranca desde la fila del scrape. Sin él no hay chequeo de
+  pertenencia: el service role no tiene RLS que lo cubra.
 
 ## Reportes de competencia (`/reportes`)
 
@@ -201,6 +211,45 @@ tarjeta + barra flotante) y se genera un reporte descargable en **.xlsx y .pdf**
   `doc.page.margins.bottom = 0` mientras se escribe (ya está hecho).
 - Rutas `POST /api/reports`, `GET /api/reports/[id]/{xlsx,pdf}` — autenticadas por
   sesión, **no** van en `PUBLIC_PATHS`.
+
+## Portal de cliente (Fase D) — RLS con miembros
+
+Plan completo: `docs/fase-d-portal-cliente.md`. Migración `0006_portal_cliente.sql`.
+Hasta acá **toda** la RLS era `owner_id = auth.uid()`; ahora hay usuarios externos.
+
+**Propiedad que hay que sostener:** un miembro solo lee filas cuyo `client_id`
+esté en *sus* membresías, y solo de las 8 tablas del portal. Todo lo demás sigue
+owner-only y es invisible aunque la UI falle.
+
+- `client_members` (N:N, roles `viewer` / `collaborator`), `client_invites`
+  (guarda `sha256` del token, nunca el token), `script_comments`, `ai_usage_log`.
+- `clients.enabled_features text[]` — qué secciones ve esa marca. **Tiene `CHECK`
+  de contención**: `reportes`, `guiones`, `calendario`, `competencia`,
+  `instagram`, `investigacion`, `generar_ia`. La fuente de verdad en el código es
+  `lib/portal/features.ts`; tocar un slug obliga a tocar el `CHECK` en la misma
+  entrega (misma regla dura que `taxonomy.ts`).
+- `clients.ai_generation_limit` — tope mensual del add-on de IA (`null` = sin tope).
+- Funciones `security definer`: `has_client_access(uuid)`, `is_client_owner(uuid)`,
+  `is_client_collaborator(uuid)`. El `security definer` **no es opcional**: sin él
+  una policy sobre `client_members` que consulta `client_members` recursa.
+- Policies de miembro: solo `select` con `has_client_access(client_id)` sobre
+  `scripts`, `reports`, `content_calendar`, `competitor_posts`, `competitors`,
+  `client_research`, `client_products`, `script_comments`. Son **aditivas** — las
+  policies de dueño no se tocan (todas son `PERMISSIVE`, así que se suman con OR).
+- Escritura de miembros: comentarios (insert propio) y **edición de guiones**
+  (`scripts_member_update`, rol `collaborator`). Sin `insert` ni `delete`.
+- ⚠️ **RLS no limita columnas.** Por eso el trigger `scripts_guard_update`
+  congela `owner_id` y `client_id` cuando quien edita no es el dueño (si no, el
+  cliente podría llevarse el guion a otra marca), y llena `last_edited_by` /
+  `last_edited_at`. Por lo mismo, `script_comments` tiene un trigger
+  `set_owner_from_client` (también definer): si `owner_id` quedara en el miembro,
+  la fila desaparecería de la vista de Paco.
+- Vista `portal_clients` — lo único de `clients` que ve un miembro.
+  `security_invoker` **apagado a propósito**: el control es su `where
+  has_client_access(id)`. El linter de Supabase la marca como
+  `security_definer_view`; es esperado.
+- Cuando llegue la etapa 3: **`/invitacion` va en `PUBLIC_PATHS`** en el mismo
+  cambio que se cree la ruta.
 
 ## Respuestas JSON de la IA (`lib/ai/json.ts`)
 
@@ -262,7 +311,9 @@ knowledge/              # fuente original de la base de conocimiento
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `ANTHROPIC_API_KEY` (server-only), `NEXT_PUBLIC_SITE_URL`,
 `APIFY_API_TOKEN` (global/fallback), `SECRETS_KEY` (cifrado de tokens por cliente),
-`SUPER_ADMIN_USER_ID` (único uuid que puede usar el token global de Apify).
+`SUPER_ADMIN_USER_ID` (único uuid que puede usar el token global de Apify),
+`SUPABASE_SERVICE_ROLE_KEY` (server-only; **también en local** desde `0006`, para
+leer `client_secrets`).
 
 ## Comandos
 

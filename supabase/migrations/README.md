@@ -32,3 +32,13 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0003 | `0003_backfill_source_post_id_cross_client.sql` | ✅ 2026-08-07 |
 | 0004 | `0004_reports.sql` | ✅ 2026-08-07 |
 | 0005 | `0005_instagram_refresh_estado.sql` | ✅ 2026-08-10 |
+| 0006 | `0006_portal_cliente.sql` | ⏳ pendiente |
+| 0007 | `0007_drop_apify_cols_de_clients.sql` | ⏳ pendiente — **después** del deploy (ver abajo) |
+
+### 0006 + 0007 van separadas a propósito
+
+El deploy es manual. `0006` crea todo y **copia** los tokens de Apify a
+`client_secrets` dejando las columnas viejas en su lugar, para que la app que
+está publicada siga funcionando. `0007` las borra, y se corre recién después de
+`netlify build && netlify deploy --prod`. Entre una y otra: no cambies tokens de
+Apify (la app vieja escribiría en las columnas viejas y el cambio se perdería).
