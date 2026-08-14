@@ -1,0 +1,125 @@
+/* Pantalla pública de invitación al portal (Fase D, etapa 3).
+   Vive fuera del grupo (app): no hay sidebar ni topbar, así que se pinta sola,
+   con el mismo aire que /login. */
+
+.wrap {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+}
+
+.card {
+  width: 100%;
+  max-width: 460px;
+  padding: 32px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 26px;
+}
+
+.mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: linear-gradient(140deg, var(--emerald), var(--forest));
+  box-shadow: 0 0 0 1px var(--glass-border);
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.heading {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 6px 0 10px;
+}
+
+.sub {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin: 0 0 22px;
+}
+
+.invitedEmail {
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.roleNote {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0 0 22px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+  background: rgba(0, 159, 125, 0.06);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.error {
+  font-size: 13px;
+  color: var(--flare);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.notice {
+  font-size: 13px;
+  color: var(--emerald);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.toggle {
+  margin-top: 18px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.toggle:hover {
+  color: var(--text);
+}
+
+.done {
+  text-align: center;
+}
+
+.doneIcon {
+  font-size: 34px;
+  line-height: 1;
+  margin-bottom: 14px;
+}
+
+.footNote {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--glass-border);
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}

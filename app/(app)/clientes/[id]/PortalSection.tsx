@@ -18,11 +18,15 @@
 
 import { useState, useTransition } from "react";
 import {
+  inviteClientMember,
+  regenerateInviteLink,
   removeClientMember,
+  revokeClientInvite,
   setAiGenerationLimit,
   setClientFeatures,
   setClientMemberRole,
 } from "../portalActions";
+import type { ClientInvite } from "@/lib/portal/invites";
 import {
   AI_FEATURE_SLUG,
   FREE_PORTAL_FEATURES,
@@ -30,11 +34,12 @@ import {
   sanitizeFeatures,
   type PortalFeature,
 } from "@/lib/portal/features";
+import type { PortalMember } from "@/lib/portal/members";
 import {
   PORTAL_MEMBER_ROLES,
-  type PortalMember,
+  portalMemberRoleLabel,
   type PortalMemberRole,
-} from "@/lib/portal/members";
+} from "@/lib/portal/roles";
 import type { AiUsageSummary } from "@/lib/portal/usage";
 import s from "../clientes.module.css";
 
@@ -44,6 +49,7 @@ type Props = {
   initialLimit: number | null;
   usage: AiUsageSummary;
   initialMembers: PortalMember[];
+  initialInvites: ClientInvite[];
 };
 
 function formatDate(iso: string): string {
@@ -52,6 +58,17 @@ function formatDate(iso: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+/** "vence en 6 días" / "venció el 20 ago". */
+function expiryLabel(invite: ClientInvite): string {
+  if (invite.status === "vencida") return `Venció el ${formatDate(invite.expiresAt)}`;
+  const days = Math.max(
+    0,
+    Math.ceil((new Date(invite.expiresAt).getTime() - Date.now()) / 86400000),
+  );
+  if (days === 0) return "Vence hoy";
+  return `Vence en ${days} ${days === 1 ? "día" : "días"}`;
 }
 
 function formatMonth(iso: string): string {
@@ -64,11 +81,19 @@ export default function PortalSection({
   initialLimit,
   usage,
   initialMembers,
+  initialInvites,
 }: Props) {
   const [features, setFeatures] = useState<string[]>(() => sanitizeFeatures(initialFeatures));
   const [limit, setLimit] = useState<number | null>(initialLimit);
   const [limitDraft, setLimitDraft] = useState(initialLimit === null ? "" : String(initialLimit));
   const [members, setMembers] = useState<PortalMember[]>(initialMembers);
+  const [invites, setInvites] = useState<ClientInvite[]>(initialInvites);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<PortalMemberRole>("viewer");
+  // El link solo existe en memoria: en la base queda su sha256, así que si se
+  // recarga la página no hay forma de volver a mostrarlo (hay que regenerarlo).
+  const [freshLink, setFreshLink] = useState<{ email: string; url: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -195,6 +220,103 @@ export default function PortalSection({
     });
   }
 
+  function invite(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setOk(null);
+    setCopied(false);
+
+    const email = inviteEmail.trim();
+    if (!email) {
+      setError("Escribí el correo de la persona que querés invitar.");
+      return;
+    }
+
+    start(async () => {
+      try {
+        const res = await inviteClientMember(clientId, email, inviteRole);
+        if (res.ok) {
+          setInvites((prev) => [
+            res.invite,
+            ...prev.filter((i) => i.email.toLowerCase() !== res.invite.email.toLowerCase()),
+          ]);
+          setFreshLink({ email: res.invite.email, url: res.url });
+          setInviteEmail("");
+          setOk(null);
+        } else {
+          setError(res.error);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "No se pudo crear la invitación.");
+      }
+    });
+  }
+
+  function regenerate(inviteItem: ClientInvite) {
+    setError(null);
+    setOk(null);
+    setCopied(false);
+    setBusyId(inviteItem.id);
+
+    start(async () => {
+      try {
+        const res = await regenerateInviteLink(inviteItem.id, clientId);
+        if (res.ok) {
+          setInvites((prev) => prev.map((i) => (i.id === res.invite.id ? res.invite : i)));
+          setFreshLink({ email: res.invite.email, url: res.url });
+        } else {
+          setError(res.error);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "No se pudo regenerar el link.");
+      } finally {
+        setBusyId(null);
+      }
+    });
+  }
+
+  function cancelInvite(inviteItem: ClientInvite) {
+    if (!confirm(`¿Cancelar la invitación de ${inviteItem.email}? El link deja de servir.`)) {
+      return;
+    }
+
+    const previous = invites;
+
+    setInvites((prev) => prev.filter((i) => i.id !== inviteItem.id));
+    setError(null);
+    setOk(null);
+    setBusyId(inviteItem.id);
+    if (freshLink?.email.toLowerCase() === inviteItem.email.toLowerCase()) setFreshLink(null);
+
+    start(async () => {
+      try {
+        const res = await revokeClientInvite(inviteItem.id, clientId);
+        if (res.ok) {
+          setOk(`Invitación de ${inviteItem.email} cancelada.`);
+        } else {
+          setInvites(previous);
+          setError(res.error);
+        }
+      } catch (e) {
+        setInvites(previous);
+        setError(e instanceof Error ? e.message : "No se pudo cancelar la invitación.");
+      } finally {
+        setBusyId(null);
+      }
+    });
+  }
+
+  async function copyLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      // Sin permiso de portapapeles (o http sin localhost): el link igual está
+      // en el input de al lado para copiarlo a mano.
+      setError("No se pudo copiar solo. Seleccioná el link y copialo a mano.");
+    }
+  }
+
   function renderToggle(feature: PortalFeature) {
     const on = features.includes(feature.slug);
     return (
@@ -292,11 +414,119 @@ export default function PortalSection({
       <div className={s.portalGroup}>
         <p className={s.portalGroupTitle}>Quién tiene acceso</p>
 
+        <form onSubmit={invite} className={s.inviteForm}>
+          <div className={s.inviteEmailField}>
+            <label className="field-label" style={{ fontSize: 12 }} htmlFor="invite-email">
+              Invitar por correo
+            </label>
+            <input
+              id="invite-email"
+              type="email"
+              className="input"
+              placeholder="cliente@sumarca.com"
+              value={inviteEmail}
+              disabled={isPending}
+              onChange={(e) => setInviteEmail(e.target.value)}
+            />
+          </div>
+          <div className={s.inviteRoleField}>
+            <label className="field-label" style={{ fontSize: 12 }} htmlFor="invite-role">
+              Rol
+            </label>
+            <select
+              id="invite-role"
+              className={`input ${s.memberRoleSelect}`}
+              value={inviteRole}
+              disabled={isPending}
+              onChange={(e) => setInviteRole(e.target.value as PortalMemberRole)}
+            >
+              {PORTAL_MEMBER_ROLES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            style={{ fontSize: 13 }}
+            disabled={isPending || !inviteEmail.trim()}
+          >
+            {isPending ? "…" : "Generar link"}
+          </button>
+        </form>
+
+        {freshLink && (
+          <div className={s.linkBox}>
+            <p className={s.linkBoxTitle}>Link para {freshLink.email}</p>
+            <p className={s.linkBoxText}>
+              Mandáselo por donde quieras. Vence en 7 días y sirve una sola vez.
+              Se muestra ahora nada más: al recargar la página no se puede volver
+              a ver (en la base solo queda su huella), pero podés generar uno
+              nuevo cuando quieras.
+            </p>
+            <div className={s.linkRow}>
+              <input
+                className={`input ${s.linkInput}`}
+                readOnly
+                value={freshLink.url}
+                onFocus={(e) => e.currentTarget.select()}
+              />
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ fontSize: 13 }}
+                onClick={() => copyLink(freshLink.url)}
+              >
+                {copied ? "¡Copiado!" : "Copiar"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {invites.length > 0 && (
+          <div className={s.memberList} style={{ marginBottom: 12 }}>
+            {invites.map((inviteItem) => (
+              <div key={inviteItem.id} className={s.inviteRow}>
+                <div className={s.inviteInfo}>
+                  <p className={s.inviteEmail}>{inviteItem.email}</p>
+                  <p
+                    className={`${s.inviteMeta} ${
+                      inviteItem.status === "vencida" ? s.inviteExpired : ""
+                    }`}
+                  >
+                    Invitado como {portalMemberRoleLabel(inviteItem.role).toLowerCase()} ·{" "}
+                    {expiryLabel(inviteItem)} · sin aceptar
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ fontSize: 13 }}
+                  disabled={isPending && busyId === inviteItem.id}
+                  onClick={() => regenerate(inviteItem)}
+                >
+                  Nuevo link
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ fontSize: 13 }}
+                  disabled={isPending && busyId === inviteItem.id}
+                  onClick={() => cancelInvite(inviteItem)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {members.length === 0 ? (
           <div className={s.memberEmpty}>
-            Todavía nadie entra a esta marca. Las invitaciones por email llegan en
-            la próxima etapa; por ahora las membresías se cargan a mano en
-            Supabase (<code>client_members</code>).
+            Todavía nadie aceptó. Cuando el invitado cree su cuenta con el link,
+            aparece acá y podés cambiarle el rol o quitarle el acceso.
           </div>
         ) : (
           <div className={s.memberList}>

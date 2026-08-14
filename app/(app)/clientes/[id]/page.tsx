@@ -6,6 +6,7 @@ import {
   type ApifyTokenState,
 } from "@/lib/competencia/apifyToken";
 import { listClientMembers, type PortalMember } from "@/lib/portal/members";
+import { listPendingInvites, type ClientInvite } from "@/lib/portal/invites";
 import { emptyAiUsage, getMonthlyAiUsage, type AiUsageSummary } from "@/lib/portal/usage";
 import ClienteForm from "../ClienteForm";
 import PortalSection from "./PortalSection";
@@ -64,6 +65,11 @@ export default async function ClienteDetailPage({ params }: Props) {
     },
   );
 
+  const invitesPromise: Promise<ClientInvite[]> = listPendingInvites(supabase, id).catch((e) => {
+    console.error("[clientes/[id]] no se pudieron leer las invitaciones:", e);
+    return [];
+  });
+
   const [
     { data: cliente },
     { data: research },
@@ -72,6 +78,7 @@ export default async function ClienteDetailPage({ params }: Props) {
     apify,
     members,
     aiUsage,
+    invites,
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -102,6 +109,7 @@ export default async function ClienteDetailPage({ params }: Props) {
     apifyState,
     membersPromise,
     usagePromise,
+    invitesPromise,
   ]);
 
   if (!cliente) notFound();
@@ -131,6 +139,7 @@ export default async function ClienteDetailPage({ params }: Props) {
           initialLimit={(cliente.ai_generation_limit as number | null) ?? null}
           usage={aiUsage}
           initialMembers={members}
+          initialInvites={invites}
         />
         {/* Solo el estado enmascarado: `apify_token_cipher` NUNCA cruza al cliente. */}
         <ApifySection clientId={id} initial={apify} />

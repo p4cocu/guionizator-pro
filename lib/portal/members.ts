@@ -17,38 +17,17 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "../supabase/service";
+import { isPortalMemberRole, type PortalMemberRole } from "./roles";
 
-/**
- * Espeja el `CHECK` de `client_members.role` (migración `0006`):
- *   check (role in ('viewer','collaborator'))
- * Agregar un rol acá obliga a entregar el `ALTER TABLE` en el mismo cambio.
- */
-export type PortalMemberRole = "viewer" | "collaborator";
-
-export const PORTAL_MEMBER_ROLES: {
-  value: PortalMemberRole;
-  label: string;
-  description: string;
-}[] = [
-  {
-    value: "viewer",
-    label: "Lector",
-    description: "Ve las secciones habilitadas y comenta. No modifica nada.",
-  },
-  {
-    value: "collaborator",
-    label: "Colaborador",
-    description: "Además edita los guiones de su marca (no puede crearlos ni borrarlos).",
-  },
-];
-
-export function isPortalMemberRole(value: string): value is PortalMemberRole {
-  return value === "viewer" || value === "collaborator";
-}
-
-export function portalMemberRoleLabel(role: string): string {
-  return PORTAL_MEMBER_ROLES.find((r) => r.value === role)?.label ?? role;
-}
+// Los roles viven en `./roles` (módulo puro) para que la UI pueda importarlos
+// sin arrastrar el service role al browser. Se reexportan acá por comodidad de
+// los consumidores de servidor.
+export {
+  PORTAL_MEMBER_ROLES,
+  isPortalMemberRole,
+  portalMemberRoleLabel,
+  type PortalMemberRole,
+} from "./roles";
 
 export type PortalMember = {
   id: string;

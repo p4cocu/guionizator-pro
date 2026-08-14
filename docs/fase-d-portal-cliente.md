@@ -13,9 +13,11 @@
    una edición más.
 2. **El `drop` de las columnas viejas de Apify fue en `0007`**, aplicada después
    del deploy, para que la app publicada siguiera funcionando entre una y otra.
-3. **La etapa 2 no necesitó migración**: `enabled_features`,
-   `ai_generation_limit`, `ai_usage_log` y `client_members` ya venían de `0006`.
-   El `0008` queda libre para las invitaciones.
+3. **Ni la etapa 2 ni la 3 necesitaron migración**: `enabled_features`,
+   `ai_generation_limit`, `ai_usage_log`, `client_members` y `client_invites`
+   ya venían completas de `0006`. El `0008` sigue sin usarse.
+4. **La invitación se entrega como link copiable**, no por mail (ver "Flujo de
+   invitación"). El envío automático quedó como pendiente.
 
 ## Qué se quiere
 
@@ -223,16 +225,26 @@ están en el panel todavía: son la etapa 3. Hasta entonces las membresías se
 cargan a mano con un `insert` en `client_members`; el panel las lista, les
 cambia el rol y las revoca.
 
-### Flujo de invitación
+### Flujo de invitación (implementado, etapa 3)
 
-1. Paco invita (email + rol) → server action con service role.
-2. Se guarda `sha256(token)` con vencimiento a 7 días; el token en claro solo
-   viaja en el mail.
-3. Envío: `inviteUserByEmail` del admin de Supabase como transporte, con
-   `redirectTo` a `/invitacion/<token>`. ⚠️ El SMTP default de Supabase limita a
-   ~4 mails/hora — para más volumen, Resend.
+1. Paco invita (email + rol) desde el panel → se crea la fila con el cliente de
+   sesión (policy `client_invites_owner_all`) y la app devuelve el link.
+2. Se guarda `sha256(token)` con vencimiento a 7 días; el token en claro se
+   muestra **una sola vez** en pantalla. Si se pierde, "Nuevo link" genera otro
+   e invalida el anterior.
+3. **Entrega: link copiable** (decidido 2026-08-13). Paco lo manda por WhatsApp
+   o mail. Sin dependencia del SMTP de Supabase, y funciona igual si el
+   invitado ya tiene cuenta.
+   > 🔜 **Pendiente**: envío automático del mail desde la app. El camino es
+   > Resend (dominio propio) y no `inviteUserByEmail`, que además de estar
+   > limitado a ~4 mails/hora falla si el email ya existe en Auth.
 4. `/invitacion/[token]`: valida hash, vencimiento y **que el email de la sesión
-   sea el invitado**; recién ahí inserta en `client_members`.
+   sea el invitado**; recién ahí inserta en `client_members` (service role, que
+   es el único que puede: el invitado no tiene policies ahí).
+5. Si no tiene cuenta, se registra en esa misma pantalla con el email fijado; el
+   mail de confirmación vuelve vía `/auth/callback?next=/invitacion/<token>`.
+6. Aceptada la invitación, hasta que exista `/portal` el miembro ve
+   `PortalPending` ("tu portal está en camino") en vez del shell interno.
 
 ---
 
@@ -242,7 +254,7 @@ cambia el rol y las revoca.
 |---|---|---|
 | ✅ 1 | Migración `0006` completa (tablas, RLS, vista, mover secretos) + adaptar `lib/competencia/apifyToken.ts` y `clientes/actions.ts` a `client_secrets` | SQL a mano: con el uid de un miembro de prueba, `select` a cada tabla debe devolver solo lo suyo |
 | ✅ 2 | `lib/portal/{features,members,usage}.ts` + panel "Portal del cliente" en `/clientes/[id]` (flags + add-on de IA + miembros) | Prender/apagar flags y ver el array en la DB |
-| 3 | Invitaciones + `/invitacion/[token]` + `PUBLIC_PATHS` | Invitar a un mail propio y aceptar |
+| ✅ 3 | Invitaciones (`lib/portal/invites.ts`) + `/invitacion/[token]` + `PUBLIC_PATHS` + `PortalPending` | Invitar a un mail propio y aceptar |
 | 4 | `/portal` con Reportes | Entrar con el usuario invitado |
 | 5 | Guiones, Calendario, Competencia + comentarios/aprobación | |
 | 6 | Add-on de IA: tope, `ai_usage_log`, corte al pasarse | |
@@ -254,7 +266,8 @@ real (toca RLS de tablas en uso) y conviene aplicarla con la app quieta.
 
 - **Cobro del add-on**: no hay pasarela. Arranca como acuerdo por fuera y un
   switch manual; Stripe queda para después.
-- **Emails**: si el límite de Supabase molesta, Resend (dominio ya propio).
+- **Emails**: pendiente explícito de la etapa 3 — hoy el link de invitación se
+  copia y se manda a mano. Cuando moleste, Resend (dominio ya propio).
 - `SUPER_ADMIN_USER_ID` sigue siendo solo para el token global de Apify. Los
   permisos del portal se resuelven por `clients.owner_id`, no por super admin,
   para que el día que haya otro dueño funcione igual.

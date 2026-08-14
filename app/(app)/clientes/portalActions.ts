@@ -15,9 +15,16 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { sanitizeFeatures, type PortalFeatureSlug } from "@/lib/portal/features";
-import { isPortalMemberRole } from "@/lib/portal/members";
+import { isPortalMemberRole, listClientMembers } from "@/lib/portal/members";
+import {
+  createInvite,
+  deleteInvite,
+  regenerateInvite,
+  type ClientInvite,
+} from "@/lib/portal/invites";
 
 async function getAuthUser() {
   const supabase = await createClient();
@@ -26,6 +33,40 @@ async function getAuthUser() {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
   return { supabase, user };
+}
+
+/** Confirma que la marca es de este usuario. `client_members` y
+ *  `client_invites` no tienen `owner_id`: la pertenencia se chequea contra
+ *  `clients`. */
+async function assertOwnsClient(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  clientId: string,
+  ownerId: string,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("clients")
+    .select("id")
+    .eq("id", clientId)
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Cliente no encontrado.");
+}
+
+/**
+ * Origen para armar el link de invitación. Se prefiere el host real del request
+ * (funciona igual en localhost y en producción) y se cae a `NEXT_PUBLIC_SITE_URL`.
+ */
+async function requestOrigin(): Promise<string> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? (host?.startsWith("localhost") ? "http" : "https");
+  if (host) return `${proto}://${host}`;
+
+  const fallback = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (!fallback) throw new Error("No se pudo determinar la URL del sitio.");
+  return fallback;
 }
 
 // ─── Secciones habilitadas ───────────────────────────────────────────────────
@@ -136,19 +177,7 @@ export async function setClientMemberRole(
 
   try {
     const { supabase, user } = await getAuthUser();
-
-    // El service role no está en juego acá, pero igual confirmamos la marca:
-    // `client_members` no tiene `owner_id`, así que la pertenencia se chequea
-    // contra `clients`.
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("id", clientId)
-      .eq("owner_id", user.id)
-      .maybeSingle();
-
-    if (clientError) return { ok: false, error: clientError.message };
-    if (!client) return { ok: false, error: "Cliente no encontrado." };
+    await assertOwnsClient(supabase, clientId, user.id);
 
     const { error } = await supabase
       .from("client_members")
@@ -183,16 +212,7 @@ export async function removeClientMember(
 ): Promise<MemberActionResult> {
   try {
     const { supabase, user } = await getAuthUser();
-
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("id", clientId)
-      .eq("owner_id", user.id)
-      .maybeSingle();
-
-    if (clientError) return { ok: false, error: clientError.message };
-    if (!client) return { ok: false, error: "Cliente no encontrado." };
+    await assertOwnsClient(supabase, clientId, user.id);
 
     const { error } = await supabase
       .from("client_members")
@@ -205,6 +225,100 @@ export async function removeClientMember(
     return {
       ok: false,
       error: e instanceof Error ? e.message : "No se pudo revocar el acceso.",
+    };
+  }
+
+  revalidatePath(`/clientes/${clientId}`);
+  return { ok: true };
+}
+
+// ─── Invitaciones (etapa 3) ──────────────────────────────────────────────────
+// El link se genera acá y se copia a mano: el envío automático por email quedó
+// como pendiente (el SMTP default de Supabase corta a ~4 mails/hora y falla si
+// el email ya existe en Auth). Ver docs/fase-d-portal-cliente.md.
+
+export type InviteResult =
+  | { ok: true; invite: ClientInvite; url: string }
+  | { ok: false; error: string };
+
+/**
+ * Crea (o reemplaza) la invitación de un email a esta marca y devuelve el link.
+ * El token en claro se ve UNA sola vez: en la base solo queda su sha256.
+ */
+export async function inviteClientMember(
+  clientId: string,
+  email: string,
+  role: string,
+): Promise<InviteResult> {
+  if (!isPortalMemberRole(role)) return { ok: false, error: "Rol desconocido." };
+
+  try {
+    const { supabase, user } = await getAuthUser();
+    await assertOwnsClient(supabase, clientId, user.id);
+
+    // Si ya es miembro, invitarlo de nuevo no aporta nada y confunde.
+    const normalized = email.trim().toLowerCase();
+    const members = await listClientMembers(supabase, clientId, user.id).catch(() => []);
+    if (members.some((m) => m.email?.toLowerCase() === normalized)) {
+      return { ok: false, error: "Ese correo ya tiene acceso a esta marca." };
+    }
+
+    const origin = await requestOrigin();
+    const created = await createInvite(supabase, {
+      clientId,
+      email,
+      role,
+      createdBy: user.id,
+      origin,
+    });
+
+    revalidatePath(`/clientes/${clientId}`);
+    return { ok: true, invite: created.invite, url: created.url };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo crear la invitación.",
+    };
+  }
+}
+
+/**
+ * Nuevo token y nuevo vencimiento. Sirve tanto para "se venció" como para
+ * "el link se filtró": el anterior deja de funcionar en el acto.
+ */
+export async function regenerateInviteLink(
+  inviteId: string,
+  clientId: string,
+): Promise<InviteResult> {
+  try {
+    const { supabase, user } = await getAuthUser();
+    await assertOwnsClient(supabase, clientId, user.id);
+
+    const origin = await requestOrigin();
+    const created = await regenerateInvite(supabase, { inviteId, clientId, origin });
+
+    revalidatePath(`/clientes/${clientId}`);
+    return { ok: true, invite: created.invite, url: created.url };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo regenerar el link.",
+    };
+  }
+}
+
+export async function revokeClientInvite(
+  inviteId: string,
+  clientId: string,
+): Promise<MemberActionResult> {
+  try {
+    const { supabase, user } = await getAuthUser();
+    await assertOwnsClient(supabase, clientId, user.id);
+    await deleteInvite(supabase, inviteId, clientId);
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo cancelar la invitación.",
     };
   }
 

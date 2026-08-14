@@ -5,6 +5,12 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC_PATHS = [
   "/login",
   "/auth",
+  // Invitaciones al portal de cliente: el invitado llega SIN sesión (todavía no
+  // tiene cuenta). Si esta ruta no estuviera acá, el middleware lo mandaría a
+  // /login y el link no serviría para nada. La invitación se valida por su
+  // token (sha256 en client_invites), no por sesión — y aceptar sí exige estar
+  // logueado con el email invitado.
+  "/invitacion",
   // Endpoint de ingesta del Shortcut: se autentica por token (Bearer), no por
   // sesión, así que no debe redirigir a /login.
   "/api/resources/ingest",

@@ -248,8 +248,8 @@ owner-only y es invisible aunque la UI falle.
   `security_invoker` **apagado a propósito**: el control es su `where
   has_client_access(id)`. El linter de Supabase la marca como
   `security_definer_view`; es esperado.
-- Cuando llegue la etapa 3: **`/invitacion` va en `PUBLIC_PATHS`** en el mismo
-  cambio que se cree la ruta.
+- **`/invitacion` está en `PUBLIC_PATHS`** (etapa 3): el invitado llega sin
+  sesión y sin cuenta. La autorización la da el token, no el middleware.
 
 ### Panel de configuración (etapa 2) — `lib/portal/*`
 
@@ -278,6 +278,29 @@ todo lo que usa lo creó `0006`.
   (`null` = sin tope).
 - Prender un flag no le da acceso a nadie: define qué se dibuja en `/portal`
   (etapa 4). Quién entra lo deciden las membresías, y qué puede leer, la RLS.
+
+### Invitaciones (etapa 3) — `lib/portal/invites.ts` + `/invitacion/[token]`
+
+- **El token en claro se muestra una sola vez**, dentro del link: en
+  `client_invites` solo vive su `sha256`. Recargar el panel no lo recupera —
+  hay botón "Nuevo link", que además invalida el anterior. Vence a los 7 días
+  (`INVITE_TTL_DAYS`).
+- **Entrega por link copiable**, no por mail: el SMTP default de Supabase corta
+  a ~4 mails/hora y `inviteUserByEmail` falla si el email ya existe en Auth. El
+  envío automático (Resend) quedó pendiente.
+- Crear/listar/revocar/regenerar usan el **cliente de sesión** (policy
+  `client_invites_owner_all`). **Solo validar y aceptar** usan service role: el
+  invitado no tiene policies sobre `client_invites` ni puede leer `clients`.
+- `acceptInvite` valida, en orden: token existe → no aceptada → no vencida →
+  **el email de la sesión es exactamente el invitado**. Sin ese último chequeo,
+  cualquiera con el link entraría con su cuenta.
+- ⚠️ **`/invitacion` está en `PUBLIC_PATHS`.** Si se saca, el link deja de
+  funcionar: el middleware manda a `/login` antes de que corra la página.
+- La confirmación de correo vuelve a la invitación vía
+  `/auth/callback?next=/invitacion/<token>` (esa ruta ya soportaba `next`).
+- `app/(app)/layout.tsx`: quien **no es dueño de ninguna marca pero tiene
+  membresías** ve `PortalPending` en vez del shell interno. Se reemplaza por
+  `redirect("/portal")` en la etapa 4.
 
 ## Respuestas JSON de la IA (`lib/ai/json.ts`)
 
