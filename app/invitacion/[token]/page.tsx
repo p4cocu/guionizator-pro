@@ -68,7 +68,7 @@ export default async function InvitacionPage({ params }: Props) {
     return (
       <Invalid
         title="No pudimos validar tu invitación"
-        text="Hubo un problema del lado del servidor. Volvé a intentar en un rato o pedile a quien te invitó que te reenvíe el link."
+        text="Hubo un problema del lado del servidor. Vuelve a intentar en un rato o pídele a quien te invitó que te reenvíe el link."
       />
     );
   }
@@ -77,7 +77,7 @@ export default async function InvitacionPage({ params }: Props) {
     return (
       <Invalid
         title="Esta invitación no existe"
-        text="El link puede estar incompleto, haber sido cancelado o reemplazado por uno nuevo. Pedile a quien te invitó que te mande el actual."
+        text="El link puede estar incompleto, haber sido cancelado o reemplazado por uno nuevo. Pídele a quien te invitó que te mande el actual."
       />
     );
   }
@@ -86,7 +86,7 @@ export default async function InvitacionPage({ params }: Props) {
     return (
       <Invalid
         title="Esta invitación ya fue aceptada"
-        text="Tu acceso ya está activo. Entrá con tu cuenta cuando el portal esté disponible."
+        text="Tu acceso ya está activo. Entra con tu cuenta cuando el portal esté disponible."
       />
     );
   }
@@ -95,7 +95,7 @@ export default async function InvitacionPage({ params }: Props) {
     return (
       <Invalid
         title="Esta invitación venció"
-        text="Los links duran 7 días. Pedile a quien te invitó que te genere uno nuevo — le toma un clic."
+        text="Los links duran 7 días. Pídele a quien te invitó que te genere uno nuevo — le toma un clic."
       />
     );
   }

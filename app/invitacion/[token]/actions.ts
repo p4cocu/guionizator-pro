@@ -26,7 +26,7 @@ export async function acceptInviteAction(token: string): Promise<AcceptInviteRes
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return { ok: false, error: "Entrá con tu cuenta para aceptar la invitación." };
+      return { ok: false, error: "Entra con tu cuenta para aceptar la invitación." };
     }
 
     const result = await acceptInvite(token, { id: user.id, email: user.email });

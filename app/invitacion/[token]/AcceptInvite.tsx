@@ -98,7 +98,7 @@ export default function AcceptInvite({
 
         if (!data.session) {
           setNotice(
-            "Cuenta creada. Revisá tu correo y hacé clic en el enlace de confirmación: te trae de vuelta a esta invitación.",
+            "Cuenta creada. Revisa tu correo y haz clic en el enlace de confirmación: te trae de vuelta a esta invitación.",
           );
           setLoading(false);
           return;
@@ -126,7 +126,7 @@ export default function AcceptInvite({
     return (
       <div className={s.done}>
         <div className={s.doneIcon}>✓</div>
-        <h1 className={s.heading}>Listo, ya tenés acceso</h1>
+        <h1 className={s.heading}>Listo, ya tienes acceso</h1>
         <p className={s.sub}>
           Tu cuenta quedó vinculada a <strong>{clientName}</strong> como{" "}
           {portalMemberRoleLabel(role).toLowerCase()}.
@@ -150,15 +150,15 @@ export default function AcceptInvite({
       <p className={s.roleNote}>
         Vas a entrar como <strong>{portalMemberRoleLabel(role)}</strong>:{" "}
         {role === "collaborator"
-          ? "podés ver el contenido de la marca, comentarlo y editar los guiones."
-          : "podés ver el contenido de la marca y comentarlo."}
+          ? "puedes ver el contenido de la marca, comentarlo y editar los guiones."
+          : "puedes ver el contenido de la marca y comentarlo."}
       </p>
 
       {sessionEmail && !emailMatches ? (
         <>
           <p className={s.error}>
             Estás con la cuenta <strong>{sessionEmail}</strong>, y esta invitación es
-            para {invitedEmail}. Cerrá sesión y entrá con la cuenta invitada.
+            para {invitedEmail}. Cierra sesión y entra con la cuenta invitada.
           </p>
           <button
             type="button"
@@ -206,7 +206,7 @@ export default function AcceptInvite({
             </div>
             <div>
               <label className="field-label" htmlFor="password">
-                {mode === "signup" ? "Elegí una contraseña" : "Contraseña"}
+                {mode === "signup" ? "Elige una contraseña" : "Contraseña"}
               </label>
               <input
                 id="password"
@@ -246,13 +246,13 @@ export default function AcceptInvite({
               setNotice(null);
             }}
           >
-            {mode === "signup" ? "¿Ya tenés cuenta? Entrá" : "¿No tenés cuenta? Creala"}
+            {mode === "signup" ? "¿Ya tienes cuenta? Entra" : "¿No tienes cuenta? Créala"}
           </button>
         </>
       )}
 
       <p className={s.footNote}>
-        ¿No esperabas esta invitación? Ignorá este link: sin aceptarlo no pasa nada.{" "}
+        ¿No esperabas esta invitación? Ignora este link: sin aceptarlo no pasa nada.{" "}
         <Link href="/login" style={{ color: "inherit" }}>
           Ir al inicio
         </Link>

@@ -321,11 +321,11 @@ export async function acceptInvite(
     throw new InviteError("Esta invitación ya fue aceptada. Entra con tu cuenta.");
   }
   if (new Date(row.expires_at).getTime() < Date.now()) {
-    throw new InviteError("Esta invitación venció. Pedí una nueva.");
+    throw new InviteError("Esta invitación venció. Pide una nueva.");
   }
   if (!sessionEmail || sessionEmail !== invitedEmail) {
     throw new InviteError(
-      `Esta invitación es para ${row.email}. Cerrá sesión y entrá con esa cuenta.`,
+      `Esta invitación es para ${row.email}. Cierra sesión y entra con esa cuenta.`,
     );
   }
 

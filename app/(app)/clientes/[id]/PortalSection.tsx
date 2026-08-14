@@ -228,7 +228,7 @@ export default function PortalSection({
 
     const email = inviteEmail.trim();
     if (!email) {
-      setError("Escribí el correo de la persona que querés invitar.");
+      setError("Escribe el correo de la persona que quieres invitar.");
       return;
     }
 
@@ -313,7 +313,7 @@ export default function PortalSection({
     } catch {
       // Sin permiso de portapapeles (o http sin localhost): el link igual está
       // en el input de al lado para copiarlo a mano.
-      setError("No se pudo copiar solo. Seleccioná el link y copialo a mano.");
+      setError("No se pudo copiar solo. Selecciona el link y cópialo a mano.");
     }
   }
 
@@ -461,9 +461,9 @@ export default function PortalSection({
           <div className={s.linkBox}>
             <p className={s.linkBoxTitle}>Link para {freshLink.email}</p>
             <p className={s.linkBoxText}>
-              Mandáselo por donde quieras. Vence en 7 días y sirve una sola vez.
+              Mándaselo por donde quieras. Vence en 7 días y sirve una sola vez.
               Se muestra ahora nada más: al recargar la página no se puede volver
-              a ver (en la base solo queda su huella), pero podés generar uno
+              a ver (en la base solo queda su huella), pero puedes generar uno
               nuevo cuando quieras.
             </p>
             <div className={s.linkRow}>
@@ -526,7 +526,7 @@ export default function PortalSection({
         {members.length === 0 ? (
           <div className={s.memberEmpty}>
             Todavía nadie aceptó. Cuando el invitado cree su cuenta con el link,
-            aparece acá y podés cambiarle el rol o quitarle el acceso.
+            aparece aquí y puedes cambiarle el rol o quitarle el acceso.
           </div>
         ) : (
           <div className={s.memberList}>
