@@ -178,6 +178,30 @@ local**, no solo en Netlify.
   porque ya arranca desde la fila del scrape. Sin él no hay chequeo de
   pertenencia: el service role no tiene RLS que lo cubra.
 
+## ID público de los posts de competencia (`competitor_posts.public_id`)
+
+Código de **6 caracteres, único global** (no por cliente) para que el cliente
+pueda pedir cambios sin mandar links: "cambiame el Q7F2M9". Migración `0008`.
+
+- Alfabeto de 31 sin ambiguos: `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (fuera `0 O 1 I L`).
+  Fuente de verdad en TypeScript: `lib/competencia/publicId.ts`
+  (`normalizePublicId`, `looksLikePublicId`); en la base, la función
+  `gen_competitor_public_id()`. **Los dos alfabetos tienen que coincidir.**
+- La función es `security definer` a propósito: la unicidad es global pero la RLS
+  de `competitor_posts` es por owner — sin definer, el chequeo de colisión solo
+  vería los posts del usuario que inserta.
+- **El ID es estable**: el upsert de `scrape.ts` (`onConflict
+  owner_id,client_id,shortcode`) no manda `public_id`, así que re-scrapear
+  actualiza métricas sin tocarlo. El mismo reel guardado para dos clientes son
+  dos filas y dos IDs — el ID identifica la pieza en el tablero de esa marca.
+- UI: badge monoespaciado en la fila de métricas de cada tarjeta (clic = copiar)
+  y buscador arriba de los filtros que acepta ID o `@cuenta`. Si el ID no está en
+  la marca abierta, `findPostByPublicId` lo busca en las otras marcas del dueño y
+  ofrece saltar — es el caso real, porque el cliente dicta el ID sin decir de qué
+  marca es.
+- Va en el snapshot de los reportes (`SNAPSHOT_VERSION` **2**). Los reportes v1 ya
+  generados se descargan igual pero muestran `—`: hay que regenerarlos.
+
 ## Reportes de competencia (`/reportes`)
 
 Entregable para el cliente: se seleccionan posts en `/competencia` (checkbox por

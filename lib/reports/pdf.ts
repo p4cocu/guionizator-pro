@@ -64,6 +64,14 @@ function sectionTitle(doc: Doc, text: string) {
   doc.moveDown(0.9);
 }
 
+/**
+ * ID corto del contenido, el que el cliente usa para pedir cambios. Los
+ * reportes v1 (anteriores a la migración 0008) no lo traen en su snapshot.
+ */
+function publicIdOf(row: ReportRow): string | null {
+  return row.post.publicId ?? null;
+}
+
 function metricsLine(row: ReportRow): string {
   const bits = [
     `${row.post.likes.toLocaleString("es-MX")} likes`,
@@ -133,7 +141,25 @@ export function buildReportPdf(snapshot: ReportSnapshot): Promise<Buffer> {
         .text(c.label, x, cardY + 50, { width: cardW, align: "center" });
     });
 
-    doc.y = cardY + cardH + 30;
+    doc.y = cardY + cardH + 22;
+
+    // Instructivo del ID. Va en la portada porque es lo primero que el cliente
+    // necesita saber para pedir cambios sin mandar links ni describir el video.
+    if (snapshot.rows.some((r) => publicIdOf(r) != null)) {
+      doc
+        .font("Helvetica")
+        .fontSize(9.5)
+        .fillColor(MUTED)
+        .text(
+          "Cada contenido de este reporte tiene un ID de 6 caracteres (por ejemplo Q7F2M9). " +
+            "Menciónalo cuando quieras pedir un cambio y sabemos exactamente de qué pieza hablas.",
+          MARGIN,
+          doc.y,
+          { width: CONTENT_WIDTH },
+        );
+      doc.moveDown(0.4);
+    }
+
     doc.fillColor(INK);
 
     // ── Qué grabar y por qué ─────────────────────────────────────────────────
@@ -147,8 +173,15 @@ export function buildReportPdf(snapshot: ReportSnapshot): Promise<Buffer> {
       ensureSpace(doc, 110);
       const top = doc.y;
 
+      const publicId = publicIdOf(r);
       doc.font("Helvetica-Bold").fontSize(12).fillColor(INK);
-      doc.text(`${i + 1}. @${r.post.username}`, MARGIN, top, { continued: false });
+      doc.text(`${i + 1}. @${r.post.username}`, MARGIN, top, {
+        continued: publicId != null,
+      });
+      if (publicId != null) {
+        // Courier para que el ID se lea carácter por carácter al dictarlo.
+        doc.font("Courier-Bold").fontSize(12).fillColor(FOREST).text(`   ${publicId}`);
+      }
 
       if (r.post.isOutlier && r.post.outlierMultiple) {
         doc
@@ -210,7 +243,9 @@ export function buildReportPdf(snapshot: ReportSnapshot): Promise<Buffer> {
           .fillColor(INK)
           .text(script.title || `Guion ${i + 1}`, { width: CONTENT_WIDTH });
 
+        const scriptPublicId = publicIdOf(r);
         const meta = [
+          scriptPublicId ? `ID ${scriptPublicId}` : null,
           typeLabel(script.type === "carousel" ? "carousel" : "video"),
           script.structureName,
           `inspirado en @${r.post.username}`,

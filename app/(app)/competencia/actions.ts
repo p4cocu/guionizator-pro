@@ -6,6 +6,7 @@ import { runScrapeJob } from "@/lib/competencia/scrape";
 import { resolveApifyToken } from "@/lib/competencia/apifyToken";
 import { MODEL_FAST } from "@/lib/ai/anthropic";
 import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
+import { looksLikePublicId, normalizePublicId } from "@/lib/competencia/publicId";
 import {
   buildTaxonomyPrompt,
   HOOK_TYPE_SLUGS,
@@ -205,6 +206,8 @@ export async function getScrapeStatus(scrapeId: string): Promise<ScrapeStatus | 
 
 export type CompetitorPost = {
   id: string;
+  /** Código corto y legible (6 chars) para referirse al post con el cliente. */
+  public_id: string;
   username: string;
   permalink: string | null;
   type: string | null;
@@ -230,7 +233,7 @@ export type CompetitorPost = {
 
 /** Columnas base de un post (sin los derivados de outlier). */
 const POST_COLUMNS =
-  "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual, hook_type, script_structure, value_pillar, classification_notes, classified_at";
+  "id, public_id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual, hook_type, script_structure, value_pillar, classification_notes, classified_at";
 
 export type LatestResults = {
   scrapeId: string | null;
@@ -326,6 +329,59 @@ export async function getLatestResults(clientId: string): Promise<LatestResults>
         "is_outlier" | "outlier_multiple" | "account_median_comments"
       >[],
     ),
+  };
+}
+
+export type FoundByPublicId = {
+  postId: string;
+  publicId: string;
+  clientId: string;
+  clientName: string;
+  username: string;
+};
+
+/**
+ * Busca un ID público entre TODAS las marcas del usuario.
+ *
+ * El buscador de /competencia filtra en memoria los posts de la marca
+ * seleccionada, que es lo único que tiene cargado. Pero el caso real es que el
+ * cliente escriba "cambiame el Q7F2M9" y Paco no sepa de qué marca es: sin esto,
+ * habría que ir probando marca por marca en el selector.
+ */
+export async function findPostByPublicId(
+  rawPublicId: string,
+): Promise<FoundByPublicId | null> {
+  const publicId = normalizePublicId(rawPublicId);
+  if (!looksLikePublicId(publicId)) return null;
+
+  const { supabase, user } = await getAuthUser();
+
+  const { data } = await supabase
+    .from("competitor_posts")
+    .select("id, public_id, username, client_id")
+    .eq("owner_id", user.id)
+    .eq("public_id", publicId)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  // El nombre de la marca sale en una segunda consulta y no con un embed
+  // (`clients(nombre)`): el embed depende de que PostgREST resuelva la FK y
+  // devuelve objeto o array según el caso. Dos lecturas chicas, cero magia.
+  const { data: client } = await supabase
+    .from("clients")
+    .select("nombre, marca")
+    .eq("id", data.client_id as string)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+
+  return {
+    postId: data.id as string,
+    publicId: data.public_id as string,
+    clientId: data.client_id as string,
+    clientName:
+      (client?.marca as string | null) || (client?.nombre as string | null) || "otra marca",
+    username: data.username as string,
   };
 }
 

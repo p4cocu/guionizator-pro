@@ -300,6 +300,73 @@
   margin-left: auto;
 }
 
+/* ── ID público del contenido ──
+   Va en la fila de métricas, empujado a la derecha junto con la fecha. Fuente
+   monoespaciada y letter-spacing para que se lea carácter por carácter: está
+   hecho para dictarse por WhatsApp. */
+.idBadge {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--signal);
+  background: color-mix(in srgb, var(--ink) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--signal) 30%, transparent);
+  border-radius: var(--r-pill);
+  padding: 2px 9px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.idBadge:hover {
+  background: color-mix(in srgb, var(--signal) 18%, transparent);
+}
+
+.idBadgeCopied {
+  color: var(--ink);
+  background: var(--signal);
+  border-color: var(--signal);
+}
+
+/* ── Buscador por ID / cuenta ── */
+.searchPanel {
+  margin-bottom: 20px;
+}
+
+.searchBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.searchBar .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.searchIcon {
+  font-size: 15px;
+  opacity: 0.7;
+}
+
+.searchHint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.searchJump {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--emerald);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .empty,
 .scrapedAt {
   font-size: 14px;

@@ -34,6 +34,15 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0005 | `0005_instagram_refresh_estado.sql` | ✅ 2026-08-10 |
 | 0006 | `0006_portal_cliente.sql` | ✅ 2026-08-13 |
 | 0007 | `0007_drop_apify_cols_de_clients.sql` | ✅ 2026-08-13 (después del deploy) |
+| 0008 | `0008_competitor_posts_public_id.sql` | ✅ 2026-08-14 (antes del deploy) |
+
+### 0008 va ANTES del deploy (al revés que 0006/0007)
+
+Es puramente aditiva: el código publicado hoy no selecciona `public_id` ni lo
+inserta (lo llena el `default`), así que la app vieja funciona igual entre la
+migración y el deploy. Si se deploya primero, en cambio, el `select` de
+/competencia pide una columna que todavía no existe y la página se queda sin
+posts.
 
 ### 0006 + 0007 van separadas a propósito
 

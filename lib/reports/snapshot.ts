@@ -18,10 +18,20 @@ import {
   type TaxonomyItem,
 } from "../competencia/taxonomy";
 
-export const SNAPSHOT_VERSION = 1 as const;
+/**
+ * v2 (2026-08-14): agrega `publicId` a cada post. Los snapshots v1 ya guardados
+ * NO lo tienen y se siguen descargando igual — sus reportes muestran "—" en la
+ * columna de ID. Para que aparezcan hay que regenerar el reporte.
+ */
+export const SNAPSHOT_VERSION = 2;
 
 export type ReportPost = {
   id: string;
+  /**
+   * ID corto que ve el cliente (`competitor_posts.public_id`). Opcional porque
+   * los snapshots v1 se guardaron sin él.
+   */
+  publicId?: string | null;
   username: string;
   permalink: string | null;
   type: string | null;
@@ -76,7 +86,8 @@ export type CategoryBreakdown = {
 };
 
 export type ReportSnapshot = {
-  version: typeof SNAPSHOT_VERSION;
+  /** Número, no literal: en la base conviven snapshots v1 y v2. */
+  version: number;
   generatedAt: string;
   client: { id: string; nombre: string; marca: string | null };
   period: { start: string | null; end: string | null };
@@ -168,6 +179,7 @@ function median(nums: number[]): number {
 
 type RawPost = {
   id: string;
+  public_id: string | null;
   username: string;
   permalink: string | null;
   type: string | null;
@@ -228,7 +240,7 @@ export async function buildReportSnapshot(
   const { data: postsData, error: postsErr } = await supabase
     .from("competitor_posts")
     .select(
-      "id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_manual, hook_type, script_structure, value_pillar, classification_notes",
+      "id, public_id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_manual, hook_type, script_structure, value_pillar, classification_notes",
     )
     .eq("owner_id", ownerId)
     .eq("client_id", input.clientId)
@@ -299,6 +311,7 @@ export async function buildReportSnapshot(
     return {
       post: {
         id: p.id,
+        publicId: p.public_id,
         username: p.username,
         permalink: p.permalink,
         type: p.type,

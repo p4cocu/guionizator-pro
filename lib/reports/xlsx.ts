@@ -30,6 +30,23 @@ function styleHeader(row: ExcelJS.Row) {
   row.height = 24;
 }
 
+/** Fuente monoespaciada para los IDs: se leen carácter por carácter. */
+const MONO = "Consolas";
+
+/**
+ * ID corto del contenido. Es lo que el cliente escribe para pedir un cambio
+ * ("cambiame el Q7F2M9"). Los reportes v1 (generados antes de la migración
+ * 0008) no lo traen en el snapshot congelado y muestran un guion.
+ */
+function publicIdOf(row: ReportRow): string {
+  return row.post.publicId ?? "—";
+}
+
+function styleIdCell(cell: ExcelJS.Cell) {
+  cell.font = { name: MONO, bold: true, size: 11 };
+  cell.alignment = { vertical: "top", horizontal: "left" };
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("es-MX", {
@@ -76,6 +93,7 @@ export async function buildReportXlsx(snapshot: ReportSnapshot): Promise<Buffer>
   });
   plan.columns = [
     { header: "#", key: "n", width: 5 },
+    { header: "ID del contenido", key: "id", width: 16 },
     { header: "Cuenta", key: "cuenta", width: 20 },
     { header: "Por qué funcionó", key: "porque", width: 46 },
     { header: "Tipo de gancho", key: "gancho", width: 20 },
@@ -90,6 +108,7 @@ export async function buildReportXlsx(snapshot: ReportSnapshot): Promise<Buffer>
   snapshot.rows.forEach((r, i) => {
     const row = plan.addRow({
       n: i + 1,
+      id: publicIdOf(r),
       cuenta: `@${r.post.username}`,
       porque: whyItWorks(r),
       gancho: r.classification.hookTypeLabel ?? "Sin clasificar",
@@ -103,6 +122,7 @@ export async function buildReportXlsx(snapshot: ReportSnapshot): Promise<Buffer>
     if (i % 2 === 1) {
       row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ZEBRA } };
     }
+    styleIdCell(row.getCell("id"));
     if (r.post.isOutlier) {
       row.getCell("porque").font = { bold: true, color: { argb: EMERALD } };
     }
@@ -116,6 +136,7 @@ export async function buildReportXlsx(snapshot: ReportSnapshot): Promise<Buffer>
   const guiones = wb.addWorksheet("Guiones", { views: [{ state: "frozen", ySplit: 1 }] });
   guiones.columns = [
     { header: "#", key: "n", width: 5 },
+    { header: "ID del contenido", key: "id", width: 16 },
     { header: "Inspirado en", key: "inspirado", width: 20 },
     { header: "Post original", key: "link", width: 14 },
     { header: "Título", key: "titulo", width: 42 },
@@ -131,6 +152,7 @@ export async function buildReportXlsx(snapshot: ReportSnapshot): Promise<Buffer>
     const script = r.script!;
     const row = guiones.addRow({
       n: i + 1,
+      id: publicIdOf(r),
       inspirado: `@${r.post.username}`,
       link: "",
       titulo: script.title ?? "",
@@ -142,6 +164,7 @@ export async function buildReportXlsx(snapshot: ReportSnapshot): Promise<Buffer>
     if (i % 2 === 1) {
       row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ZEBRA } };
     }
+    styleIdCell(row.getCell("id"));
     row.getCell("titulo").font = { bold: true };
     if (r.post.permalink) {
       row.getCell("link").value = { text: "Ver post", hyperlink: r.post.permalink };
@@ -163,6 +186,7 @@ export async function buildReportXlsx(snapshot: ReportSnapshot): Promise<Buffer>
   // ── Hoja 3: Datos ──────────────────────────────────────────────────────────
   const datos = wb.addWorksheet("Datos", { views: [{ state: "frozen", ySplit: 1 }] });
   datos.columns = [
+    { header: "ID del contenido", key: "id", width: 16 },
     { header: "Cuenta", key: "cuenta", width: 20 },
     { header: "Publicado", key: "fecha", width: 14 },
     { header: "Tipo", key: "tipo", width: 10 },
@@ -186,6 +210,7 @@ export async function buildReportXlsx(snapshot: ReportSnapshot): Promise<Buffer>
   snapshot.rows.forEach((r, i) => {
     const transcription = (r.post.transcription ?? "").trim();
     const row = datos.addRow({
+      id: publicIdOf(r),
       cuenta: `@${r.post.username}`,
       fecha: formatDate(r.post.postedAt),
       tipo: typeLabel(r.post.type),
@@ -208,6 +233,7 @@ export async function buildReportXlsx(snapshot: ReportSnapshot): Promise<Buffer>
     if (i % 2 === 1) {
       row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ZEBRA } };
     }
+    styleIdCell(row.getCell("id"));
     if (r.post.permalink) {
       row.getCell("link").value = { text: "Ver post", hyperlink: r.post.permalink };
       row.getCell("link").font = { color: { argb: "FF0563C1" }, underline: true };

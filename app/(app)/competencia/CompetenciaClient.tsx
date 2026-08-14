@@ -7,6 +7,7 @@ import {
   addManualPost,
   classifyPost,
   deleteCompetitorPost,
+  findPostByPublicId,
   getLatestResults,
   getScrapeStatus,
   listCompetitors,
@@ -16,8 +17,10 @@ import {
   toggleFavoritePost,
   type Competitor,
   type CompetitorPost,
+  type FoundByPublicId,
 } from "./actions";
 import { DIMENSIONS, labelFor, colorFor } from "@/lib/competencia/taxonomy";
+import { looksLikePublicId, normalizePublicId } from "@/lib/competencia/publicId";
 import AdaptarModal from "./AdaptarModal";
 import GanchoModal from "./GanchoModal";
 import ReporteModal from "./ReporteModal";
@@ -57,6 +60,22 @@ function fmt(n: number | null | undefined): string {
 
 function eng(p: CompetitorPost): number {
   return (p.likes ?? 0) + (p.comments ?? 0);
+}
+
+/**
+ * Filtra por ID público (prefijo) o por @cuenta con una sola caja. No hay
+ * ambigüedad que resolver: un ID nunca se parece a un usuario de Instagram.
+ */
+function filterBySearch(list: CompetitorPost[], search: string): CompetitorPost[] {
+  const raw = search.trim();
+  if (!raw) return list;
+  const idQuery = normalizePublicId(raw);
+  const userQuery = raw.toLowerCase().replace(/^@/, "");
+  return list.filter(
+    (p) =>
+      (idQuery.length > 0 && p.public_id.startsWith(idQuery)) ||
+      (userQuery.length > 0 && p.username.includes(userQuery)),
+  );
 }
 
 function fmtAgo(hours: number): string {
@@ -104,6 +123,14 @@ export default function CompetenciaClient({ clients }: Props) {
   const [classifyingId, setClassifyingId] = useState<string | null>(null);
   const [bulkClassify, setBulkClassify] = useState<{ done: number; total: number } | null>(null);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
+  // Búsqueda por ID público o por @cuenta. El ID es el que el cliente dicta
+  // ("cambiame el Q7F2M9"); la cuenta es de paso, para no tener que bajar al
+  // filtro de abajo cuando ya sabés qué competidor te interesa.
+  const [search, setSearch] = useState("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  // Resultado de buscar el ID en las OTRAS marcas (ver el useEffect de abajo).
+  const [crossHit, setCrossHit] = useState<FoundByPublicId | null>(null);
+  const [crossSearching, setCrossSearching] = useState(false);
   // Selección para el reporte. Se guarda por id (no por índice) para que
   // reordenar o filtrar la lista no cambie lo seleccionado.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -180,6 +207,7 @@ export default function CompetenciaClient({ clients }: Props) {
     if (onlyFavorites) list = list.filter((p) => p.is_favorite);
     if (typeFilter !== "all") list = list.filter((p) => p.type === typeFilter);
     if (accountFilter !== "all") list = list.filter((p) => p.username === accountFilter);
+    list = filterBySearch(list, search);
     list.sort((a, b) => {
       switch (sortBy) {
         case "manual":
@@ -200,7 +228,7 @@ export default function CompetenciaClient({ clients }: Props) {
       }
     });
     return list;
-  }, [posts, sortBy, typeFilter, accountFilter, onlyFavorites]);
+  }, [posts, sortBy, typeFilter, accountFilter, onlyFavorites, search]);
 
   // ── Outliers: posts con comentarios ≥3× la mediana de esa cuenta (calculado
   // en el servidor, en getLatestResults, sobre TODOS los posts acumulados —
@@ -208,14 +236,49 @@ export default function CompetenciaClient({ clients }: Props) {
   const outlierPosts = useMemo(() => {
     let list = posts.filter((p) => p.is_outlier);
     if (accountFilter !== "all") list = list.filter((p) => p.username === accountFilter);
+    list = filterBySearch(list, search);
     list.sort((a, b) => (b.outlier_multiple ?? 0) - (a.outlier_multiple ?? 0));
     return list;
-  }, [posts, accountFilter]);
+  }, [posts, accountFilter, search]);
 
   useEffect(() => {
     const t = setTimeout(() => window.instgrm?.Embeds.process(), 300);
     return () => clearTimeout(t);
   }, [sorted, visibleCount, view, outlierPosts]);
+
+  // ── ¿El ID buscado es de otra marca? ──
+  // Solo se va al servidor cuando lo escrito es un ID completo y bien formado
+  // que NO está en la marca abierta: es el caso de "el cliente me dictó un ID y
+  // no sé de qué marca es". Con texto suelto o una cuenta, no se consulta nada.
+  useEffect(() => {
+    const target = normalizePublicId(search);
+    const shouldLookup =
+      looksLikePublicId(search) && !posts.some((p) => p.public_id === target);
+
+    let cancelled = false;
+    // Los setState van dentro de la función async y no en el cuerpo del effect
+    // (regla react-hooks/set-state-in-effect).
+    (async () => {
+      if (!shouldLookup) {
+        setCrossHit(null);
+        setCrossSearching(false);
+        return;
+      }
+      setCrossSearching(true);
+      try {
+        const hit = await findPostByPublicId(target);
+        if (!cancelled) setCrossHit(hit);
+      } catch {
+        // Búsqueda auxiliar: si falla, el buscador local sigue funcionando.
+        if (!cancelled) setCrossHit(null);
+      } finally {
+        if (!cancelled) setCrossSearching(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [search, posts]);
 
   const accountMedians = useMemo(() => {
     const map = new Map<string, number>();
@@ -450,6 +513,17 @@ export default function CompetenciaClient({ clients }: Props) {
     });
   }
 
+  async function handleCopyId(post: CompetitorPost) {
+    try {
+      await navigator.clipboard.writeText(post.public_id);
+      setCopiedId(post.id);
+      setTimeout(() => setCopiedId((cur) => (cur === post.id ? null : cur)), 1400);
+    } catch {
+      // El navegador puede negar el portapapeles (permisos, contexto no seguro).
+      window.prompt("Copia el ID de este contenido:", post.public_id);
+    }
+  }
+
   function toggleSelected(postId: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -529,6 +603,15 @@ export default function CompetenciaClient({ clients }: Props) {
           {p.video_views != null && <span>▶️ {fmt(p.video_views)}</span>}
           <span>❤️ {fmt(p.likes)}</span>
           <span>💬 {fmt(p.comments)}</span>
+          <button
+            type="button"
+            className={`${s.idBadge} ${copiedId === p.id ? s.idBadgeCopied : ""}`}
+            onClick={() => handleCopyId(p)}
+            title="ID de este contenido — clic para copiarlo"
+            aria-label={`Copiar el ID ${p.public_id}`}
+          >
+            {copiedId === p.id ? "¡Copiado!" : p.public_id}
+          </button>
           {p.posted_at && (
             <span className={s.date}>
               {new Date(p.posted_at).toLocaleDateString("es-MX")}
@@ -663,6 +746,10 @@ export default function CompetenciaClient({ clients }: Props) {
   }
 
   const isFresh = hoursSinceScrape != null && hoursSinceScrape < 72;
+
+  // Cuántos posts sobreviven a la búsqueda en la vista abierta (los outliers se
+  // filtran por su propio memo).
+  const searchHits = view === "outliers" ? outlierPosts.length : sorted.length;
 
   const currentClient = clients.find((c) => c.id === clientId);
   const otherClients = clients.filter((c) => c.id !== clientId);
@@ -804,6 +891,58 @@ export default function CompetenciaClient({ clients }: Props) {
           buscar.
         </p>
         {runError && <p className={s.error}>{runError}</p>}
+      </div>
+
+      {/* ── Buscador por ID público o por cuenta ── */}
+      <div className={`card ${s.panel} ${s.searchPanel}`}>
+        <div className={s.searchBar}>
+          <span className={s.searchIcon}>🔎</span>
+          <input
+            className="input"
+            placeholder="Buscar por ID (ej. Q7F2M9) o por @cuenta"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search !== "" && (
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 13 }}
+              onClick={() => setSearch("")}
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+
+        {search.trim() === "" ? (
+          <p className={s.searchHint}>
+            Cada contenido tiene un ID de 6 caracteres debajo de sus métricas. Es el que
+            usa el cliente para pedirte cambios («cambiame el Q7F2M9»), y aparece también
+            en los reportes.
+          </p>
+        ) : searchHits > 0 ? (
+          <p className={s.searchHint}>
+            {searchHits} resultado{searchHits === 1 ? "" : "s"} en{" "}
+            {currentClient?.nombre ?? "esta marca"}.
+          </p>
+        ) : crossSearching ? (
+          <p className={s.searchHint}>Buscando ese ID en tus otras marcas…</p>
+        ) : crossHit ? (
+          <p className={s.searchHint}>
+            <strong>{crossHit.publicId}</strong> es de <strong>{crossHit.clientName}</strong>{" "}
+            (@{crossHit.username}).{" "}
+            <button
+              className={s.searchJump}
+              onClick={() => setClientId(crossHit.clientId)}
+            >
+              Ver en esa marca →
+            </button>
+          </p>
+        ) : (
+          <p className={s.searchHint}>
+            Sin resultados para «{search.trim()}» en {currentClient?.nombre ?? "esta marca"}.
+          </p>
+        )}
       </div>
 
       {/* ── Resultados ── */}
