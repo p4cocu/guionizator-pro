@@ -30,7 +30,7 @@ export default function LoginPage() {
           password,
         });
         if (error) throw error;
-        router.push("/dashboard");
+        router.push("/");
         router.refresh();
       } else {
         const { data, error } = await supabase.auth.signUp({
@@ -42,7 +42,7 @@ export default function LoginPage() {
         });
         if (error) throw error;
         if (data.session) {
-          router.push("/dashboard");
+          router.push("/");
           router.refresh();
         } else {
           setNotice(

@@ -323,8 +323,79 @@ todo lo que usa lo creó `0006`.
 - La confirmación de correo vuelve a la invitación vía
   `/auth/callback?next=/invitacion/<token>` (esa ruta ya soportaba `next`).
 - `app/(app)/layout.tsx`: quien **no es dueño de ninguna marca pero tiene
-  membresías** ve `PortalPending` en vez del shell interno. Se reemplaza por
-  `redirect("/portal")` en la etapa 4.
+  membresías** se redirige a `/portal` (etapa 4). El dueño no: puede entrar a
+  `/portal` a mano, pero su casa sigue siendo el estudio.
+
+### `/portal` (etapa 4) — `lib/portal/access.ts` + `app/(portal)/`
+
+No necesitó migración: `0006` ya traía todo. `/portal` **no** va en
+`PUBLIC_PATHS` (se autentica por sesión).
+
+- **`lib/portal/access.ts`** es el único lugar que resuelve "qué marcas ve este
+  usuario y con qué rol". Lee la vista **`portal_clients`**, que ya trae
+  `where has_client_access(id)` adentro — por eso no hay ningún `or(...)` armado
+  a mano. `getPortalSession()` está envuelto en `cache()` de React para no
+  repetir `getUser()` (valida el JWT contra Auth en cada llamada) por request.
+- ⚠️ **Un miembro no puede leer `clients`** (no hay policy de select para él ahí:
+  esa tabla trae notas internas). Ninguna pantalla del portal hace join a
+  `clients` — `select("…, clients(nombre)")` le vuelve `null`. El nombre de la
+  marca viene de `access.ts`.
+- **Doble candado**: `[clientId]/layout.tsx` valida acceso (**404, no 403**: no
+  se confirma que la marca exista) y cada página revalida su flag con
+  `requirePortalClient(..., slug)`. El flag **también corta para el dueño dentro
+  de `/portal`** — eso es lo que hace que "ver como cliente" sirva para probar
+  los switches. En `(app)` los flags no aplican: son del portal, no del estudio.
+- **`PortalFeature.live`** en `features.ts` (campo de código, sin equivalente en
+  la base): sección habilitada pero sin pantalla todavía → el sidebar la dibuja
+  atenuada con "Pronto". Pasarla a `true` **exige** entregar su `page.tsx` en el
+  mismo cambio, o queda un link roto en la cara del cliente.
+- **Descargas**: `loadReportForUser` (`lib/reports/load.ts`) reemplazó a
+  `loadReport` en `/api/reports/[id]/{xlsx,pdf}`. Dueño = camino de siempre;
+  miembro = el reporte tiene que ser de una marca suya **y** esa marca tener
+  `reportes` prendida. Sin lo segundo, apagar el switch escondía la pantalla
+  pero el link directo al `.xlsx` seguía sirviendo.
+- **Ruteo por rol**: `/` (`app/page.tsx`) es el **único** lugar que decide
+  estudio vs portal, vía `resolveLandingPath`. El login, `/auth/callback` y el
+  middleware mandan todos a `/`. El middleware no consulta la base a propósito:
+  corre en cada request.
+
+### Secciones del portal (etapa 5) — tampoco necesitó migración
+
+Reportes, Competencia, Calendario, Investigación y Guiones. **Instagram queda
+EN PAUSA** (decidido 2026-08-14), no pendiente: `instagram_media` e
+`instagram_accounts` quedaron owner-only en `0006` (haría falta migración) y el
+flujo real exigiría que cada cliente conecte su propia cuenta — mucho OAuth para
+lo que devuelven esas métricas. El slug NO se borra de `features.ts`: sacarlo
+obliga al `ALTER TABLE` del CHECK, y con `live: false` prenderlo no habilita nada.
+
+Qué se le esconde al cliente en cada una (decisiones de producto, no de
+seguridad — la RLS le dejaría verlas):
+
+- **Competencia**: los posts `is_disliked`. Es la marca interna de "esto no
+  sirve"; al cliente le sería ruido inaccionable.
+- **Guiones**: los estados `idea` y `baul`, y las versiones viejas
+  (solo `is_latest`). Mismo criterio con el que `getScripts` esconde el baúl.
+- **Calendario**: nada, pero `etapa0` se rotula "En preparación" — la jerga del
+  taller no le dice nada al cliente.
+
+Módulos que aparecieron:
+
+- **`lib/portal/comments.ts`** — el `insert` de `script_comments` **no manda
+  `owner_id`**: lo pone el trigger `set_owner_from_client`. Si quedara en el
+  miembro, la fila desaparecería de la vista de Paco. No hay `update` ni
+  `delete`: un comentario se responde, no se edita.
+- **`lib/portal/scriptView.ts`** — normaliza el `content` (jsonb sin esquema) y
+  **nunca lanza**. `parseMarkup` devuelve datos, no HTML: el markdown ligero del
+  editor se dibuja sin `dangerouslySetInnerHTML`.
+- **`lib/competencia/outliers.ts`** — `withOutliers` salió de
+  `competencia/actions.ts` (módulo `"use server"`: todo export tiene que ser
+  async, por eso no se podía compartir). Portal y estudio marcan destacados con
+  los mismos umbrales.
+
+**Aprobar es un `update` a `scripts.client_approved_at`** (no hay RPC), así que
+**solo el rol `collaborator`** puede: `scripts_member_update` no le da `update`
+al `viewer`. El feedback vuelve a `/guiones/[id]` vía `ClientFeedbackPanel` +
+`feedbackActions.ts` — se dibuja solo si hay comentarios o aprobación.
 
 ## Respuestas JSON de la IA (`lib/ai/json.ts`)
 

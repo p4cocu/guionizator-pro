@@ -6,6 +6,8 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { listPortalClients } from "../portal/access";
+import { hasFeature } from "../portal/features";
 import type { ReportSnapshot } from "./snapshot";
 
 export type LoadedReport = {
@@ -25,6 +27,54 @@ export async function loadReport(
     .select("id, title, created_at, snapshot")
     .eq("id", reportId)
     .eq("owner_id", ownerId)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  return {
+    id: data.id as string,
+    title: data.title as string,
+    createdAt: data.created_at as string,
+    snapshot: data.snapshot as ReportSnapshot,
+  };
+}
+
+/**
+ * El reporte que puede descargar este usuario, sea el dueño o un miembro del
+ * portal. Devuelve `null` si no le corresponde — las rutas contestan 404 igual
+ * en los dos casos, así que nadie averigua si el id existe.
+ *
+ * Dos caminos, a propósito:
+ *
+ *  - **Dueño**: filtra `owner_id`, exactamente como antes. No mira
+ *    `enabled_features`: los flags son del portal, no de su propio estudio.
+ *  - **Miembro del portal**: el reporte tiene que ser de una marca suya **y**
+ *    esa marca tener la sección `reportes` prendida. Sin esa segunda condición,
+ *    apagar el switch escondería la pantalla pero el link directo al .xlsx
+ *    seguiría sirviendo — que es justo el agujero que el doble candado evita.
+ *
+ * La RLS (`reports_member_select`, migración `0006`) ya impide leer reportes de
+ * otras marcas; el `.in("client_id", …)` de acá es defensa en profundidad.
+ */
+export async function loadReportForUser(
+  supabase: SupabaseClient,
+  userId: string,
+  reportId: string,
+): Promise<LoadedReport | null> {
+  const asOwner = await loadReport(supabase, userId, reportId);
+  if (asOwner) return asOwner;
+
+  const clientIds = (await listPortalClients(userId))
+    .filter((c) => hasFeature(c.features, "reportes"))
+    .map((c) => c.id);
+
+  if (clientIds.length === 0) return null;
+
+  const { data } = await supabase
+    .from("reports")
+    .select("id, title, created_at, snapshot")
+    .eq("id", reportId)
+    .in("client_id", clientIds)
     .maybeSingle();
 
   if (!data) return null;

@@ -56,6 +56,16 @@ export type PortalFeature = {
    * no tiene pantalla propia (se resuelve en las etapas 4-6).
    */
   path: string | null;
+  /**
+   * ¿La pantalla ya está construida? Prender el flag de una sección con
+   * `live: false` no rompe nada: el sidebar del portal la muestra atenuada con
+   * un "Pronto" en vez de linkear a una ruta que no existe.
+   *
+   * Etapa 4 dejó viva solo `reportes`. Las etapas 5 y 6 van pasando las demás a
+   * `true` **junto con** su `page.tsx` — cambiar esto sin la pantalla deja un
+   * link roto en la cara del cliente.
+   */
+  live: boolean;
 };
 
 export const PORTAL_FEATURES: PortalFeature[] = [
@@ -66,6 +76,7 @@ export const PORTAL_FEATURES: PortalFeature[] = [
       "Los reportes de competencia que le generas: plan de grabación, hallazgos y guiones, en .xlsx y .pdf.",
     paid: false,
     path: "reportes",
+    live: true,
   },
   {
     slug: "guiones",
@@ -74,6 +85,7 @@ export const PORTAL_FEATURES: PortalFeature[] = [
       "Los guiones de su marca. Puede leerlos, comentarlos y —si su rol es colaborador— editarlos.",
     paid: false,
     path: "guiones",
+    live: true,
   },
   {
     slug: "calendario",
@@ -81,6 +93,7 @@ export const PORTAL_FEATURES: PortalFeature[] = [
     description: "El calendario de contenido de su marca: qué se publica y cuándo.",
     paid: false,
     path: "calendario",
+    live: true,
   },
   {
     slug: "competencia",
@@ -89,13 +102,26 @@ export const PORTAL_FEATURES: PortalFeature[] = [
       "Los posts de sus competidores con métricas y clasificación. Solo lectura: buscar competencia sigue siendo tuyo.",
     paid: false,
     path: "competencia",
+    live: true,
   },
   {
+    // 🚧 EN PAUSA (decidido 2026-08-14). El slug NO se borra: sacarlo de acá
+    // obliga al `ALTER TABLE … clients_enabled_features_check`, y prender el
+    // switch no le da acceso a nada mientras `live` sea false.
+    //
+    // Dos razones para no hacerla:
+    //  1. Requiere migración: `instagram_media` e `instagram_accounts` quedaron
+    //     owner-only en `0006` (están en la lista de tablas que el portal NO
+    //     toca), así que un miembro no puede leerlas.
+    //  2. El flujo real sería que cada cliente conecte SU cuenta — bastante
+    //     trabajo de OAuth para lo poco que devuelven hoy esas métricas.
     slug: "instagram",
     label: "Instagram",
-    description: "Las métricas de la cuenta de Instagram conectada a su marca.",
+    description:
+      "En pausa: mostrarle sus métricas de Instagram exige que conecte su propia cuenta, y hoy no compensa el trabajo. Prenderlo no habilita nada.",
     paid: false,
     path: "instagram",
+    live: false,
   },
   {
     slug: "investigacion",
@@ -104,6 +130,7 @@ export const PORTAL_FEATURES: PortalFeature[] = [
       "El perfil de marca y la investigación que cargaste: qué vende, cliente ideal, dolor, deseo y tono.",
     paid: false,
     path: "investigacion",
+    live: true,
   },
   {
     slug: "generar_ia",
@@ -112,6 +139,7 @@ export const PORTAL_FEATURES: PortalFeature[] = [
       "Deja que el cliente genere guiones nuevos con IA desde el portal. Gasta tu API key de Anthropic: por eso nace apagado y admite un tope mensual.",
     paid: true,
     path: "generar",
+    live: false,
   },
 ];
 
@@ -167,6 +195,31 @@ export function portalFeatureLabel(slug: string): string {
 export function sanitizeFeatures(input: readonly string[]): PortalFeatureSlug[] {
   const wanted = new Set(input.filter(isPortalFeatureSlug));
   return PORTAL_FEATURE_SLUGS.filter((slug) => wanted.has(slug));
+}
+
+/**
+ * Las secciones que ve el cliente, en el orden canónico. Es lo que dibuja el
+ * sidebar de `/portal/[clientId]`.
+ *
+ * Incluye las que todavía no tienen pantalla (`live: false`): el sidebar las
+ * muestra atenuadas con "Pronto". Ocultarlas sería mentirle al cliente sobre lo
+ * que ya le habilitaste.
+ */
+export function enabledPortalFeatures(
+  enabled: readonly string[] | null | undefined,
+): PortalFeature[] {
+  const on = new Set(enabled ?? []);
+  return PORTAL_FEATURES.filter((f) => on.has(f.slug));
+}
+
+/**
+ * La primera sección habilitada que ya tiene pantalla, o `null` si la marca no
+ * tiene ninguna todavía. `/portal/[clientId]` redirige acá.
+ */
+export function firstLivePortalFeature(
+  enabled: readonly string[] | null | undefined,
+): PortalFeature | null {
+  return enabledPortalFeatures(enabled).find((f) => f.live && f.path) ?? null;
 }
 
 /** ¿Esta marca tiene habilitada esta sección? */

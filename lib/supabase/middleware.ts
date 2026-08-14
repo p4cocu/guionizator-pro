@@ -66,9 +66,13 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Con sesión, /login no tiene nada que ofrecer. Se manda a `/` y NO a
+  // `/dashboard`: quién va al estudio y quién al portal lo decide `app/page.tsx`
+  // (consultando la base). Acá no se puede: el middleware corre en CADA request
+  // y meterle dos consultas sería pagar ese costo en toda la app.
   if (user && pathname === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 

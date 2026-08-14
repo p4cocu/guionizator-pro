@@ -5,8 +5,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { loadReport, downloadFilename } from "@/lib/reports/load";
+import { getPortalSession } from "@/lib/portal/access";
+import { loadReportForUser, downloadFilename } from "@/lib/reports/load";
 import { buildReportXlsx } from "@/lib/reports/xlsx";
 
 export const runtime = "nodejs";
@@ -14,13 +14,12 @@ export const maxDuration = 60;
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await getPortalSession();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const report = await loadReport(supabase, user.id, id);
+  // Sirve al dueño y al miembro del portal (que además necesita la sección
+  // `reportes` prendida en su marca). Ver `loadReportForUser`.
+  const report = await loadReportForUser(supabase, user.id, id);
   if (!report) return NextResponse.json({ error: "Reporte no encontrado." }, { status: 404 });
 
   try {

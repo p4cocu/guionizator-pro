@@ -1,0 +1,110 @@
+/* Panel "Feedback del cliente" al pie del detalle de guion. */
+
+.panel {
+  margin-top: 32px;
+  padding: 20px 22px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+  background-color: var(--glass-base);
+  background-image: var(--glass-overlay);
+  box-shadow: var(--glass-inset), var(--glass-shadow);
+  display: grid;
+  gap: 14px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.approved {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--emerald);
+}
+
+.pending {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--signal);
+}
+
+.empty {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.comments {
+  display: grid;
+  gap: 9px;
+}
+
+.comment {
+  padding: 11px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--glass-border);
+}
+
+/* Las respuestas propias se hunden un poco para leer el hilo de un vistazo. */
+.mine {
+  opacity: 0.78;
+  margin-left: 18px;
+}
+
+.commentHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.author {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.date {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.body {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.form {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.form :global(.textarea) {
+  width: 100%;
+}
+
+.form :global(.btn) {
+  font-size: 11px;
+  padding: 9px 16px;
+}
+
+.error {
+  font-size: 12.5px;
+  color: var(--flare);
+}

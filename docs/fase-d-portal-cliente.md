@@ -1,7 +1,8 @@
 # Fase D — Portal de cliente (login propio + secciones configurables)
 
 > Plan aprobado 2026-08-12. Reemplaza el esbozo de "Fase D" en `pendientes.md`.
-> **Estado: etapas 1 y 2 hechas** (2026-08-13). Migraciones desde `0006`.
+> **Estado: etapas 1 a 5 hechas** (2026-08-14). Migraciones desde `0006`.
+> Falta la 6 (tope del add-on de IA) y la sección Instagram del portal.
 
 ## Desvíos del plan original (decididos sobre la marcha)
 
@@ -243,8 +244,93 @@ cambia el rol y las revoca.
    es el único que puede: el invitado no tiene policies ahí).
 5. Si no tiene cuenta, se registra en esa misma pantalla con el email fijado; el
    mail de confirmación vuelve vía `/auth/callback?next=/invitacion/<token>`.
-6. Aceptada la invitación, hasta que exista `/portal` el miembro ve
-   `PortalPending` ("tu portal está en camino") en vez del shell interno.
+6. Aceptada la invitación, el miembro cae en `/portal` (etapa 4).
+
+### `/portal` (etapa 4) — `lib/portal/access.ts` + `app/(portal)/`
+
+**Sin migración**: `0006` ya había creado todo lo que la etapa consume
+(`reports_member_select`, la vista `portal_clients`, `client_members`). La
+`0009` sigue libre. `/portal` **no** va en `PUBLIC_PATHS`: se autentica por
+sesión.
+
+- **`lib/portal/access.ts`** es el único lugar que responde "qué marcas ve este
+  usuario y con qué rol". La lista sale de la vista `portal_clients`, que ya
+  trae `where has_client_access(id)` adentro — por eso no hay ningún `or(...)`
+  armado a mano. `getPortalSession()` va envuelto en `cache()` de React: el
+  layout, la página y la ruta de descarga la piden por separado y `getUser()`
+  valida el JWT contra el servidor de Auth en cada llamada.
+- **Rol `owner`** = ausencia de membresía sobre una marca que la vista igual
+  devolvió, lo que solo puede pasar si sos el dueño. Sirve para el aviso de
+  "estás viendo el portal como tu cliente".
+- ⚠️ **Un miembro no puede leer `clients`.** Ninguna pantalla del portal hace
+  join a esa tabla (`select("…, clients(nombre)")` le vuelve `null`): el nombre
+  de la marca viaja desde `access.ts`.
+- **Doble candado**, como estaba planeado: `[clientId]/layout.tsx` valida el
+  acceso (404, no 403 — no le confirmamos a nadie que la marca existe) y cada
+  página revalida su flag con `requirePortalClient(..., "reportes")`. **El flag
+  también corta para el dueño dentro de `/portal`**, que es lo que hace que
+  "ver como cliente" sirva para probar los switches. En `(app)` los flags no
+  existen: son del portal, no del estudio.
+- **`PortalFeature.live`** (nuevo campo en `features.ts`, sin equivalente en la
+  base): una sección habilitada pero todavía sin pantalla se dibuja atenuada con
+  "Pronto" en vez de linkear a una ruta que no existe. Etapas 5 y 6 la pasan a
+  `true` **junto con** su `page.tsx`.
+- **Descargas**: `loadReportForUser` (`lib/reports/load.ts`) reemplazó a
+  `loadReport` en las dos rutas de `/api/reports/[id]`. El camino de dueño es el
+  de siempre; el de miembro exige que el reporte sea de una marca suya **y** que
+  esa marca tenga `reportes` prendida. Sin esa segunda condición, apagar el
+  switch escondía la pantalla pero el link directo al `.xlsx` seguía sirviendo.
+- **Ruteo por rol**: `/` (`app/page.tsx`) es el único lugar que decide estudio
+  vs portal, vía `resolveLandingPath`. El login, el callback de Auth y el
+  middleware mandan todos a `/`. El middleware no consulta la base: corre en
+  cada request.
+- `PortalPending` se borró; su lugar lo ocupan `PortalNotice` (sin marca
+  asignada) y `[clientId]/page.tsx` (sin secciones habilitadas).
+
+### Secciones y feedback (etapa 5)
+
+**Tampoco necesitó migración**: `script_comments`, `scripts.client_approved_at`
+y todas las policies de miembro venían de `0006`. La `0009` sigue libre.
+
+Secciones nuevas, todas de **solo lectura** salvo Guiones:
+
+| Sección | Qué muestra | Decisión que se tomó |
+|---|---|---|
+| Competencia | Posts de competidores con métricas, clasificación de la IA, transcripción y el ID público | **Esconde los `is_disliked`**: es la señal interna de "esto no sirve"; al cliente le sería ruido inaccionable |
+| Calendario | Plan del mes por semana, navegable con `?month=&year=` | **Cero JS**: navegación con `<Link>`. Y `etapa0` se muestra como "En preparación" — es jerga del taller |
+| Guiones | Guiones vigentes, con comentarios y aprobación | **Esconde `idea` y `baul`**: apuntes crudos y congelados. Solo `is_latest`: el historial de versiones es herramienta de taller |
+| Investigación | Perfil de marca + productos + investigación cargada | Los datos de la marca salen de `portal_clients`, **nunca** de `clients` |
+
+- **`lib/portal/comments.ts`** — el `insert` **no manda `owner_id`**: lo pone el
+  trigger `set_owner_from_client`. Si quedara en el miembro, la fila
+  desaparecería de la vista de Paco. No hay `update` ni `delete` para nadie: un
+  comentario se responde, no se edita.
+- **Aprobar es un `update` a `scripts.client_approved_at`**, como decía el plan
+  (no hay RPC). Por lo tanto **solo el rol `collaborator`** puede: la policy
+  `scripts_member_update` no le da `update` al `viewer`. La UI le esconde el
+  botón y la action lo rechaza con un mensaje, no con un error de servidor.
+- **El feedback vuelve a la pantalla de Paco**: `ClientFeedbackPanel` al pie de
+  `/guiones/[id]` muestra el hilo y el estado de aprobación, y deja responder
+  (`feedbackActions.ts`). Sin eso el portal sería un buzón sin destinatario.
+  Se dibuja **solo si hay comentarios o aprobación**, para no meter un bloque
+  vacío en cada guion.
+- **`lib/competencia/outliers.ts`** — `withOutliers` salió de
+  `app/(app)/competencia/actions.ts` (un módulo `"use server"`, donde todo export
+  tiene que ser async y por eso no se podía compartir). Ahora el portal marca los
+  destacados con exactamente los mismos umbrales.
+- **`lib/portal/scriptView.ts`** — normaliza el `content` (jsonb, sin esquema) a
+  algo dibujable y **nunca lanza**: un guion viejo con otra forma se muestra
+  degradado, no rompe la pantalla del cliente. `parseMarkup` devuelve datos y no
+  HTML, así el markdown ligero del editor se dibuja sin
+  `dangerouslySetInnerHTML`.
+
+**Instagram queda EN PAUSA** (decidido 2026-08-14), no pendiente. Dos razones:
+`instagram_media` e `instagram_accounts` están en la lista de tablas que `0006`
+dejó **owner-only** a propósito, así que haría falta una migración nueva; y el
+flujo real sería que cada cliente conecte su propia cuenta — mucho OAuth para lo
+poco que hoy devuelven esas métricas. El slug **no se borra** de
+`lib/portal/features.ts` (sacarlo obligaría al `ALTER TABLE` del CHECK) y con
+`live: false` prender el switch no habilita nada.
 
 ---
 
@@ -255,9 +341,10 @@ cambia el rol y las revoca.
 | ✅ 1 | Migración `0006` completa (tablas, RLS, vista, mover secretos) + adaptar `lib/competencia/apifyToken.ts` y `clientes/actions.ts` a `client_secrets` | SQL a mano: con el uid de un miembro de prueba, `select` a cada tabla debe devolver solo lo suyo |
 | ✅ 2 | `lib/portal/{features,members,usage}.ts` + panel "Portal del cliente" en `/clientes/[id]` (flags + add-on de IA + miembros) | Prender/apagar flags y ver el array en la DB |
 | ✅ 3 | Invitaciones (`lib/portal/invites.ts`) + `/invitacion/[token]` + `PUBLIC_PATHS` + `PortalPending` | Invitar a un mail propio y aceptar |
-| 4 | `/portal` con Reportes | Entrar con el usuario invitado |
-| 5 | Guiones, Calendario, Competencia + comentarios/aprobación | |
+| ✅ 4 | `/portal` con Reportes (`lib/portal/access.ts`, `app/(portal)/`) | Entrar con el usuario invitado |
+| ✅ 5 | Guiones (+ comentarios/aprobación), Calendario, Competencia, Investigación | Comentar desde el portal y ver el hilo en `/guiones/[id]` |
 | 6 | Add-on de IA: tope, `ai_usage_log`, corte al pasarse | |
+| — | Instagram en el portal: **necesita migración** (hoy `instagram_media` es owner-only) | |
 
 Etapas 1–3 no cambian nada de lo que Paco ve hoy. La 1 es la única con riesgo
 real (toca RLS de tablas en uso) y conviene aplicarla con la app quieta.
