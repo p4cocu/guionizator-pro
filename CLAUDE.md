@@ -251,6 +251,34 @@ owner-only y es invisible aunque la UI falle.
 - Cuando llegue la etapa 3: **`/invitacion` va en `PUBLIC_PATHS`** en el mismo
   cambio que se cree la ruta.
 
+### Panel de configuración (etapa 2) — `lib/portal/*`
+
+Sección "Portal del cliente" en `/clientes/[id]`
+(`[id]/PortalSection.tsx` + `clientes/portalActions.ts`). No necesitó migración:
+todo lo que usa lo creó `0006`.
+
+- **`lib/portal/features.ts`** — fuente de verdad de los slugs de
+  `clients.enabled_features` (`slug`, `label`, `description`, `paid`, `path`),
+  con la unión `PortalFeatureSlug` cerrada y un assert de compilación para que
+  renombrar un slug rompa el build. Misma regla dura que `taxonomy.ts`: tocar un
+  slug **exige** el `ALTER TABLE … clients_enabled_features_check` en la misma
+  entrega. `sanitizeFeatures()` es el único camino de escritura — filtra
+  desconocidos, deduplica y ordena — así nunca sale un array que viole el CHECK.
+  El módulo es puro (no importa Supabase) para poder usarse desde el cliente.
+- **`lib/portal/members.ts`** — `client_members` guarda `user_id`, no email. Las
+  filas se leen con el **cliente de sesión** (la policy `client_members_owner_all`
+  ya alcanza); solo los emails salen de `auth.admin.getUserById` con service role,
+  y si eso falla la fila cae al uuid en vez de tumbar el perfil. `PortalMemberRole`
+  espeja el `CHECK` de `client_members.role`.
+- **`lib/portal/usage.ts`** — consumo del add-on de IA: cuenta filas de
+  `ai_usage_log` del mes en curso, cortado en **UTC** (la misma referencia que
+  `created_at`). El insert de esas filas es de la etapa 6.
+- El switch del add-on de IA **es** el slug `generar_ia` dentro de
+  `enabled_features`; `clients.ai_generation_limit` es solo el número
+  (`null` = sin tope).
+- Prender un flag no le da acceso a nadie: define qué se dibuja en `/portal`
+  (etapa 4). Quién entra lo deciden las membresías, y qué puede leer, la RLS.
+
 ## Respuestas JSON de la IA (`lib/ai/json.ts`)
 
 Todo endpoint que le pide JSON a Claude pasa por `lib/ai/json.ts` — **nunca

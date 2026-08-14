@@ -5,7 +5,10 @@ import {
   getApifyTokenState,
   type ApifyTokenState,
 } from "@/lib/competencia/apifyToken";
+import { listClientMembers, type PortalMember } from "@/lib/portal/members";
+import { emptyAiUsage, getMonthlyAiUsage, type AiUsageSummary } from "@/lib/portal/usage";
 import ClienteForm from "../ClienteForm";
+import PortalSection from "./PortalSection";
 import ResearchSection from "./ResearchSection";
 import ProductsSection from "./ProductsSection";
 import InstagramSection from "./InstagramSection";
@@ -43,12 +46,32 @@ export default async function ClienteDetailPage({ params }: Props) {
     return EMPTY_APIFY_TOKEN_STATE;
   });
 
+  // Igual que Apify: ni la lista de miembros ni el consumo de IA valen tumbar el
+  // perfil. Los emails salen de `auth.users` vía service role y el conteo de
+  // `ai_usage_log`; si algo de eso falla, el panel se dibuja vacío y el motivo
+  // queda en el log del servidor.
+  const membersPromise: Promise<PortalMember[]> = listClientMembers(supabase, id, user.id).catch(
+    (e) => {
+      console.error("[clientes/[id]] no se pudieron leer los miembros del portal:", e);
+      return [];
+    },
+  );
+
+  const usagePromise: Promise<AiUsageSummary> = getMonthlyAiUsage(supabase, id, user.id).catch(
+    (e) => {
+      console.error("[clientes/[id]] no se pudo leer el consumo de IA:", e);
+      return emptyAiUsage();
+    },
+  );
+
   const [
     { data: cliente },
     { data: research },
     { data: products },
     { data: igAccount },
     apify,
+    members,
+    aiUsage,
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -77,6 +100,8 @@ export default async function ClienteDetailPage({ params }: Props) {
       .eq("owner_id", user.id)
       .maybeSingle(),
     apifyState,
+    membersPromise,
+    usagePromise,
   ]);
 
   if (!cliente) notFound();
@@ -99,6 +124,14 @@ export default async function ClienteDetailPage({ params }: Props) {
       />
       <div style={{ maxWidth: 760 }}>
         <ProductsSection clientId={id} products={products ?? []} />
+        {/* Configuración de qué ve el cliente en /portal (Fase D). */}
+        <PortalSection
+          clientId={id}
+          initialFeatures={(cliente.enabled_features as string[] | null) ?? []}
+          initialLimit={(cliente.ai_generation_limit as number | null) ?? null}
+          usage={aiUsage}
+          initialMembers={members}
+        />
         {/* Solo el estado enmascarado: `apify_token_cipher` NUNCA cruza al cliente. */}
         <ApifySection clientId={id} initial={apify} />
         <InstagramSection clientId={id} account={igAccount ?? null} />

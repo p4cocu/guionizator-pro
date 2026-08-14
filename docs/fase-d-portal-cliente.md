@@ -1,7 +1,21 @@
 # Fase D — Portal de cliente (login propio + secciones configurables)
 
 > Plan aprobado 2026-08-12. Reemplaza el esbozo de "Fase D" en `pendientes.md`.
-> **Nada de esto está implementado todavía.** Migraciones desde `0006`.
+> **Estado: etapas 1 y 2 hechas** (2026-08-13). Migraciones desde `0006`.
+
+## Desvíos del plan original (decididos sobre la marcha)
+
+1. **El cliente edita sus guiones igual que Paco** (etapa 1). En vez de un
+   update acotado a `client_approved_at`, la policy `scripts_member_update`
+   habilita el `update` completo al rol `collaborator`, y el trigger
+   `scripts_guard_update` congela `owner_id`/`client_id` y llena
+   `last_edited_by` / `last_edited_at`. **No hay RPC de aprobación**: aprobar es
+   una edición más.
+2. **El `drop` de las columnas viejas de Apify fue en `0007`**, aplicada después
+   del deploy, para que la app publicada siguiera funcionando entre una y otra.
+3. **La etapa 2 no necesitó migración**: `enabled_features`,
+   `ai_generation_limit`, `ai_usage_log` y `client_members` ya venían de `0006`.
+   El `0008` queda libre para las invitaciones.
 
 ## Qué se quiere
 
@@ -202,6 +216,13 @@ Fuente de verdad de los flags: **`lib/portal/features.ts`** (slug, label,
 descripción, si es de pago), al estilo de `lib/competencia/taxonomy.ts`. Tocar un
 slug obliga a tocar el `CHECK` en la misma entrega.
 
+Implementado en: `app/(app)/clientes/[id]/PortalSection.tsx` (UI),
+`app/(app)/clientes/portalActions.ts` (server actions),
+`lib/portal/{features,members,usage}.ts`. Las **invitaciones pendientes** no
+están en el panel todavía: son la etapa 3. Hasta entonces las membresías se
+cargan a mano con un `insert` en `client_members`; el panel las lista, les
+cambia el rol y las revoca.
+
 ### Flujo de invitación
 
 1. Paco invita (email + rol) → server action con service role.
@@ -219,8 +240,8 @@ slug obliga a tocar el `CHECK` en la misma entrega.
 
 | Etapa | Qué | Verificación |
 |---|---|---|
-| 1 | Migración `0006` completa (tablas, RLS, vista, mover secretos) + adaptar `lib/competencia/apifyToken.ts` y `clientes/actions.ts` a `client_secrets` | SQL a mano: con el uid de un miembro de prueba, `select` a cada tabla debe devolver solo lo suyo |
-| 2 | `lib/portal/features.ts` + panel "Portal del cliente" en `/clientes/[id]` (flags + miembros) | Prender/apagar flags y ver el array en la DB |
+| ✅ 1 | Migración `0006` completa (tablas, RLS, vista, mover secretos) + adaptar `lib/competencia/apifyToken.ts` y `clientes/actions.ts` a `client_secrets` | SQL a mano: con el uid de un miembro de prueba, `select` a cada tabla debe devolver solo lo suyo |
+| ✅ 2 | `lib/portal/{features,members,usage}.ts` + panel "Portal del cliente" en `/clientes/[id]` (flags + add-on de IA + miembros) | Prender/apagar flags y ver el array en la DB |
 | 3 | Invitaciones + `/invitacion/[token]` + `PUBLIC_PATHS` | Invitar a un mail propio y aceptar |
 | 4 | `/portal` con Reportes | Entrar con el usuario invitado |
 | 5 | Guiones, Calendario, Competencia + comentarios/aprobación | |
