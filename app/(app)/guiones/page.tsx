@@ -98,6 +98,12 @@ function ScriptCard({ script, hideClient }: { script: ScriptRow; hideClient: boo
           <RecordingTypeBadge type={script.recording_type} />
         </div>
       )}
+      {/* Lo pidió el cliente desde su portal (add-on de IA, Fase D etapa 6). */}
+      {script.generated_by && (
+        <div>
+          <span className={styles.clientGenerated}>✦ Generado por el cliente</span>
+        </div>
+      )}
       {!hideClient && <p className={styles.cardClient}>{clientName}</p>}
       <p className={styles.cardStructure}>{script.title || <span style={{ opacity: 0.45 }}>Sin título</span>}</p>
       <p style={{ fontSize: 11, color: "var(--text-dim)", margin: 0 }}>{script.structure_name}</p>

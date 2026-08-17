@@ -703,6 +703,54 @@
   width: 120px;
 }
 
+/* Modo de generación (etapa 6): ocupa la fila entera debajo del tope. */
+.modeField {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modeOptions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.modeOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.modeOptionOn {
+  border-color: var(--signal);
+  background: rgba(255, 214, 0, 0.07);
+}
+
+.modeRadio {
+  margin-top: 3px;
+  accent-color: var(--signal);
+}
+
+.modeLabel {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.modeDescription {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
 .usageText {
   font-size: 13px;
   color: var(--text-muted);

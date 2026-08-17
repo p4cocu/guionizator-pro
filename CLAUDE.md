@@ -62,6 +62,7 @@ estos, dilo explícitamente y entrega la migración a Paco.
 | `competitor_posts.hook_type` | `resultado`, `vacio_info`, `error`, `controversia`, `dolor_comun`, `filtrante`, `negativo` |
 | `competitor_posts.script_structure` | `how_to`, `golpe_valor`, `vacio_info`, `espejo`, `controversial`, `momento_wtf`, `problema_invisible` |
 | `competitor_posts.value_pillar` | `utilidad_practica`, `validacion_emocional`, `revelacion`, `curaduria`, `disrupcion`, `actualidad` |
+| `clients.ai_generation_mode` | `simple`, `completo` (fuente de verdad en TS: `lib/portal/generationMode.ts`) |
 
 `baul` = ideas buenas pero congeladas (falta pulir herramientas para producirlas).
 **Se oculta por defecto** en la lista de Guiones (`getScripts` filtra `neq baul` si no hay
@@ -391,6 +392,47 @@ Módulos que aparecieron:
   `competencia/actions.ts` (módulo `"use server"`: todo export tiene que ser
   async, por eso no se podía compartir). Portal y estudio marcan destacados con
   los mismos umbrales.
+
+### Generación con IA en el portal (etapa 6) — migración `0009`
+
+El add-on de pago: prender el slug `generar_ia` le da al cliente
+`/portal/[id]/generar`. Migración `0009_portal_generacion_ia.sql` (aditiva,
+**antes** del deploy).
+
+- **`clients.ai_generation_mode`** (columna tipo-enum, `CHECK`): `simple`
+  (brief → guion, 1 llamada) o `completo` (brief → Big Idea → estructura →
+  guion). Lo elige Paco por marca en el panel del add-on. Fuente de verdad
+  `lib/portal/generationMode.ts` — misma regla dura que `taxonomy.ts`. La vista
+  `portal_clients` suma la columna (el miembro no puede leer `clients`).
+- **`scripts.generated_by`** — quién lo pidió desde el portal (`null` = Paco).
+  Alimenta el badge "Generado por el cliente" en `/guiones` y la lista "lo que
+  generaste antes" del portal. El trigger `scripts_guard_update` ahora también
+  **congela** esta columna cuando quien edita no es el dueño.
+- **Nada se escribe con la sesión del miembro.** No hay policy de insert sobre
+  `scripts` ni sobre `ai_usage_log`, y no la va a haber: con su JWT y la anon key
+  el cliente puede llamar a PostgREST directo, así que una policy de insert sería
+  **regalarle el medidor de un add-on de pago**. Todo pasa por service role en
+  `lib/portal/generate.ts`, que filtra la pertenencia a mano.
+- **Contexto de la marca sin `notas`**: se lee con service role (el miembro no
+  ve `clients`) y se le saca `notas`, que son apuntes internos — todo lo que
+  entra al prompt puede salir parafraseado en el guion.
+- **El tope**: `assertCanGenerate` corre **antes** de llamar a la API (pasarse
+  no gasta tokens) y `logAiGeneration` **después** de que respondió (un error de
+  la API no come cupo). Una fila de `ai_usage_log` = **un guion generado**; los
+  pasos intermedios no cuentan y regenerar sí. Dos pestañas en paralelo pueden
+  colarse por una: asumido a propósito, ver el comentario en `usage.ts`.
+- **El guion se guarda en `preproduccion`**, no en `idea`: el portal esconde
+  `idea` y el cliente perdería de vista lo que acaba de generar. **No** se crea
+  la idea en `content_calendar` (a diferencia de `saveScriptWithNewIdea`):
+  cuándo se publica lo decide Paco. Generar y guardar son pasos separados —
+  regenerar cuesta cupo, pero no le llena el tablero de borradores.
+- Rutas `POST /api/portal/generar/{big-idea,estructuras,guion}`, autenticadas
+  **por sesión** ⇒ **no** van en `PUBLIC_PATHS`. La del guion hereda el margen
+  contra el límite de Netlify de `/api/ai/script` (mismo modelo, mismos tokens).
+- ⚠️ Los prompts están **duplicados** entre `lib/portal/generate.ts` y
+  `/api/ai/{big-idea,structures,script}` (esas rutas son handlers, no módulos
+  importables). Al tocar uno, revisar el otro o el cliente recibe guiones con
+  otro criterio que los de Paco.
 
 **Aprobar es un `update` a `scripts.client_approved_at`** (no hay RPC), así que
 **solo el rol `collaborator`** puede: `scripts_member_update` no le da `update`

@@ -1,8 +1,8 @@
 # Fase D — Portal de cliente (login propio + secciones configurables)
 
 > Plan aprobado 2026-08-12. Reemplaza el esbozo de "Fase D" en `pendientes.md`.
-> **Estado: etapas 1 a 5 hechas** (2026-08-14). Migraciones desde `0006`.
-> Falta la 6 (tope del add-on de IA) y la sección Instagram del portal.
+> **Estado: etapas 1 a 6 hechas** (2026-08-14). Migraciones desde `0006`.
+> Queda solo Instagram, que está **en pausa** (no pendiente) por decisión de Paco.
 
 ## Desvíos del plan original (decididos sobre la marcha)
 
@@ -14,9 +14,10 @@
    una edición más.
 2. **El `drop` de las columnas viejas de Apify fue en `0007`**, aplicada después
    del deploy, para que la app publicada siguiera funcionando entre una y otra.
-3. **Ni la etapa 2 ni la 3 necesitaron migración**: `enabled_features`,
-   `ai_generation_limit`, `ai_usage_log`, `client_members` y `client_invites`
-   ya venían completas de `0006`. El `0008` sigue sin usarse.
+3. **Las etapas 2 a 5 no necesitaron migración**: `enabled_features`,
+   `ai_generation_limit`, `ai_usage_log`, `client_members`, `client_invites`,
+   `script_comments` y las policies de miembro ya venían completas de `0006`.
+   La etapa 6 sí: `0009_portal_generacion_ia.sql`.
 4. **La invitación se entrega como link copiable**, no por mail (ver "Flujo de
    invitación"). El envío automático quedó como pendiente.
 
@@ -250,7 +251,7 @@ cambia el rol y las revoca.
 
 **Sin migración**: `0006` ya había creado todo lo que la etapa consume
 (`reports_member_select`, la vista `portal_clients`, `client_members`). La
-`0009` sigue libre. `/portal` **no** va en `PUBLIC_PATHS`: se autentica por
+`0009` quedó libre hasta la etapa 6. `/portal` **no** va en `PUBLIC_PATHS`: se autentica por
 sesión.
 
 - **`lib/portal/access.ts`** es el único lugar que responde "qué marcas ve este
@@ -290,7 +291,7 @@ sesión.
 ### Secciones y feedback (etapa 5)
 
 **Tampoco necesitó migración**: `script_comments`, `scripts.client_approved_at`
-y todas las policies de miembro venían de `0006`. La `0009` sigue libre.
+y todas las policies de miembro venían de `0006`. La `0009` la estrenó la etapa 6.
 
 Secciones nuevas, todas de **solo lectura** salvo Guiones:
 
@@ -324,6 +325,45 @@ Secciones nuevas, todas de **solo lectura** salvo Guiones:
   HTML, así el markdown ligero del editor se dibuja sin
   `dangerouslySetInnerHTML`.
 
+### Generación con IA (etapa 6) — migración `0009_portal_generacion_ia.sql`
+
+La primera etapa desde la `0006` que **sí** necesitó migración, y es aditiva:
+se aplica **antes** del deploy (como la `0008`).
+
+| Cambio | Por qué |
+|---|---|
+| `clients.ai_generation_mode` (`simple` \| `completo`, con `CHECK`) | Paco decidió que el flujo se elige **por marca**: hay clientes que quieren pedir y recibir, y otros que quieren elegir el ángulo. Fuente de verdad `lib/portal/generationMode.ts` |
+| `scripts.generated_by` | Distinguir en `/guiones` lo que pidió el cliente, y poder listarle "lo que generaste antes" en el portal |
+| La vista `portal_clients` suma `ai_generation_mode` | Un miembro no puede leer `clients`: la vista es su única ventana |
+| `scripts_guard_update` congela también `generated_by` | La policy `scripts_member_update` le da al `collaborator` un update de fila entera y la RLS no limita columnas — sin esto podría atribuirse un guion |
+
+Decisiones que conviene no re-discutir:
+
+- **Ninguna policy nueva de escritura, a propósito.** El cliente no tiene
+  `insert` sobre `scripts` ni sobre `ai_usage_log`, y no lo va a tener: con su
+  JWT y la anon key puede llamar a PostgREST directo, así que una policy de
+  insert sería **regalarle el medidor de un add-on de pago**. Todo el guardado y
+  todo el log van con service role desde `lib/portal/generate.ts`.
+- **`clients.notas` no entra al prompt.** Son apuntes internos sobre la marca, y
+  todo lo que entra al prompt puede volver parafraseado en el guion. El resto
+  del perfil sí va: es información que el cliente dio.
+- **Orden del tope**: chequeo antes de llamar a la API (pasarse no gasta
+  tokens), registro después de que respondió (un error de la API no come cupo).
+  Una fila = un guion generado; los pasos intermedios del modo completo no
+  cuentan y regenerar sí. Dos pestañas en paralelo pueden colarse por una:
+  asumido, ver el comentario en `usage.ts`.
+- **Generar y guardar son pasos separados.** Generar cuesta cupo siempre;
+  guardar es gratis y opcional. Así el cliente puede regenerar sin llenarle el
+  tablero a Paco de borradores que no le convencieron.
+- **Se guarda en `preproduccion`**, no en `idea`: el portal esconde `idea` y el
+  cliente perdería de vista lo que acaba de generar. Y **no** se crea la idea en
+  `content_calendar`: cuándo se publica lo decide Paco.
+- Rutas `POST /api/portal/generar/{big-idea,estructuras,guion}`, autenticadas
+  por sesión ⇒ **no** van en `PUBLIC_PATHS`.
+- ⚠️ Los prompts están **duplicados** con `/api/ai/{big-idea,structures,script}`
+  (esas rutas son handlers, no módulos importables). Al tocar uno, revisar el
+  otro: si se desincronizan, el cliente recibe guiones con otro criterio.
+
 **Instagram queda EN PAUSA** (decidido 2026-08-14), no pendiente. Dos razones:
 `instagram_media` e `instagram_accounts` están en la lista de tablas que `0006`
 dejó **owner-only** a propósito, así que haría falta una migración nueva; y el
@@ -343,7 +383,7 @@ poco que hoy devuelven esas métricas. El slug **no se borra** de
 | ✅ 3 | Invitaciones (`lib/portal/invites.ts`) + `/invitacion/[token]` + `PUBLIC_PATHS` + `PortalPending` | Invitar a un mail propio y aceptar |
 | ✅ 4 | `/portal` con Reportes (`lib/portal/access.ts`, `app/(portal)/`) | Entrar con el usuario invitado |
 | ✅ 5 | Guiones (+ comentarios/aprobación), Calendario, Competencia, Investigación | Comentar desde el portal y ver el hilo en `/guiones/[id]` |
-| 6 | Add-on de IA: tope, `ai_usage_log`, corte al pasarse | |
+| ✅ 6 | Add-on de IA: pantalla, tope, `ai_usage_log`, corte al pasarse (migración `0009`) | Poner tope 2, generar 3 veces: la tercera corta sin llamar a la API |
 | — | Instagram en el portal: **necesita migración** (hoy `instagram_media` es owner-only) | |
 
 Etapas 1–3 no cambian nada de lo que Paco ve hoy. La 1 es la única con riesgo

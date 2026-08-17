@@ -23,6 +23,7 @@ import {
   removeClientMember,
   revokeClientInvite,
   setAiGenerationLimit,
+  setAiGenerationMode,
   setClientFeatures,
   setClientMemberRole,
 } from "../portalActions";
@@ -34,6 +35,11 @@ import {
   sanitizeFeatures,
   type PortalFeature,
 } from "@/lib/portal/features";
+import {
+  GENERATION_MODES,
+  sanitizeGenerationMode,
+  type PortalGenerationMode,
+} from "@/lib/portal/generationMode";
 import type { PortalMember } from "@/lib/portal/members";
 import {
   PORTAL_MEMBER_ROLES,
@@ -47,6 +53,7 @@ type Props = {
   clientId: string;
   initialFeatures: string[];
   initialLimit: number | null;
+  initialMode: string;
   usage: AiUsageSummary;
   initialMembers: PortalMember[];
   initialInvites: ClientInvite[];
@@ -71,20 +78,34 @@ function expiryLabel(invite: ClientInvite): string {
   return `Vence en ${days} ${days === 1 ? "día" : "días"}`;
 }
 
+/**
+ * ⚠️ `timeZone: "UTC"` no es opcional: `usage.monthStart` es el día 1 a las
+ * 00:00 **UTC** (así lo corta `lib/portal/usage.ts`, para coincidir con el
+ * `created_at` de Postgres). Formateado en la hora de México eso cae el último
+ * día del mes anterior, y el panel decía "julio" estando en agosto.
+ */
 function formatMonth(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+  return new Date(iso).toLocaleDateString("es-MX", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 export default function PortalSection({
   clientId,
   initialFeatures,
   initialLimit,
+  initialMode,
   usage,
   initialMembers,
   initialInvites,
 }: Props) {
   const [features, setFeatures] = useState<string[]>(() => sanitizeFeatures(initialFeatures));
   const [limit, setLimit] = useState<number | null>(initialLimit);
+  const [mode, setMode] = useState<PortalGenerationMode>(() =>
+    sanitizeGenerationMode(initialMode),
+  );
   const [limitDraft, setLimitDraft] = useState(initialLimit === null ? "" : String(initialLimit));
   const [members, setMembers] = useState<PortalMember[]>(initialMembers);
   const [invites, setInvites] = useState<ClientInvite[]>(initialInvites);
@@ -155,6 +176,33 @@ export default function PortalSection({
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "No se pudo guardar el tope.");
+      }
+    });
+  }
+
+  /** El modo se guarda al instante, con UI optimista como los toggles. */
+  function changeMode(next: PortalGenerationMode) {
+    const previous = mode;
+    setMode(next);
+    setError(null);
+    setOk(null);
+
+    start(async () => {
+      try {
+        const res = await setAiGenerationMode(clientId, next);
+        if (res.ok) {
+          setOk(
+            res.mode === "simple"
+              ? "Tu cliente va a ver el flujo corto: escribe el pedido y recibe el guion."
+              : "Tu cliente va a elegir la idea central y la estructura antes del guion.",
+          );
+        } else {
+          setMode(previous);
+          setError(res.error);
+        }
+      } catch (e) {
+        setMode(previous);
+        setError(e instanceof Error ? e.message : "No se pudo guardar el modo.");
       }
     });
   }
@@ -395,6 +443,34 @@ export default function PortalSection({
                 >
                   {isPending ? "…" : "Guardar tope"}
                 </button>
+
+                <div className={s.modeField}>
+                  <span className="field-label" style={{ fontSize: 12 }}>
+                    Flujo que ve el cliente
+                  </span>
+                  <div className={s.modeOptions}>
+                    {GENERATION_MODES.map((m) => (
+                      <label
+                        key={m.value}
+                        className={`${s.modeOption} ${mode === m.value ? s.modeOptionOn : ""}`}
+                      >
+                        <input
+                          type="radio"
+                          name="ai-generation-mode"
+                          className={s.modeRadio}
+                          value={m.value}
+                          checked={mode === m.value}
+                          disabled={isPending}
+                          onChange={() => changeMode(m.value)}
+                        />
+                        <span>
+                          <span className={s.modeLabel}>{m.label}</span>
+                          <span className={s.modeDescription}>{m.description}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
 
                 <p className={s.usageText}>
                   Consumo de {formatMonth(usage.monthStart)}:{" "}

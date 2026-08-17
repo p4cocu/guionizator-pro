@@ -35,6 +35,15 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0006 | `0006_portal_cliente.sql` | ✅ 2026-08-13 |
 | 0007 | `0007_drop_apify_cols_de_clients.sql` | ✅ 2026-08-13 (después del deploy) |
 | 0008 | `0008_competitor_posts_public_id.sql` | ✅ 2026-08-14 (antes del deploy) |
+| 0009 | `0009_portal_generacion_ia.sql` | ⬜ pendiente — **antes** del deploy |
+
+### 0009 va ANTES del deploy (mismo caso que la 0008)
+
+Es aditiva: agrega `scripts.generated_by` y `clients.ai_generation_mode`, y suma
+esa segunda columna al final de la vista `portal_clients`. La app publicada hoy
+no selecciona ninguna de las dos, así que sigue andando entre la migración y el
+deploy. Al revés no: el `/portal` nuevo le pide `ai_generation_mode` a la vista
+y, si todavía no está, la pantalla se cae.
 
 ### 0008 va ANTES del deploy (al revés que 0006/0007)
 

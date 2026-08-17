@@ -34,6 +34,12 @@ export type ScriptRow = {
   source_post_permalink: string | null;
   source_post_id: string | null;
   featured: boolean;
+  /**
+   * Miembro del portal que generó este guion con el add-on de IA (migración
+   * `0009`). `null` = lo hiciste vos desde el estudio. Se usa solo para el badge
+   * "Generado por el cliente": el guion se trabaja igual que cualquier otro.
+   */
+  generated_by: string | null;
   clients: { nombre: string; marca: string | null } | null;
   has_resource?: boolean;
 };

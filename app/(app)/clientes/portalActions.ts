@@ -18,6 +18,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { sanitizeFeatures, type PortalFeatureSlug } from "@/lib/portal/features";
+import { isGenerationMode, type PortalGenerationMode } from "@/lib/portal/generationMode";
 import { isPortalMemberRole, listClientMembers } from "@/lib/portal/members";
 import {
   createInvite,
@@ -154,6 +155,50 @@ export async function setAiGenerationLimit(
 
   revalidatePath(`/clientes/${clientId}`);
   return { ok: true, limit };
+}
+
+// ─── Add-on de IA: modo de generación ────────────────────────────────────────
+
+export type SetAiModeResult =
+  | { ok: true; mode: PortalGenerationMode }
+  | { ok: false; error: string };
+
+/**
+ * Qué flujo ve el cliente en `/portal/[id]/generar`: `simple` (brief → guion) o
+ * `completo` (brief → Big Idea → estructura → guion).
+ *
+ * `clients.ai_generation_mode` tiene `CHECK constraint` (migración `0009`), así
+ * que el valor pasa sí o sí por `isGenerationMode` antes de tocar Postgres: un
+ * valor desconocido tiene que volver como error legible, no como un 500 de la
+ * base.
+ */
+export async function setAiGenerationMode(
+  clientId: string,
+  rawMode: string,
+): Promise<SetAiModeResult> {
+  if (!isGenerationMode(rawMode)) {
+    return { ok: false, error: "Modo de generación desconocido." };
+  }
+
+  try {
+    const { supabase, user } = await getAuthUser();
+
+    const { error } = await supabase
+      .from("clients")
+      .update({ ai_generation_mode: rawMode })
+      .eq("id", clientId)
+      .eq("owner_id", user.id);
+
+    if (error) return { ok: false, error: error.message };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo guardar el modo.",
+    };
+  }
+
+  revalidatePath(`/clientes/${clientId}`);
+  return { ok: true, mode: rawMode };
 }
 
 // ─── Miembros ────────────────────────────────────────────────────────────────

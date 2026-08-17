@@ -39,6 +39,7 @@ import {
   type PortalFeatureSlug,
 } from "./features";
 import { isPortalMemberRole, type PortalMemberRole } from "./roles";
+import { sanitizeGenerationMode, type PortalGenerationMode } from "./generationMode";
 
 /**
  * `owner` = Paco mirando su propia marca desde el portal ("ver como cliente").
@@ -55,6 +56,8 @@ export type PortalClient = {
   /** Ya pasado por `sanitizeFeatures`: nunca trae slugs desconocidos. */
   features: PortalFeatureSlug[];
   aiGenerationLimit: number | null;
+  /** Qué flujo ve en `/portal/[id]/generar`. Ya saneado: nunca un valor raro. */
+  aiGenerationMode: PortalGenerationMode;
   role: PortalRole;
 };
 
@@ -97,6 +100,7 @@ type PortalClientRow = {
   nicho: string | null;
   enabled_features: string[] | null;
   ai_generation_limit: number | null;
+  ai_generation_mode: string | null;
 };
 
 /**
@@ -115,7 +119,9 @@ export const listPortalClients = cache(
     const [{ data: rows, error }, { data: memberRows }] = await Promise.all([
       supabase
         .from("portal_clients")
-        .select("id, nombre, marca, nicho, enabled_features, ai_generation_limit")
+        .select(
+          "id, nombre, marca, nicho, enabled_features, ai_generation_limit, ai_generation_mode",
+        )
         .order("nombre", { ascending: true }),
       supabase.from("client_members").select("client_id, role").eq("user_id", userId),
     ]);
@@ -135,6 +141,7 @@ export const listPortalClients = cache(
       nicho: r.nicho,
       features: sanitizeFeatures(r.enabled_features ?? []),
       aiGenerationLimit: r.ai_generation_limit,
+      aiGenerationMode: sanitizeGenerationMode(r.ai_generation_mode),
       role: roles.get(r.id) ?? "owner",
     }));
   },

@@ -137,6 +137,7 @@ export default async function ClienteDetailPage({ params }: Props) {
           clientId={id}
           initialFeatures={(cliente.enabled_features as string[] | null) ?? []}
           initialLimit={(cliente.ai_generation_limit as number | null) ?? null}
+          initialMode={(cliente.ai_generation_mode as string | null) ?? "simple"}
           usage={aiUsage}
           initialMembers={members}
           initialInvites={invites}

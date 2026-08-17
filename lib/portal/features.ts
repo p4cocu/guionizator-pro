@@ -61,9 +61,10 @@ export type PortalFeature = {
    * `live: false` no rompe nada: el sidebar del portal la muestra atenuada con
    * un "Pronto" en vez de linkear a una ruta que no existe.
    *
-   * Etapa 4 dejó viva solo `reportes`. Las etapas 5 y 6 van pasando las demás a
-   * `true` **junto con** su `page.tsx` — cambiar esto sin la pantalla deja un
-   * link roto en la cara del cliente.
+   * Etapa 4 dejó viva solo `reportes`; la 5 sumó guiones, calendario,
+   * competencia e investigación; la 6, `generar_ia`. La única que sigue en
+   * `false` es `instagram`, que está EN PAUSA. Pasar una a `true` sin entregar
+   * su `page.tsx` en el mismo cambio deja un link roto en la cara del cliente.
    */
   live: boolean;
 };
@@ -139,7 +140,7 @@ export const PORTAL_FEATURES: PortalFeature[] = [
       "Deja que el cliente genere guiones nuevos con IA desde el portal. Gasta tu API key de Anthropic: por eso nace apagado y admite un tope mensual.",
     paid: true,
     path: "generar",
-    live: false,
+    live: true,
   },
 ];
 

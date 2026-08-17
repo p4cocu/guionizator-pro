@@ -194,6 +194,21 @@
   margin: 0;
 }
 
+/* Guion que pidió el cliente desde su portal (add-on de IA). */
+.clientGenerated {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--signal);
+  background: rgba(255, 210, 58, 0.12);
+  border: 1px solid rgba(255, 210, 58, 0.32);
+  white-space: nowrap;
+}
+
 .cardStructure {
   font-size: 15px;
   font-weight: 700;

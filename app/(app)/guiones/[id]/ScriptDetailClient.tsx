@@ -791,6 +791,12 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
             </span>
             <span style={{ marginRight: 8 }}>{script.structure_name}</span>
             {formatDate(script.created_at)}
+            {/* Lo generó el cliente desde su portal (add-on de IA, etapa 6). */}
+            {script.generated_by && (
+              <span className={styles.clientGenerated} style={{ marginLeft: 8 }}>
+                ✦ Generado por el cliente
+              </span>
+            )}
           </p>
         </div>
 
