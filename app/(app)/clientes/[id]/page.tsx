@@ -8,6 +8,11 @@ import {
 import { listClientMembers, type PortalMember } from "@/lib/portal/members";
 import { listPendingInvites, type ClientInvite } from "@/lib/portal/invites";
 import { emptyAiUsage, getMonthlyAiUsage, type AiUsageSummary } from "@/lib/portal/usage";
+import {
+  emptyTranscriptionUsage,
+  getMonthlyTranscriptionUsage,
+  type TranscriptionUsageSummary,
+} from "@/lib/competencia/transcriptionUsage";
 import ClienteForm from "../ClienteForm";
 import PortalSection from "./PortalSection";
 import ResearchSection from "./ResearchSection";
@@ -70,6 +75,15 @@ export default async function ClienteDetailPage({ params }: Props) {
     return [];
   });
 
+  const transcriptionUsagePromise: Promise<TranscriptionUsageSummary> = getMonthlyTranscriptionUsage(
+    supabase,
+    id,
+    user.id,
+  ).catch((e) => {
+    console.error("[clientes/[id]] no se pudo leer el consumo de transcripción:", e);
+    return emptyTranscriptionUsage();
+  });
+
   const [
     { data: cliente },
     { data: research },
@@ -79,6 +93,7 @@ export default async function ClienteDetailPage({ params }: Props) {
     members,
     aiUsage,
     invites,
+    transcriptionUsage,
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -110,6 +125,7 @@ export default async function ClienteDetailPage({ params }: Props) {
     membersPromise,
     usagePromise,
     invitesPromise,
+    transcriptionUsagePromise,
   ]);
 
   if (!cliente) notFound();
@@ -138,6 +154,8 @@ export default async function ClienteDetailPage({ params }: Props) {
           initialFeatures={(cliente.enabled_features as string[] | null) ?? []}
           initialLimit={(cliente.ai_generation_limit as number | null) ?? null}
           initialMode={(cliente.ai_generation_mode as string | null) ?? "simple"}
+          initialTranscriptionLimit={(cliente.transcription_limit as number | null) ?? null}
+          transcriptionUsage={transcriptionUsage}
           usage={aiUsage}
           initialMembers={members}
           initialInvites={invites}

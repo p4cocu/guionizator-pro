@@ -253,6 +253,9 @@ export async function getScripts(
     .select("*, clients(nombre, marca)")
     .eq("owner_id", user.id)
     .eq("is_latest", true)
+    // La papelera (etapa 7) es transversal a cualquier status, incluido baúl:
+    // se ve solo desde `getTrashedScripts`, nunca acá.
+    .is("trashed_at", null)
     .order("featured", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -640,4 +643,68 @@ export async function addScriptToCalendar(
   if (error) throw new Error(error.message);
   revalidatePath("/calendario");
   revalidatePath(`/guiones/${scriptId}`);
+}
+
+// ─── Papelera (Fase D, etapa 7) ───────────────────────────────────────────────
+// Un guion llega acá cuando un miembro del portal lo tira (server action con
+// service role, `lib/portal/trash.ts` — un `viewer` no tiene `update` sobre
+// `scripts` con su propia sesión). Vos sos el único que ve esta lista: sirve
+// para deshacer un tiro por error antes de que el cron lo borre en firme a los
+// 30 días (`netlify/functions/cleanup-scripts-trash-scheduled.ts`).
+
+export type TrashedScriptRow = {
+  id: string;
+  title: string | null;
+  brief: string | null;
+  structure_name: string;
+  type: ScriptType;
+  trashed_at: string;
+  clients: { nombre: string; marca: string | null } | null;
+};
+
+export async function getTrashedScripts(): Promise<TrashedScriptRow[]> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data, error } = await supabase
+    .from("scripts")
+    .select("id, title, brief, structure_name, type, trashed_at, clients(nombre, marca)")
+    .eq("owner_id", user.id)
+    .eq("is_latest", true)
+    .not("trashed_at", "is", null)
+    .order("trashed_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as unknown as TrashedScriptRow[];
+}
+
+export async function restoreScriptFromTrash(id: string): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+
+  const { error } = await supabase
+    .from("scripts")
+    .update({ trashed_at: null })
+    .eq("id", id)
+    .eq("owner_id", user.id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/guiones");
+}
+
+/**
+ * Borra en firme desde la papelera. A diferencia de `deleteScript` (el botón
+ * del detalle, que redirige) esta no navega a ningún lado: se llama desde la
+ * lista de la papelera, que se queda en la misma pantalla.
+ */
+export async function permanentlyDeleteScript(id: string): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+
+  const { error } = await supabase
+    .from("scripts")
+    .delete()
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .not("trashed_at", "is", null);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/guiones");
 }

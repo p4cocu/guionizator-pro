@@ -18,6 +18,9 @@
 import { revalidatePath } from "next/cache";
 import { requirePortalSession, requirePortalClient } from "@/lib/portal/access";
 import { addScriptComment } from "@/lib/portal/comments";
+import { createServiceClient } from "@/lib/supabase/service";
+import { ensureCalendarEntry } from "@/lib/portal/scheduling";
+import { trashScript as trashScriptRow } from "@/lib/portal/trash";
 
 export type CommentResult = { ok: true } | { ok: false; error: string };
 
@@ -79,6 +82,13 @@ export async function postScriptComment(
  *
  * Si un `viewer` llegara igual hasta acá, el `update` no afecta filas y el
  * mensaje se lo dice. No es un error de servidor: es "no te toca".
+ *
+ * **Al aprobar** (no al desaprobar): si el guion todavía no tiene una fila en
+ * `content_calendar`, se crea una automática a +14 días (`ensureCalendarEntry`,
+ * etapa 7). Va con service role porque el miembro no tiene `insert` sobre esa
+ * tabla — solo el dueño. Si esa parte falla, la aprobación igual queda guardada
+ * (el error se loguea, no se le muestra al cliente: la agenda es un extra, no
+ * lo que estaba pidiendo).
  */
 export async function setScriptApproval(
   clientId: string,
@@ -103,11 +113,25 @@ export async function setScriptApproval(
       .update({ client_approved_at: approved ? new Date().toISOString() : null })
       .eq("id", scriptId)
       .eq("client_id", clientId)
-      .select("id");
+      .select("id, owner_id, type, title, brief");
 
     if (error) return { ok: false, error: error.message };
     if (!data?.length) {
       return { ok: false, error: "No tienes permiso para aprobar este guion." };
+    }
+
+    if (approved) {
+      const script = data[0];
+      await ensureCalendarEntry(createServiceClient(), {
+        scriptId,
+        clientId,
+        ownerId: script.owner_id as string,
+        type: script.type as string | null,
+        title: script.title as string | null,
+        brief: script.brief as string | null,
+      }).catch((e) => {
+        console.error("[portal/guiones] no se pudo agendar el guion aprobado:", e);
+      });
     }
   } catch (e) {
     return {
@@ -118,5 +142,30 @@ export async function setScriptApproval(
 
   revalidatePath(`/portal/${clientId}/guiones/${scriptId}`);
   revalidatePath(`/portal/${clientId}/guiones`);
+  revalidatePath("/calendario");
+  return { ok: true };
+}
+
+/**
+ * Manda un guion a la papelera desde el portal. Cualquier miembro puede
+ * (viewer o collaborator) — a diferencia de aprobar, es reversible y solo
+ * Paco la ve: no hace falta el mismo nivel de permiso. La UI pide confirmar
+ * dos veces antes de llamar acá (ver `TrashButton.tsx`); esta action no vuelve
+ * a preguntar, hace lo que le piden.
+ */
+export async function trashScript(clientId: string, scriptId: string): Promise<CommentResult> {
+  try {
+    const { user } = await requirePortalSession();
+    await requirePortalClient(user.id, clientId, "guiones");
+    await trashScriptRow(createServiceClient(), scriptId, clientId);
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo mandar el guion a la papelera.",
+    };
+  }
+
+  revalidatePath(`/portal/${clientId}/guiones`);
+  revalidatePath("/guiones");
   return { ok: true };
 }

@@ -38,6 +38,7 @@ import type { User } from "@supabase/supabase-js";
 import { createServiceClient } from "../supabase/service";
 import { MODEL_DEFAULT, MODEL_FAST } from "../ai/anthropic";
 import { AiJsonError, generateJson } from "../ai/json";
+import { loadClientKnowledge } from "../ai/clientKnowledge";
 import { getPortalClient, requirePortalSession, type PortalClient } from "./access";
 import { AI_FEATURE_SLUG, hasFeature } from "./features";
 import { getAiUsageState, type AiUsageState } from "./usage";
@@ -58,6 +59,8 @@ export class PortalGenerationError extends Error {
 
 export type GenerationContext = {
   ownerId: string;
+  /** Para `loadClientKnowledge()` — la carpeta `knowledge/clients/<nombre>/`. */
+  clientName: string;
   /** Perfil de la marca en markdown, listo para el system prompt. Sin `notas`. */
   clientContext: string;
   /** Cerebro activo del dueño. `undefined` = cae al `brain/system-prompt.md`. */
@@ -117,6 +120,7 @@ export async function loadGenerationContext(clientId: string): Promise<Generatio
 
   return {
     ownerId: row.owner_id,
+    clientName: row.nombre ?? "",
     clientContext: buildClientContext(row),
     brainContent: (brain?.content as string | undefined) ?? undefined,
     brainVersionId: (brain?.id as string | undefined) ?? null,
@@ -450,6 +454,120 @@ ${finalFormat}`;
   } else {
     content = { slides: parsed.slides ?? [] };
   }
+
+  return {
+    content,
+    structureName,
+    inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
+  };
+}
+
+// ─── Adaptar un post de competencia (add-on de IA, mismo cupo que generar) ───
+// Espejo de `/api/ai/adapt-competitor` — esa ruta es un handler, no un módulo
+// importable, así que el prompt se duplica a propósito (misma disciplina que
+// los otros pasos de este archivo). Al tocar uno, revisar el otro. A
+// diferencia del estudio, el portal solo ofrece la adaptación "completa": la
+// variante "ligera" (con contexto libre) es una herramienta de afinado que no
+// aporta a un cliente que solo quiere un guion listo.
+
+const ADAPT_REEL_FORMAT = `{
+  "structure_name": "nombre de la estructura del cerebro que mejor encaja con esta adaptación",
+  "title": "título de publicación corto y atractivo",
+  "voice_off": "texto completo para teleprompter, flujo continuo sin etiquetas, máximo 150-200 palabras para 30-60 segundos"
+}`;
+
+const ADAPT_CAROUSEL_FORMAT = `{
+  "structure_name": "nombre de la estructura del cerebro que mejor encaja con esta adaptación",
+  "title": "título de publicación corto y atractivo",
+  "slides": [
+    {
+      "number": 1,
+      "text": "titular o headline del slide ≤12 palabras",
+      "body": "párrafo de desarrollo del slide: 1-2 oraciones con el argumento o valor de ese slide (máximo 40 palabras)",
+      "visual": "descripción del diseño visual: jerarquía tipográfica, elemento visual, color/contraste",
+      "micro_anchor": "elemento de retención al final del slide o null si no aplica"
+    }
+  ]
+}`;
+
+export type AdaptSourcePost = {
+  username: string | null;
+  caption: string | null;
+  type: string | null;
+  likes: number | null;
+  comments: number | null;
+  video_views: number | null;
+  transcription: string | null;
+};
+
+function fmtAdaptMetric(n: number | null | undefined): string {
+  return n == null ? "—" : String(n);
+}
+
+export async function adaptCompetitorPost(
+  ctx: GenerationContext,
+  post: AdaptSourcePost,
+  type: ScriptType,
+): Promise<GeneratedScript> {
+  const knowledge = loadClientKnowledge(ctx.clientName);
+  const clientContext = knowledge
+    ? `${ctx.clientContext}\n\n## Conocimiento de marca de ${ctx.clientName}\n${knowledge}`
+    : ctx.clientContext;
+
+  const format = type === "carousel" ? ADAPT_CAROUSEL_FORMAT : ADAPT_REEL_FORMAT;
+  const sourceMetrics = [
+    post.video_views != null && `Vistas: ${fmtAdaptMetric(post.video_views)}`,
+    `Likes: ${fmtAdaptMetric(post.likes)}`,
+    `Comentarios: ${fmtAdaptMetric(post.comments)}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const contentSection = post.transcription
+    ? `Transcripción del audio (fuente primaria):\n"""\n${post.transcription.trim()}\n"""\nCaption (referencia):\n"""\n${(post.caption ?? "(sin caption)").trim()}\n"""`
+    : `Caption:\n"""\n${(post.caption ?? "(sin caption)").trim()}\n"""`;
+
+  const userMessage = `Tarea: ADAPTAR a la marca del cliente una idea que YA funcionó en la competencia. NO es una copia: toma el ÁNGULO, el HOOK y la ESTRUCTURA ganadora del post fuente y reescríbelos por completo con la voz, el qué-vende, el dolor y el deseo del cliente. El resultado debe sonar 100% del cliente, no del competidor.
+
+Tipo de contenido a generar: ${typeLabel(type)}
+
+── Post fuente (competencia) ──
+Autor: @${post.username ?? "desconocido"}
+Tipo original: ${post.type ?? "—"}
+Métricas: ${sourceMetrics}
+${contentSection}
+
+Instrucciones:
+1. Identifica POR QUÉ este contenido funcionó (el gancho, la promesa, la estructura) y reusa ESE patrón, no el tema ni las palabras del competidor.
+2. Aterrízalo al cliente: su producto, su cliente ideal, su dolor/deseo y su tono de voz.
+3. Elige del cerebro la estructura narrativa que mejor encaje y devuélvela en "structure_name".
+4. Propón un "title" de publicación.
+
+Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
+${format}`;
+
+  const model = type === "carousel" ? MODEL_FAST : MODEL_DEFAULT;
+  const maxTokens = type === "carousel" ? 3000 : 4096;
+
+  const { data: parsed, result } = await generateJson<Record<string, unknown>>({
+    label: "portal:adapt-competitor",
+    userMessage,
+    clientContext,
+    brainContent: ctx.brainContent,
+    model,
+    maxTokens,
+  });
+
+  const structureName =
+    typeof parsed.structure_name === "string" && parsed.structure_name.trim()
+      ? parsed.structure_name.trim()
+      : "Adaptado de competencia";
+
+  const content: Record<string, unknown> =
+    type === "reel"
+      ? { voice_off: parsed.voice_off ?? "", blocks: [], music_a: null, music_b: null }
+      : { slides: parsed.slides ?? [] };
 
   return {
     content,

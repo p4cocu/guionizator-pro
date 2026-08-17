@@ -158,22 +158,32 @@
   margin-top: 2px;
 }
 
+/*
+ * Sin `background`/`appearance` explícitos, un <button> hereda el chrome nativo
+ * del navegador (gris/blanco claro) mientras `color` estaba pensado para un
+ * fondo oscuro — el código quedaba invisible hasta pasar el mouse. Ahora los
+ * dos estados se definen a propósito: claro en reposo, oscuro al pasar el mouse.
+ */
 .idBadge {
+  appearance: none;
   margin-left: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px;
+  font-weight: 700;
   letter-spacing: 0.06em;
-  color: var(--text-muted);
+  color: var(--ink);
+  background: var(--paper);
   border: 1px solid var(--glass-border);
   border-radius: var(--r-sm);
   padding: 3px 8px;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .idBadge:hover {
-  border-color: var(--emerald);
-  color: var(--emerald);
+  background: transparent;
+  border-color: var(--signal);
+  color: var(--signal);
 }
 
 .transcript {
@@ -247,4 +257,213 @@
     width: 100%;
     flex: 1 1 100%;
   }
+}
+
+/* ── Transcribir / Adaptar (etapa 7) ── */
+
+.creditRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.creditBtn {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.creditBtn:hover:not(:disabled) {
+  border-color: var(--emerald);
+}
+
+.creditBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.creditBtnPrimary {
+  color: var(--ink);
+  background: var(--grad-g1);
+  border-color: transparent;
+  font-weight: 700;
+}
+
+.creditHint {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.creditError {
+  font-size: 12.5px;
+  color: var(--flare);
+  line-height: 1.5;
+}
+
+/* ── Modal "Adaptar a mi marca" ── */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 60;
+}
+
+.modal {
+  width: 100%;
+  max-width: 560px;
+  max-height: 88vh;
+  overflow-y: auto;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-border);
+  background-color: var(--glass-base);
+  background-image: var(--glass-overlay);
+  box-shadow: var(--glass-shadow);
+}
+
+.modalHeader {
+  position: relative;
+  padding: 20px 44px 14px 20px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.modalTitle {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.modalClose {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.modalBody {
+  padding: 20px;
+}
+
+.modalHint {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.modalActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.modalLoading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+  padding: 12px 0;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--glass-border);
+  border-top-color: var(--emerald);
+  border-radius: 50%;
+  animation: modalSpin 0.8s linear infinite;
+}
+
+@keyframes modalSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.modalField {
+  margin-top: 14px;
+}
+
+.script {
+  padding: 16px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+}
+
+.voiceOff {
+  font-size: 15.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.slides {
+  display: grid;
+  gap: 10px;
+}
+
+.slideCard {
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--glass-border);
+}
+
+.slideNumber {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.slideText {
+  font-size: 14.5px;
+  line-height: 1.5;
+  margin: 5px 0;
+}
+
+.slideVisual {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.savedBox {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(0, 159, 125, 0.45);
+  background: rgba(0, 159, 125, 0.08);
+}
+
+.savedTitle {
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--emerald);
+}
+
+.savedText {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
 }

@@ -31,6 +31,10 @@ type ScriptType = "reel" | "carousel";
 
 type Structure = { name: string; hook: string; arc: string; close: string };
 
+function isAlborna(name: string): boolean {
+  return name.toLowerCase().includes("alborna");
+}
+
 type Usage = { used: number; limit: number | null; remaining: number | null };
 
 type Generated = {
@@ -401,18 +405,26 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
                   onClick={() => setChosen(st)}
                   disabled={!!loading}
                 >
-                  <span className={s.structureName}>{st.name}</span>
-                  <span className={s.structureRow}>
-                    <span className={s.structureLabel}>Arranca</span>
-                    {st.hook}
+                  <span className={`${s.structureRadio} ${selected ? s.structureCheck : ""}`}>
+                    {selected && <span className={s.checkMark}>✓</span>}
                   </span>
-                  <span className={s.structureRow}>
-                    <span className={s.structureLabel}>Desarrolla</span>
-                    {st.arc}
-                  </span>
-                  <span className={s.structureRow}>
-                    <span className={s.structureLabel}>Cierra</span>
-                    {st.close}
+                  <span className={s.structureBody}>
+                    <span className={s.structureName}>{st.name}</span>
+                    {isAlborna(st.name) && <span className={s.albornaTag}>✦ Alborna</span>}
+                    <span className={s.structureRows}>
+                      <span className={s.structureRow}>
+                        <span className={s.structureLabel}>Arranca</span>
+                        <span className={s.structureText}>{st.hook}</span>
+                      </span>
+                      <span className={s.structureRow}>
+                        <span className={s.structureLabel}>Desarrolla</span>
+                        <span className={s.structureText}>{st.arc}</span>
+                      </span>
+                      <span className={s.structureRow}>
+                        <span className={s.structureLabel}>Cierra</span>
+                        <span className={s.structureText}>{st.close}</span>
+                      </span>
+                    </span>
                   </span>
                 </button>
               );

@@ -1,22 +1,26 @@
 "use client";
 
 /**
- * Tablero de competencia del cliente. Solo lectura: filtra y muestra, no muta.
+ * Tablero de competencia del cliente (Fase D, etapas 5 y 7).
  *
  * No reusa `app/(app)/competencia/CompetenciaClient.tsx` a propósito: ese está
- * hecho alrededor de las acciones de Paco (scrapear, transcribir, clasificar,
- * adaptar, seleccionar para reporte) y arrastraría todas esas server actions al
- * bundle del cliente, además de mostrar botones que la RLS le va a rechazar.
+ * hecho alrededor de las acciones internas de Paco (scrapear, clasificar,
+ * marcar favoritos/dislikes, borrar, seleccionar para reporte) y arrastraría
+ * todas esas server actions al bundle del cliente. Lo que SÍ se comparte con
+ * el estudio es la técnica del embed de Instagram (mismo script, mismo
+ * blockquote) — es la única forma de mostrar la portada real del video: no
+ * hay columna de thumbnail en la base, Apify no la trae.
  *
- * Los filtros corren en memoria sobre lo que ya trajo el server: un cliente
- * tiene decenas o pocos cientos de posts (la limpieza borra a los 40 días), así
- * que no hay motivo para ir y volver al servidor por cada tecla.
+ * Transcribir y adaptar gastan crédito (`app/(portal)/portal/[clientId]/
+ * competencia/actions.ts`); el resto de los filtros son en memoria y gratis.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { OutlierFlags } from "@/lib/competencia/outliers";
 import { labelFor, colorFor } from "@/lib/competencia/taxonomy";
 import { normalizePublicId } from "@/lib/competencia/publicId";
+import { transcribePortalPost } from "./actions";
+import AdaptModal from "./AdaptModal";
 import s from "./competencia.module.css";
 
 export type PortalPostBase = {
@@ -44,6 +48,12 @@ type Orden = "recientes" | "comentarios" | "vistas";
 
 const nf = new Intl.NumberFormat("es-MX");
 
+declare global {
+  interface Window {
+    instgrm?: { Embeds: { process: () => void } };
+  }
+}
+
 function formatNumber(n: number | null): string {
   if (n == null) return "—";
   return nf.format(n);
@@ -59,17 +69,46 @@ function formatDate(iso: string | null): string {
 }
 
 export default function CompetenciaPortalClient({
-  posts,
+  posts: initialPosts,
+  clientId,
   clientLabel,
+  canAdapt,
+  transcriptionRemaining: initialTranscriptionRemaining,
+  adaptRemaining: initialAdaptRemaining,
 }: {
   posts: PortalPost[];
+  clientId: string;
   clientLabel: string;
+  canAdapt: boolean;
+  transcriptionRemaining: number | null;
+  adaptRemaining: number | null;
 }) {
+  const [posts, setPosts] = useState(initialPosts);
   const [query, setQuery] = useState("");
   const [cuenta, setCuenta] = useState("");
   const [soloDestacados, setSoloDestacados] = useState(false);
   const [orden, setOrden] = useState<Orden>("recientes");
   const [abierto, setAbierto] = useState<string | null>(null);
+  const [transcribingId, setTranscribingId] = useState<string | null>(null);
+  const [adaptingPost, setAdaptingPost] = useState<PortalPost | null>(null);
+  const [transcriptionRemaining, setTranscriptionRemaining] = useState(
+    initialTranscriptionRemaining,
+  );
+  const [adaptRemaining, setAdaptRemaining] = useState(initialAdaptRemaining);
+  const [errorFor, setErrorFor] = useState<{ id: string; message: string } | null>(null);
+
+  const transcriptionBlocked = transcriptionRemaining !== null && transcriptionRemaining <= 0;
+  const adaptBlocked = adaptRemaining !== null && adaptRemaining <= 0;
+
+  // ── Script de embeds de Instagram: una vez por página ──
+  useEffect(() => {
+    if (document.getElementById("ig-embed-script")) return;
+    const sc = document.createElement("script");
+    sc.id = "ig-embed-script";
+    sc.async = true;
+    sc.src = "https://www.instagram.com/embed.js";
+    document.body.appendChild(sc);
+  }, []);
 
   const cuentas = useMemo(
     () => [...new Set(posts.map((p) => p.username))].sort((a, b) => a.localeCompare(b)),
@@ -99,6 +138,36 @@ export default function CompetenciaPortalClient({
       ordenados.sort((a, b) => (b.video_views ?? 0) - (a.video_views ?? 0));
     return ordenados;
   }, [posts, query, cuenta, soloDestacados, orden]);
+
+  // ── Procesar embeds cada vez que cambia lo visible ──
+  useEffect(() => {
+    const t = setTimeout(() => window.instgrm?.Embeds.process(), 300);
+    return () => clearTimeout(t);
+  }, [visibles]);
+
+  async function handleTranscribe(post: PortalPost) {
+    setTranscribingId(post.id);
+    setErrorFor(null);
+    try {
+      const res = await transcribePortalPost(clientId, post.id);
+      if (res.ok) {
+        setPosts((prev) =>
+          prev.map((p) => (p.id === post.id ? { ...p, transcription: res.transcription } : p)),
+        );
+        setTranscriptionRemaining((r) => (r === null ? null : Math.max(0, r - 1)));
+        setAbierto(post.id);
+      } else {
+        setErrorFor({ id: post.id, message: res.error });
+      }
+    } catch (e) {
+      setErrorFor({
+        id: post.id,
+        message: e instanceof Error ? e.message : "No se pudo transcribir.",
+      });
+    } finally {
+      setTranscribingId(null);
+    }
+  }
 
   return (
     <div>
@@ -179,6 +248,15 @@ export default function CompetenciaPortalClient({
                 post={p}
                 expandido={abierto === p.id}
                 onToggle={() => setAbierto(abierto === p.id ? null : p.id)}
+                onTranscribe={() => handleTranscribe(p)}
+                transcribing={transcribingId === p.id}
+                transcriptionBlocked={transcriptionBlocked}
+                transcriptionRemaining={transcriptionRemaining}
+                canAdapt={canAdapt && p.type !== "image"}
+                adaptBlocked={adaptBlocked}
+                adaptRemaining={adaptRemaining}
+                onAdapt={() => setAdaptingPost(p)}
+                error={errorFor?.id === p.id ? errorFor.message : null}
               />
             ))}
           </div>
@@ -191,6 +269,15 @@ export default function CompetenciaPortalClient({
           )}
         </>
       )}
+
+      {adaptingPost && (
+        <AdaptModal
+          clientId={clientId}
+          post={adaptingPost}
+          onClose={() => setAdaptingPost(null)}
+          onAdapted={() => setAdaptRemaining((r) => (r === null ? null : Math.max(0, r - 1)))}
+        />
+      )}
     </div>
   );
 }
@@ -199,10 +286,28 @@ function PostCard({
   post,
   expandido,
   onToggle,
+  onTranscribe,
+  transcribing,
+  transcriptionBlocked,
+  transcriptionRemaining,
+  canAdapt,
+  adaptBlocked,
+  adaptRemaining,
+  onAdapt,
+  error,
 }: {
   post: PortalPost;
   expandido: boolean;
   onToggle: () => void;
+  onTranscribe: () => void;
+  transcribing: boolean;
+  transcriptionBlocked: boolean;
+  transcriptionRemaining: number | null;
+  canAdapt: boolean;
+  adaptBlocked: boolean;
+  adaptRemaining: number | null;
+  onAdapt: () => void;
+  error: string | null;
 }) {
   const [copiado, setCopiado] = useState(false);
 
@@ -228,6 +333,17 @@ function PostCard({
         <span className={s.account}>@{post.username}</span>
         {post.is_outlier && <span className={s.outlier}>Destacado</span>}
       </div>
+
+      {post.permalink ? (
+        <blockquote
+          className="instagram-media"
+          data-instgrm-permalink={post.permalink}
+          data-instgrm-version="14"
+          style={{ margin: 0, width: "100%", minWidth: 0 }}
+        />
+      ) : (
+        <div className={s.noEmbed}>Sin enlace embebible</div>
+      )}
 
       <p className={s.date}>{formatDate(post.posted_at)}</p>
 
@@ -273,6 +389,50 @@ function PostCard({
           <p className={s.transcriptBody}>{post.transcription}</p>
         </div>
       )}
+
+      {post.type !== "image" && (
+        <div className={s.creditRow}>
+          <button
+            type="button"
+            className={s.creditBtn}
+            onClick={onTranscribe}
+            disabled={transcribing || (transcriptionBlocked && !post.transcription)}
+            title={
+              transcriptionBlocked && !post.transcription
+                ? "Llegaste al tope de transcripciones de este mes"
+                : undefined
+            }
+          >
+            {transcribing
+              ? "Transcribiendo…"
+              : post.transcription
+                ? "🎤 Re-transcribir"
+                : "🎤 Transcribir"}
+          </button>
+          {transcriptionRemaining !== null && (
+            <span className={s.creditHint}>{transcriptionRemaining} este mes</span>
+          )}
+        </div>
+      )}
+
+      {canAdapt && (
+        <div className={s.creditRow}>
+          <button
+            type="button"
+            className={`${s.creditBtn} ${s.creditBtnPrimary}`}
+            onClick={onAdapt}
+            disabled={adaptBlocked}
+            title={adaptBlocked ? "Llegaste al tope de generaciones de este mes" : undefined}
+          >
+            ✦ Adaptar a mi marca
+          </button>
+          {adaptRemaining !== null && (
+            <span className={s.creditHint}>{adaptRemaining} este mes</span>
+          )}
+        </div>
+      )}
+
+      {error && <p className={s.creditError}>{error}</p>}
 
       <div className={s.cardActions}>
         {(post.transcription || (post.caption?.length ?? 0) > 180) && (

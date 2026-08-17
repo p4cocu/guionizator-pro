@@ -129,7 +129,14 @@
   margin-top: 16px;
 }
 
-/* ── Estructuras (modo completo) ── */
+/* ── Estructuras (modo completo) ──
+ * Mismo look que .structureCard de app/(app)/guiones/guiones.module.css a
+ * propósito (bug reportado: acá el fondo era --glass-base, más claro que el
+ * casi-negro rgba(255,255,255,0.02) del estudio, y el texto muted/dim quedaba
+ * de bajo contraste encima). Copiado 1:1 en vez de compartido porque son
+ * CSS Modules de carpetas distintas — no hay forma limpia de compartir una
+ * clase entre los dos sin un archivo común que hoy no existe.
+ */
 
 .structures {
   display: grid;
@@ -138,49 +145,107 @@
 
 .structure {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  gap: 14px;
+  align-items: flex-start;
   width: 100%;
   text-align: left;
-  padding: 14px 16px;
+  padding: 18px;
   border-radius: var(--r-md);
   border: 1px solid var(--glass-border);
-  background-color: var(--glass-base);
-  background-image: var(--glass-overlay);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .structure:hover {
-  border-color: var(--emerald);
+  border-color: rgba(0, 159, 125, 0.4);
+  background: rgba(0, 159, 125, 0.04);
 }
 
 .structureOn {
   border-color: var(--emerald);
-  box-shadow: inset 0 0 0 1px var(--emerald);
+  background: rgba(0, 159, 125, 0.08);
+}
+
+.structureRadio {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--glass-border);
+  flex-shrink: 0;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.structureCheck {
+  border-color: var(--emerald) !important;
+  background: var(--emerald) !important;
+}
+
+.checkMark {
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.structureBody {
+  flex: 1;
+  min-width: 0;
 }
 
 .structureName {
+  display: block;
   font-family: var(--font-display);
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.albornaTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--signal);
+  background: rgba(255, 210, 58, 0.1);
+  margin-bottom: 8px;
+}
+
+.structureRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .structureRow {
-  display: block;
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px;
   font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-muted);
 }
 
 .structureLabel {
-  display: inline-block;
-  min-width: 82px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--text-dim);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding-top: 1px;
+}
+
+.structureText {
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 
 /* ── El guion ── */

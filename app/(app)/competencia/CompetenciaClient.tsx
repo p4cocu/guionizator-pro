@@ -29,8 +29,6 @@ import s from "./competencia.module.css";
 type Client = { id: string; nombre: string; marca: string | null };
 type Props = { clients: Client[] };
 
-const transcribeEnabled = process.env.NEXT_PUBLIC_TRANSCRIBE_ENABLED === "true";
-
 type SortKey = "views" | "likes" | "comments" | "engagement" | "recent" | "manual";
 type TypeFilter = "all" | "video" | "carousel" | "image";
 
@@ -381,17 +379,12 @@ export default function CompetenciaClient({ clients }: Props) {
   }
 
   async function handleTranscribeClick(post: CompetitorPost) {
-    const filePath = window.prompt(
-      "📁 Pega la ruta local del video descargado:\nEj: /Users/paco/Downloads/reel.mp4"
-    );
-    if (!filePath?.trim()) return;
-
     setTranscribingId(post.id);
     try {
       const res = await fetch("/api/transcribe-reel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ post_id: post.id, file_path: filePath.trim() }),
+        body: JSON.stringify({ post_id: post.id }),
       });
       const json = (await res.json()) as { transcription?: string; error?: string };
       if (!res.ok) {
@@ -619,7 +612,7 @@ export default function CompetenciaClient({ clients }: Props) {
           )}
         </div>
 
-        {transcribeEnabled && p.type !== "image" && (
+        {p.type !== "image" && (
           <div className={s.transcribeRow}>
             {p.transcription ? (
               <span className={s.transcribedBadge}>

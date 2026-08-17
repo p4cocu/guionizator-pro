@@ -103,6 +103,9 @@ export async function runScrapeJob(
     likes: p.likes,
     comments: p.comments,
     video_views: p.videoViews ?? null,
+    // Se pisa en cada re-scrape del mismo shortcode: es un link firmado de
+    // Instagram con vida corta, así que lo que vale es el más reciente.
+    video_url: p.videoUrl ?? null,
     followers: p.followers ?? null,
     posted_at: p.postedAt ?? null,
     scraped_at: now,

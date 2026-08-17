@@ -28,3 +28,9 @@
 # cliente, la cuenta deja de traer métricas. Requiere SUPABASE_SERVICE_ROLE_KEY.
 [functions."refresh-instagram-tokens-scheduled"]
   schedule = "@daily"
+
+# Borrado en firme diario de guiones con más de 30 días en la papelera
+# (netlify/functions/cleanup-scripts-trash-scheduled.ts). Fase D, etapa 7.
+# Requiere SUPABASE_SERVICE_ROLE_KEY, ya seteada en Netlify.
+[functions."cleanup-scripts-trash-scheduled"]
+  schedule = "@daily"

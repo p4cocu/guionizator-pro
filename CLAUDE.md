@@ -423,9 +423,11 @@ El add-on de pago: prender el slug `generar_ia` le da al cliente
   colarse por una: asumido a propósito, ver el comentario en `usage.ts`.
 - **El guion se guarda en `preproduccion`**, no en `idea`: el portal esconde
   `idea` y el cliente perdería de vista lo que acaba de generar. **No** se crea
-  la idea en `content_calendar` (a diferencia de `saveScriptWithNewIdea`):
-  cuándo se publica lo decide Paco. Generar y guardar son pasos separados —
-  regenerar cuesta cupo, pero no le llena el tablero de borradores.
+  la idea en `content_calendar` al guardar (a diferencia de
+  `saveScriptWithNewIdea`): cuándo se publica lo decide Paco. Generar y guardar
+  son pasos separados — regenerar cuesta cupo, pero no le llena el tablero de
+  borradores. (Si más tarde el cliente lo **aprueba**, ahí sí se agenda solo —
+  ver etapa 7.)
 - Rutas `POST /api/portal/generar/{big-idea,estructuras,guion}`, autenticadas
   **por sesión** ⇒ **no** van en `PUBLIC_PATHS`. La del guion hereda el margen
   contra el límite de Netlify de `/api/ai/script` (mismo modelo, mismos tokens).
@@ -438,6 +440,78 @@ El add-on de pago: prender el slug `generar_ia` le da al cliente
 **solo el rol `collaborator`** puede: `scripts_member_update` no le da `update`
 al `viewer`. El feedback vuelve a `/guiones/[id]` vía `ClientFeedbackPanel` +
 `feedbackActions.ts` — se dibuja solo si hay comentarios o aprobación.
+
+### Etapa 7 — transcripción online, Competencia en el portal, papelera y agenda automática
+
+Migraciones `0010_transcripcion_online.sql` y `0011_papelera_guiones.sql`
+(aditivas, **antes** del deploy).
+
+**Transcripción online (reemplaza el pipeline local).** Antes corría
+`faster-whisper` + `yt-dlp` en la Mac de Paco (`scripts/transcribe_reel.py`,
+ya no se usa) y exigía descargar el video a mano. Ahora `lib/ai/openai.ts`
+manda el video directo a la API de Whisper (acepta mp4, sin extraer audio, sin
+ffmpeg) y `lib/competencia/transcribe.ts` orquesta el resto:
+
+- **`competitor_posts.video_url`** — el link de descarga que trae Apify en
+  cada scrape. Es un link **firmado, de vida corta** (horas). Antes de
+  transcribir se prueba ese link; si ya murió, se le pide a Apify **ese post
+  puntual** de nuevo (`fetchFreshVideoUrl`, `directUrls`) en vez de recorrer el
+  perfil entero.
+- **Sin tope desde el estudio** (`/competencia`, un clic — ya no pide
+  `file_path`): es tuyo, lo controlás scrapeando cuando querés, y por eso **no**
+  escribe en `transcription_usage_log`. **Con tope desde el portal**
+  (`clients.transcription_limit`, `null` = sin tope; medido en
+  `transcription_usage_log`, mismo criterio de "una fila = un éxito" que
+  `ai_usage_log`). `OPENAI_API_KEY` es una cuenta aparte de `ANTHROPIC_API_KEY`.
+
+**Competencia en el portal ya no es solo lectura de datos:**
+
+- **Portada del post**: mismo embed de Instagram que el estudio (blockquote +
+  `embed.js`) — no hay columna de thumbnail, Apify no la trae; es la única
+  forma de mostrarla.
+- **"Adaptar a mi marca"** (`lib/portal/generate.ts` → `adaptCompetitorPost`,
+  prompt duplicado a propósito de `/api/ai/adapt-competitor`, misma disciplina
+  que el resto de este archivo) gasta el **mismo cupo que generar guiones**
+  (`ai_generation_limit`): reusa `requireGenerationAccess`, así que además de
+  `competencia` exige que `generar_ia` esté prendido. Genera y previsualiza
+  primero; guardar usa el mismo `guardarGuion` de `/generar` (gratis, aparte).
+  Solo ofrece la adaptación "completa" (no la variante "ligera" con contexto
+  libre del estudio: es una herramienta de afinado, no algo que un cliente
+  necesite).
+- Filtros, "solo destacados" y buscador por cuenta/ID **ya estaban** desde la
+  etapa 5 — no se tocaron.
+- El botón "Transcribir" del portal usa la misma `transcribeCompetitorPost`
+  que el estudio, pero **sí** mide y **sí** puede bloquear.
+
+**Agenda automática al aprobar** (`lib/portal/scheduling.ts` →
+`ensureCalendarEntry`, llamado desde `setScriptApproval`): si el guion que se
+está aprobando **no tiene ya** una fila en `content_calendar`, se crea una a
+**+14 días**, estado `idea`. Si ya la tiene (el caso normal: nace de
+`saveScriptWithNewIdea` en el estudio), no se toca nada — no hay que
+duplicarla ni pisarle la fecha a Paco. Sin migración: `content_calendar.status`
+**no tiene `CHECK`** en la base (a diferencia de `scripts.status`), así que
+`"idea"` es solo una convención de texto. Va con service role: el miembro no
+tiene `insert` sobre `content_calendar`.
+
+**Papelera de guiones** (`scripts.trashed_at`, migración `0011`):
+
+- Cualquier miembro del portal (viewer o collaborator) puede mandar un guion a
+  la papelera — es reversible y **solo Paco la ve**, así que no hace falta el
+  nivel de permiso de aprobar. Va con service role (`lib/portal/trash.ts`): un
+  `viewer` no tiene ninguna policy de `update` sobre `scripts`.
+- La UI pide confirmar dos veces (`TrashButton.tsx`, ventana de 4s) antes de
+  llamar a la action — no hay vuelta atrás desde el portal una vez tirado
+  (solo Paco puede restaurar, desde `/guiones/papelera`).
+  `netlify/functions/cleanup-scripts-trash-scheduled.ts` (cron `@daily`) borra
+  en firme a los **30 días**.
+- No se agregó como valor de `scripts.status` a propósito: pisaría el
+  significado de `baul` (bueno pero congelado, no descartado) y ese `CHECK` ya
+  está cerrado. Es una columna de fecha aparte, igual que
+  `client_approved_at`.
+- ⚠️ Solo marca la versión `is_latest`. Las versiones anteriores de un guion
+  con historial quedan en la tabla sin `trashed_at` — invisibles igual (no son
+  `is_latest`) pero el cron de 30 días tampoco las alcanza. Fuga menor de filas
+  viejas, aceptada a propósito en vez de reconstruir la cadena de versiones.
 
 ## Respuestas JSON de la IA (`lib/ai/json.ts`)
 
@@ -501,7 +575,8 @@ knowledge/              # fuente original de la base de conocimiento
 `APIFY_API_TOKEN` (global/fallback), `SECRETS_KEY` (cifrado de tokens por cliente),
 `SUPER_ADMIN_USER_ID` (único uuid que puede usar el token global de Apify),
 `SUPABASE_SERVICE_ROLE_KEY` (server-only; **también en local** desde `0006`, para
-leer `client_secrets`).
+leer `client_secrets`), `OPENAI_API_KEY` (server-only, desde la etapa 7 —
+Whisper; cuenta aparte de `ANTHROPIC_API_KEY`).
 
 ## Comandos
 

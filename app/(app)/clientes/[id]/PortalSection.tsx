@@ -26,7 +26,9 @@ import {
   setAiGenerationMode,
   setClientFeatures,
   setClientMemberRole,
+  setTranscriptionLimit,
 } from "../portalActions";
+import type { TranscriptionUsageSummary } from "@/lib/competencia/transcriptionUsage";
 import type { ClientInvite } from "@/lib/portal/invites";
 import {
   AI_FEATURE_SLUG,
@@ -55,6 +57,8 @@ type Props = {
   initialLimit: number | null;
   initialMode: string;
   usage: AiUsageSummary;
+  initialTranscriptionLimit: number | null;
+  transcriptionUsage: TranscriptionUsageSummary;
   initialMembers: PortalMember[];
   initialInvites: ClientInvite[];
 };
@@ -98,6 +102,8 @@ export default function PortalSection({
   initialLimit,
   initialMode,
   usage,
+  initialTranscriptionLimit,
+  transcriptionUsage,
   initialMembers,
   initialInvites,
 }: Props) {
@@ -105,6 +111,12 @@ export default function PortalSection({
   const [limit, setLimit] = useState<number | null>(initialLimit);
   const [mode, setMode] = useState<PortalGenerationMode>(() =>
     sanitizeGenerationMode(initialMode),
+  );
+  const [transcriptionLimit, setTranscriptionLimitState] = useState<number | null>(
+    initialTranscriptionLimit,
+  );
+  const [transcriptionLimitDraft, setTranscriptionLimitDraft] = useState(
+    initialTranscriptionLimit === null ? "" : String(initialTranscriptionLimit),
   );
   const [limitDraft, setLimitDraft] = useState(initialLimit === null ? "" : String(initialLimit));
   const [members, setMembers] = useState<PortalMember[]>(initialMembers);
@@ -123,6 +135,11 @@ export default function PortalSection({
   const aiEnabled = features.includes(AI_FEATURE_SLUG);
   const limitDirty = limitDraft.trim() !== (limit === null ? "" : String(limit));
   const overLimit = limit !== null && usage.used >= limit;
+  const competenciaEnabled = features.includes("competencia");
+  const transcriptionLimitDirty =
+    transcriptionLimitDraft.trim() !== (transcriptionLimit === null ? "" : String(transcriptionLimit));
+  const transcriptionOverLimit =
+    transcriptionLimit !== null && transcriptionUsage.used >= transcriptionLimit;
 
   function toggleFeature(slug: string, on: boolean) {
     const previous = features;
@@ -203,6 +220,38 @@ export default function PortalSection({
       } catch (e) {
         setMode(previous);
         setError(e instanceof Error ? e.message : "No se pudo guardar el modo.");
+      }
+    });
+  }
+
+  function saveTranscriptionLimit() {
+    const raw = transcriptionLimitDraft.trim();
+    const parsed = raw === "" ? null : Number(raw);
+
+    if (parsed !== null && (!Number.isInteger(parsed) || parsed < 0)) {
+      setError("El tope tiene que ser un número entero mayor o igual a 0 (o vacío, para sin tope).");
+      return;
+    }
+
+    setError(null);
+    setOk(null);
+
+    start(async () => {
+      try {
+        const res = await setTranscriptionLimit(clientId, parsed);
+        if (res.ok) {
+          setTranscriptionLimitState(res.limit);
+          setTranscriptionLimitDraft(res.limit === null ? "" : String(res.limit));
+          setOk(
+            res.limit === null
+              ? "Tope de transcripción quitado: ilimitadas."
+              : `Tope de transcripción guardado: ${res.limit} al mes.`,
+          );
+        } else {
+          setError(res.error);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "No se pudo guardar el tope de transcripción.");
       }
     });
   }
@@ -405,6 +454,45 @@ export default function PortalSection({
           Secciones incluidas · {enabledCount} de {FREE_PORTAL_FEATURES.length} prendidas
         </p>
         <div className={s.featureList}>{FREE_PORTAL_FEATURES.map(renderToggle)}</div>
+
+        {competenciaEnabled && (
+          <div className={s.addonBody} style={{ borderTop: "1px solid var(--glass-border)", marginTop: 12, paddingTop: 12 }}>
+            <div className={s.limitField}>
+              <label className="field-label" style={{ fontSize: 12 }} htmlFor="transcription-limit">
+                Tope de transcripción (Competencia)
+              </label>
+              <input
+                id="transcription-limit"
+                className={`input ${s.limitInput}`}
+                type="number"
+                min={0}
+                step={1}
+                placeholder="Sin tope"
+                value={transcriptionLimitDraft}
+                disabled={isPending}
+                onChange={(e) => setTranscriptionLimitDraft(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ fontSize: 13 }}
+              disabled={isPending || !transcriptionLimitDirty}
+              onClick={saveTranscriptionLimit}
+            >
+              {isPending ? "…" : "Guardar tope"}
+            </button>
+            <p className={s.usageText}>
+              Consumo de {formatMonth(transcriptionUsage.monthStart)}:{" "}
+              <strong className={transcriptionOverLimit ? s.usageOver : undefined}>
+                {transcriptionUsage.used}
+                {transcriptionLimit !== null ? ` de ${transcriptionLimit}` : ""}
+              </strong>{" "}
+              {transcriptionLimit === null ? "transcripciones (sin tope)" : "transcripciones"}
+              {transcriptionOverLimit ? " — tope alcanzado" : ""}
+            </p>
+          </div>
+        )}
       </div>
 
       {PAID_PORTAL_FEATURES.map((feature) => (

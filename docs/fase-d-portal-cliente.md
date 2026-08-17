@@ -1,7 +1,7 @@
 # Fase D — Portal de cliente (login propio + secciones configurables)
 
 > Plan aprobado 2026-08-12. Reemplaza el esbozo de "Fase D" en `pendientes.md`.
-> **Estado: etapas 1 a 6 hechas** (2026-08-14). Migraciones desde `0006`.
+> **Estado: etapas 1 a 7 hechas** (2026-08-17). Migraciones desde `0006`.
 > Queda solo Instagram, que está **en pausa** (no pendiente) por decisión de Paco.
 
 ## Desvíos del plan original (decididos sobre la marcha)
@@ -364,6 +364,24 @@ Decisiones que conviene no re-discutir:
   (esas rutas son handlers, no módulos importables). Al tocar uno, revisar el
   otro: si se desincronizan, el cliente recibe guiones con otro criterio.
 
+### Etapa 7 — transcripción online, Competencia en el portal, papelera y agenda
+
+Migraciones `0010_transcripcion_online.sql` y `0011_papelera_guiones.sql`.
+Detalle completo (por qué cada decisión, qué código depende de qué) en
+`CLAUDE.md` → "Etapa 7"; acá solo el resumen de qué cambió para el cliente:
+
+- **Transcripción ya no es solo local.** El pipeline de Whisper corre online
+  (OpenAI), así que ahora también funciona desde el portal — con tope propio
+  (`clients.transcription_limit`). Desde el estudio sigue sin tope.
+- **Competencia en el portal** sumó portada del video (embed de Instagram),
+  "Adaptar a mi marca" (gasta el mismo cupo que generar guiones — exige que
+  `generar_ia` también esté prendido) y "Transcribir".
+- **Aprobar un guion sin idea previa** ahora agenda solo, a 14 días, en
+  `content_calendar`. Si el guion ya tenía una idea vinculada, no se toca.
+- **Papelera**: cualquier miembro puede tirar un guion (dos clics para
+  confirmar); solo Paco la ve y puede restaurar, en `/guiones/papelera`. Se
+  borra en firme a los 30 días.
+
 **Instagram queda EN PAUSA** (decidido 2026-08-14), no pendiente. Dos razones:
 `instagram_media` e `instagram_accounts` están en la lista de tablas que `0006`
 dejó **owner-only** a propósito, así que haría falta una migración nueva; y el
@@ -384,6 +402,7 @@ poco que hoy devuelven esas métricas. El slug **no se borra** de
 | ✅ 4 | `/portal` con Reportes (`lib/portal/access.ts`, `app/(portal)/`) | Entrar con el usuario invitado |
 | ✅ 5 | Guiones (+ comentarios/aprobación), Calendario, Competencia, Investigación | Comentar desde el portal y ver el hilo en `/guiones/[id]` |
 | ✅ 6 | Add-on de IA: pantalla, tope, `ai_usage_log`, corte al pasarse (migración `0009`) | Poner tope 2, generar 3 veces: la tercera corta sin llamar a la API |
+| ✅ 7 | Transcripción online (Whisper), Competencia con portada/adaptar/transcribir en el portal, agenda automática al aprobar, papelera de guiones (migraciones `0010` y `0011`) | Transcribir desde el portal, adaptar un post, aprobar un guion sin idea previa y verlo en `/calendario`, tirar un guion y verlo en `/guiones/papelera` |
 | — | Instagram en el portal: **necesita migración** (hoy `instagram_media` es owner-only) | |
 
 Etapas 1–3 no cambian nada de lo que Paco ve hoy. La 1 es la única con riesgo

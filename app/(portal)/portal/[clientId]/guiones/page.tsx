@@ -17,6 +17,7 @@ import Link from "next/link";
 import { requirePortalClient, requirePortalSession, portalClientLabel } from "@/lib/portal/access";
 import { countCommentsByScript } from "@/lib/portal/comments";
 import { toScriptView } from "@/lib/portal/scriptView";
+import TrashButton from "./TrashButton";
 import s from "./guiones.module.css";
 
 /** Estados que el cliente sí ve, en el orden en que se listan. */
@@ -81,6 +82,7 @@ export default async function PortalGuionesPage({
     .select("id, type, title, brief, status, content, created_at, client_approved_at")
     .eq("client_id", client.id)
     .eq("is_latest", true)
+    .is("trashed_at", null)
     .in("status", VISIBLE_STATUSES)
     .order("created_at", { ascending: false });
 
@@ -149,6 +151,7 @@ export default async function PortalGuionesPage({
                   ) : (
                     <span className={s.pending}>Sin aprobar</span>
                   )}
+                  <TrashButton clientId={client.id} scriptId={x.id} />
                 </div>
               </Link>
             );

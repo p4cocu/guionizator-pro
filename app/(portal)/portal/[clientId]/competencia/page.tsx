@@ -1,15 +1,19 @@
 /**
- * `/portal/[clientId]/competencia` — el tablero de competencia de la marca,
- * **solo lectura** (Fase D, etapa 5).
+ * `/portal/[clientId]/competencia` — el tablero de competencia de la marca
+ * (Fase D, etapas 5 y 7).
  *
  * Candado 2: revalida el flag `competencia` antes de consultar.
  *
- * Qué NO tiene, a diferencia de `/competencia` (la pantalla de Paco): buscar
- * competidores, transcribir, clasificar, adaptar a guion, marcar favoritos,
- * borrar y seleccionar para reporte. Todo eso son mutaciones que la RLS del
- * miembro no permite igual — la policy `competitor_posts_member_select` es solo
- * `select`. Acá directamente no se dibujan, para no ofrecer botones que van a
- * fallar.
+ * Qué SIGUE sin tener, a diferencia de `/competencia` (la pantalla de Paco):
+ * buscar/agregar competidores, clasificar, marcar favoritos, borrar y
+ * seleccionar para reporte. Son mutaciones internas de taller, no algo que el
+ * cliente necesite — y la RLS del miembro tampoco las permitiría (la policy
+ * `competitor_posts_member_select` es solo `select`).
+ *
+ * Lo que SÍ tiene (etapa 7): la portada del post (mismo embed de Instagram que
+ * el estudio), transcribir y adaptar a su marca — las dos gastan crédito, así
+ * que la página trae el estado del cupo para que `CompetenciaPortalClient`
+ * pueda mostrarlo y bloquear los botones sin ida y vuelta al servidor.
  *
  * **Los posts marcados como descartados (`is_disliked`) no se muestran.** Es la
  * señal de "esto no sirve" que Paco deja al revisar; pasársela al cliente sería
@@ -18,6 +22,10 @@
 
 import { requirePortalClient, requirePortalSession, portalClientLabel } from "@/lib/portal/access";
 import { withOutliers } from "@/lib/competencia/outliers";
+import { hasFeature, AI_FEATURE_SLUG } from "@/lib/portal/features";
+import { getClientOwnerId, getGenerationState } from "@/lib/portal/generate";
+import { getTranscriptionUsageState } from "@/lib/competencia/transcriptionUsage";
+import { createServiceClient } from "@/lib/supabase/service";
 import CompetenciaPortalClient, { type PortalPostBase } from "./CompetenciaPortalClient";
 
 /** Solo lo que la pantalla dibuja. Menos columnas que `POST_COLUMNS` de `(app)`. */
@@ -33,6 +41,8 @@ export default async function PortalCompetenciaPage({
   const { supabase, user } = await requirePortalSession();
   const client = await requirePortalClient(user.id, clientId, "competencia");
 
+  const canAdapt = hasFeature(client.features, AI_FEATURE_SLUG);
+
   const { data } = await supabase
     .from("competitor_posts")
     .select(POST_COLUMNS)
@@ -45,5 +55,39 @@ export default async function PortalCompetenciaPage({
   // sería outlier o no según lo que estés mirando.
   const posts = withOutliers((data ?? []) as unknown as PortalPostBase[]);
 
-  return <CompetenciaPortalClient posts={posts} clientLabel={portalClientLabel(client)} />;
+  // El cupo se lee con service role: el miembro no tiene select sobre
+  // ai_usage_log ni transcription_usage_log. Si falla, se degrada a "sin
+  // datos" en vez de tumbar la pantalla — el corte real igual lo hace el
+  // servidor en las server actions.
+  const admin = createServiceClient();
+
+  const [transcriptionUsage, adaptUsage] = await Promise.all([
+    getClientOwnerId(client.id)
+      .then((ownerId) =>
+        getTranscriptionUsageState(admin, client.id, ownerId, client.transcriptionLimit),
+      )
+      .catch((e) => {
+        console.error("[portal/competencia] no se pudo leer el cupo de transcripción:", e);
+        return null;
+      }),
+    canAdapt
+      ? getClientOwnerId(client.id)
+          .then((ownerId) => getGenerationState(client.id, ownerId, client.aiGenerationLimit))
+          .catch((e) => {
+            console.error("[portal/competencia] no se pudo leer el cupo de adaptación:", e);
+            return null;
+          })
+      : Promise.resolve(null),
+  ]);
+
+  return (
+    <CompetenciaPortalClient
+      posts={posts}
+      clientId={client.id}
+      clientLabel={portalClientLabel(client)}
+      canAdapt={canAdapt}
+      transcriptionRemaining={transcriptionUsage?.remaining ?? null}
+      adaptRemaining={adaptUsage?.remaining ?? null}
+    />
+  );
 }

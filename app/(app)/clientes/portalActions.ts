@@ -157,6 +157,52 @@ export async function setAiGenerationLimit(
   return { ok: true, limit };
 }
 
+// ─── Transcripción: tope mensual ─────────────────────────────────────────────
+// No es un slug de `enabled_features` (viaja con "competencia", que es
+// gratis): es solo el número que corta cuántas transcripciones puede pedir el
+// cliente desde el portal antes de que se reinicie el mes. Mismo patrón que
+// `setAiGenerationLimit`.
+
+export type SetTranscriptionLimitResult =
+  | { ok: true; limit: number | null }
+  | { ok: false; error: string };
+
+export async function setTranscriptionLimit(
+  clientId: string,
+  rawLimit: number | null,
+): Promise<SetTranscriptionLimitResult> {
+  let limit: number | null = null;
+
+  if (rawLimit !== null) {
+    if (!Number.isFinite(rawLimit) || !Number.isInteger(rawLimit)) {
+      return { ok: false, error: "El tope tiene que ser un número entero." };
+    }
+    if (rawLimit < 0) return { ok: false, error: "El tope no puede ser negativo." };
+    if (rawLimit > 100000) return { ok: false, error: "Ese tope es absurdamente alto." };
+    limit = rawLimit;
+  }
+
+  try {
+    const { supabase, user } = await getAuthUser();
+
+    const { error } = await supabase
+      .from("clients")
+      .update({ transcription_limit: limit })
+      .eq("id", clientId)
+      .eq("owner_id", user.id);
+
+    if (error) return { ok: false, error: error.message };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo guardar el tope.",
+    };
+  }
+
+  revalidatePath(`/clientes/${clientId}`);
+  return { ok: true, limit };
+}
+
 // ─── Add-on de IA: modo de generación ────────────────────────────────────────
 
 export type SetAiModeResult =

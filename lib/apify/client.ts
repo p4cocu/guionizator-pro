@@ -100,6 +100,9 @@ type RawApifyPost = {
   // Con addParentData el actor suele adjuntar datos del perfil padre.
   ownerFollowersCount?: number;
   followersCount?: number;
+  /** Link directo de descarga del video (solo en posts tipo Video). Firmado
+   *  por Instagram, de vida corta — ver comentario en la migración 0010. */
+  videoUrl?: string;
   error?: string;
 };
 
@@ -113,6 +116,7 @@ export type ScrapedPost = {
   likes: number;
   comments: number;
   videoViews?: number;
+  videoUrl?: string;
   followers?: number;
   postedAt?: string;
 };
@@ -203,8 +207,54 @@ export async function scrapeCompetitorPosts(opts: {
         likes: it.likesCount ?? 0,
         comments: it.commentsCount ?? 0,
         videoViews: it.videoViewCount ?? it.videoPlayCount,
+        videoUrl: it.videoUrl,
         followers: typeof followers === "number" ? followers : undefined,
         postedAt: it.timestamp,
       };
     });
+}
+
+/**
+ * Vuelve a pedirle a Apify UN post puntual por su URL directa (`directUrls`
+ * acepta tanto perfiles como posts/reels individuales). Se usa cuando el
+ * `video_url` guardado en la migración anterior ya expiró: en vez de
+ * recorrer el perfil entero, se pide solo ese post.
+ *
+ * Devuelve `null` si el post ya no existe o no trae video (ej. se borró en
+ * Instagram, o es una imagen).
+ */
+export async function fetchFreshVideoUrl(
+  token: string,
+  permalink: string,
+): Promise<string | null> {
+  const url = `${APIFY_BASE}/acts/${ACTOR_ID}/run-sync-get-dataset-items?token=${encodeURIComponent(
+    token,
+  )}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      directUrls: [permalink],
+      resultsType: "posts",
+      resultsLimit: 1,
+      addParentData: false,
+    }),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    let detail = `Apify ${res.status}`;
+    try {
+      const j = await res.json();
+      detail = j?.error?.message || detail;
+    } catch {
+      /* ignore */
+    }
+    throw new ApifyError(detail, res.status);
+  }
+
+  const items = (await res.json()) as RawApifyPost[];
+  const item = items.find((it) => !it.error);
+  return item?.videoUrl ?? null;
 }

@@ -58,6 +58,8 @@ export type PortalClient = {
   aiGenerationLimit: number | null;
   /** Qué flujo ve en `/portal/[id]/generar`. Ya saneado: nunca un valor raro. */
   aiGenerationMode: PortalGenerationMode;
+  /** Tope mensual de transcripciones desde el portal. `null` = sin tope. */
+  transcriptionLimit: number | null;
   role: PortalRole;
 };
 
@@ -101,6 +103,7 @@ type PortalClientRow = {
   enabled_features: string[] | null;
   ai_generation_limit: number | null;
   ai_generation_mode: string | null;
+  transcription_limit: number | null;
 };
 
 /**
@@ -120,7 +123,7 @@ export const listPortalClients = cache(
       supabase
         .from("portal_clients")
         .select(
-          "id, nombre, marca, nicho, enabled_features, ai_generation_limit, ai_generation_mode",
+          "id, nombre, marca, nicho, enabled_features, ai_generation_limit, ai_generation_mode, transcription_limit",
         )
         .order("nombre", { ascending: true }),
       supabase.from("client_members").select("client_id, role").eq("user_id", userId),
@@ -142,6 +145,7 @@ export const listPortalClients = cache(
       features: sanitizeFeatures(r.enabled_features ?? []),
       aiGenerationLimit: r.ai_generation_limit,
       aiGenerationMode: sanitizeGenerationMode(r.ai_generation_mode),
+      transcriptionLimit: r.transcription_limit,
       role: roles.get(r.id) ?? "owner",
     }));
   },

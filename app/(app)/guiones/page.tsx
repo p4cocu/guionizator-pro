@@ -146,6 +146,9 @@ export default async function GuionesPage({
         </div>
         <div className={styles.headerActions}>
           <ClientFilter clients={clients} />
+          <Link href="/guiones/papelera" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
+            🗑 Papelera
+          </Link>
           <Link href="/guiones/nuevo" className="btn btn-primary" style={{ whiteSpace: "nowrap" }}>
             + Nuevo guion
           </Link>
