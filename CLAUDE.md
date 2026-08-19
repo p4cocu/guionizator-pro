@@ -600,6 +600,73 @@ modo lectura: lo usan la pantalla del portal, `AdaptModal`, `/generar` y el
 modal del calendario. Antes había tres copias que ya se estaban
 desincronizando.
 
+### Etapa 9 — perfil de usuario, estrella del cliente y guion en el calendario
+
+**Sin migración**: las tres cosas corren sobre columnas que ya existían.
+
+**Perfil (`/portal/perfil` y `/perfil`).** Cada uno cambia su **nombre** y su
+**contraseña**. Esto revierte a propósito la decisión de la etapa 8 de que el
+nombre se eligiera una sola vez.
+
+- Lo que sostiene la atribución ahora es `assertNameAvailable`
+  (`lib/portal/profiles.ts`): **dentro de una misma marca no puede haber dos
+  nombres iguales**; en marcas distintas sí (dos "Paco" que no se cruzan no se
+  pisan). Sin unique index detrás — sería global, que es justo lo que no se
+  quiere —, así que dos altas simultáneas pueden colarse; lo corrige el dueño.
+- ⚠️ El alta por invitación guarda el nombre **antes** de crear la membresía, así
+  que `setOwnDisplayName` acepta `extraClientIds` y `acceptInviteAction` le pasa
+  la marca de la invitación. Sin eso el usuario nuevo no tiene pares y el
+  chequeo no compara con nadie.
+- La escritura del nombre sigue yendo por **service role** (`portal_profiles` no
+  tiene policies para nadie). La contraseña va por `auth.updateUser` con el
+  **cliente de sesión**, y se pide la actual: se valida con un cliente anon
+  **efímero** (`persistSession: false`) — `signInWithPassword` sobre el cliente
+  de sesión reescribiría las cookies y un tipeo mal dejaría al usuario afuera.
+- `PASSWORD_MIN` vive en `lib/portal/profiles.ts` y no en `profileActions.ts`:
+  en un módulo `"use server"` solo se pueden exportar funciones async, un
+  `export const` rompe el build. La pantalla lo recibe como prop, igual que
+  `DISPLAY_NAME_MAX`.
+- `components/portal/ProfileForm.tsx` lo comparten las dos pantallas.
+  `/portal/perfil` vive **fuera de `[clientId]`** (es de la persona, no de la
+  marca) y por eso no lleva `PortalShell`. Entradas: el email de las dos
+  topbars, el pie del sidebar del portal y "Tu perfil" en el sidebar del
+  estudio (el email se oculta en móvil).
+
+**El cliente marca la estrella en Competencia** (`toggleClientFavorite`).
+Escribe en **`competitor_posts.is_favorite`, la misma columna que Paco** —
+decisión de Paco (2026-08-19) contra la alternativa de una columna
+`is_client_favorite` propia. Lo que eso implica y hay que tener presente:
+
+- El badge dejó de significar "lo elegimos nosotros"; el copy del portal se
+  reescribió a "⭐ Guardado" y el filtro a "⭐ Guardados".
+- **En `/competencia` no se distingue quién marcó qué**: no hay columna de autor.
+- La limpieza a 40 días (`cleanup-competencia-scheduled` y `runScrapeJob`) ya
+  excluye `is_favorite`, así que lo que marque el cliente **se conserva solo** —
+  y un cliente que marque todo llena la tabla del dueño.
+- Entra al snapshot de los reportes como favorito, igual que los de Paco.
+- Va con **service role** filtrando `client_id` a mano (el miembro solo tiene
+  `select` sobre la tabla, y no se le va a dar `update`: con su JWT podría
+  tocar `is_disliked`, la transcripción o la clasificación). Solo
+  `collaborator` — un `viewer` no ve el botón y la action lo rechaza.
+
+**Guion en el modal del calendario** (`app/(app)/calendario/`):
+
+- ⚠️ `content_calendar.script_id` apunta a la fila que existía al crear la
+  entrada, y **guardar una versión crea una fila nueva** (`parent_id` = raíz,
+  `is_latest` en la última). El modal mostraba la v1 sin avisar: al 2026-08-19
+  le pasaba a **10 de las 20 entradas vinculadas**. `getCalendarScript` ahora
+  resuelve la cadena (`parent_id ?? id` → la `is_latest`), devuelve
+  `resolved_from_older` para avisarlo en pantalla, y "Editar guion →" usa el id
+  resuelto. **No** se reescribe el `script_id` guardado: apunta a la raíz, que
+  es estable, y sincronizarlo en cada `saveScriptVersion` sería otra cosa que
+  mantener.
+- `getLinkableScripts` + `setCalendarScript` permiten **vincular y desvincular**
+  un guion existente desde el mismo modal. Hacía falta porque la mayoría de las
+  entradas nace sin guion: las 6 de agosto de 2026 no tenían ninguno. Lista solo
+  `is_latest` sin `trashed_at`, acotada a la marca de la entrada si la tiene, y
+  marca "· ya agendado" a los que ya cuelgan de otra entrada (se permiten igual:
+  a veces es mover de fecha).
+
 ## Respuestas JSON de la IA (`lib/ai/json.ts`)
 
 Todo endpoint que le pide JSON a Claude pasa por `lib/ai/json.ts` — **nunca

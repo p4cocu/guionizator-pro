@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { OutlierFlags } from "@/lib/competencia/outliers";
 import { labelFor, colorFor } from "@/lib/competencia/taxonomy";
 import { normalizePublicId } from "@/lib/competencia/publicId";
-import { transcribePortalPost } from "./actions";
+import { transcribePortalPost, toggleClientFavorite } from "./actions";
 import AdaptModal from "./AdaptModal";
 import s from "./competencia.module.css";
 
@@ -73,6 +73,7 @@ export default function CompetenciaPortalClient({
   clientId,
   clientLabel,
   canAdapt,
+  canFavorite,
   transcriptionRemaining: initialTranscriptionRemaining,
   adaptRemaining: initialAdaptRemaining,
 }: {
@@ -80,16 +81,19 @@ export default function CompetenciaPortalClient({
   clientId: string;
   clientLabel: string;
   canAdapt: boolean;
+  /** `collaborator` (o el dueño en preview). Un `viewer` no ve la estrella. */
+  canFavorite: boolean;
   transcriptionRemaining: number | null;
   adaptRemaining: number | null;
 }) {
   const [posts, setPosts] = useState(initialPosts);
   const [query, setQuery] = useState("");
   const [cuenta, setCuenta] = useState("");
-  // Destacados y "nuestra selección" son dos cosas distintas (etapa 8): el
-  // primero es automático (el post rindió muy por encima de su propia cuenta),
-  // el segundo es curaduría a mano. Antes iban en un solo checkbox y un post
-  // que entraba solo por favorito no llevaba ninguna marca en la tarjeta.
+  // Destacados y guardados son dos cosas distintas (etapa 8): el primero es
+  // automático (el post rindió muy por encima de su propia cuenta), el segundo
+  // es curaduría a mano. Antes iban en un solo checkbox y un post que entraba
+  // solo por favorito no llevaba ninguna marca en la tarjeta. Desde la etapa 9
+  // la estrella la puede poner también el cliente: es la misma columna.
   const [soloDestacados, setSoloDestacados] = useState(false);
   const [soloSeleccion, setSoloSeleccion] = useState(false);
   const [soloTranscritos, setSoloTranscritos] = useState(false);
@@ -183,6 +187,36 @@ export default function CompetenciaPortalClient({
     }
   }
 
+  /**
+   * La estrella se pinta antes de que responda el servidor y se revierte si
+   * falla (regla dura de `CLAUDE.md`: nunca una action de mutación sin
+   * `try/catch` del lado del cliente).
+   */
+  async function handleFavorite(post: PortalPost) {
+    const nuevo = !post.is_favorite;
+    setPosts((prev) =>
+      prev.map((p) => (p.id === post.id ? { ...p, is_favorite: nuevo } : p)),
+    );
+    setErrorFor(null);
+    try {
+      const res = await toggleClientFavorite(clientId, post.id, nuevo);
+      if (!res.ok) {
+        setPosts((prev) =>
+          prev.map((p) => (p.id === post.id ? { ...p, is_favorite: !nuevo } : p)),
+        );
+        setErrorFor({ id: post.id, message: res.error });
+      }
+    } catch (e) {
+      setPosts((prev) =>
+        prev.map((p) => (p.id === post.id ? { ...p, is_favorite: !nuevo } : p)),
+      );
+      setErrorFor({
+        id: post.id,
+        message: e instanceof Error ? e.message : "No se pudo guardar la estrella.",
+      });
+    }
+  }
+
   return (
     <div>
       <div className={s.header}>
@@ -191,10 +225,11 @@ export default function CompetenciaPortalClient({
         <p className={s.subtitle}>
           Lo que están publicando las cuentas que seguimos en tu categoría.{" "}
           <strong>🔥 Destacado</strong> es el que rindió muy por encima de lo
-          normal para su propia cuenta; <strong>⭐ Nuestra selección</strong> es
-          el que elegimos a mano porque nos parece que da para algo tuyo. Cada
-          pieza tiene un código de 6 caracteres: si quieres pedir algo sobre una
-          en particular, mándanos ese código.
+          normal para su propia cuenta; <strong>⭐ Guardado</strong> es el que
+          alguno de los dos marcó porque da para algo tuyo
+          {canFavorite ? " — la estrella de cada tarjeta es tuya para usar" : ""}.
+          Cada pieza tiene un código de 6 caracteres: si quieres pedir algo sobre
+          una en particular, mándanos ese código.
         </p>
       </div>
 
@@ -254,7 +289,7 @@ export default function CompetenciaPortalClient({
                 checked={soloSeleccion}
                 onChange={(e) => setSoloSeleccion(e.target.checked)}
               />
-              <span>⭐ Nuestra selección</span>
+              <span>⭐ Guardados</span>
             </label>
             <label className={s.check}>
               <input
@@ -287,6 +322,8 @@ export default function CompetenciaPortalClient({
                 adaptBlocked={adaptBlocked}
                 adaptRemaining={adaptRemaining}
                 onAdapt={() => setAdaptingPost(p)}
+                canFavorite={canFavorite}
+                onFavorite={() => handleFavorite(p)}
                 error={errorFor?.id === p.id ? errorFor.message : null}
               />
             ))}
@@ -325,6 +362,8 @@ function PostCard({
   adaptBlocked,
   adaptRemaining,
   onAdapt,
+  canFavorite,
+  onFavorite,
   error,
 }: {
   post: PortalPost;
@@ -338,6 +377,8 @@ function PostCard({
   adaptBlocked: boolean;
   adaptRemaining: number | null;
   onAdapt: () => void;
+  canFavorite: boolean;
+  onFavorite: () => void;
   error: string | null;
 }) {
   const [copiado, setCopiado] = useState(false);
@@ -366,21 +407,40 @@ function PostCard({
     >
       <div className={s.cardTop}>
         <span className={s.account}>@{post.username}</span>
-        {/*
-          Un post puede ser las dos cosas; en ese caso manda el dato duro
-          (outlier), que es el que explica los números de abajo. El favorito
-          sin números excepcionales entra por curaduría y hasta la etapa 8 no
-          llevaba ninguna marca, aunque el filtro sí lo devolvía.
-        */}
-        {post.is_outlier ? (
-          <span className={s.outlier} title="Rindió muy por encima de lo normal para esa cuenta">
-            🔥 Destacado
-          </span>
-        ) : post.is_favorite ? (
-          <span className={s.picked} title="Lo elegimos a mano para esta marca">
-            ⭐ Nuestra selección
-          </span>
-        ) : null}
+        <div className={s.cardTopRight}>
+          {/*
+            Un post puede ser las dos cosas; en ese caso manda el dato duro
+            (outlier), que es el que explica los números de abajo. El guardado
+            sin números excepcionales entra por curaduría y hasta la etapa 8 no
+            llevaba ninguna marca, aunque el filtro sí lo devolvía.
+          */}
+          {post.is_outlier ? (
+            <span className={s.outlier} title="Rindió muy por encima de lo normal para esa cuenta">
+              🔥 Destacado
+            </span>
+          ) : post.is_favorite && !canFavorite ? (
+            // Sin estrella clicable (viewer) el badge es la única señal.
+            <span className={s.picked} title="Está guardado para esta marca">
+              ⭐ Guardado
+            </span>
+          ) : null}
+
+          {canFavorite && (
+            <button
+              type="button"
+              className={`${s.starBtn} ${post.is_favorite ? s.starOn : ""}`}
+              onClick={onFavorite}
+              aria-pressed={post.is_favorite}
+              title={
+                post.is_favorite
+                  ? "Quitar de guardados"
+                  : "Guardar esta publicación para tu marca"
+              }
+            >
+              {post.is_favorite ? "★" : "☆"}
+            </button>
+          )}
+        </div>
       </div>
 
       {post.permalink ? (

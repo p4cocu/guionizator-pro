@@ -122,8 +122,13 @@ export default function PortalShell({
         </nav>
 
         <div className={s.sidebarFooter}>
-          <span className={s.dot} />
-          <span>Portal de cliente</span>
+          <Link href="/portal/perfil" className={`${s.link} ${s.linkMuted}`} onClick={close}>
+            <span>Tu perfil</span>
+          </Link>
+          <div className={s.sidebarFooterNote}>
+            <span className={s.dot} />
+            <span>Portal de cliente</span>
+          </div>
         </div>
       </aside>
 
@@ -139,9 +144,11 @@ export default function PortalShell({
           </div>
           <div className={s.topbarRight}>
             {email && (
-              <span className={s.user} title={email}>
+              // Desde la etapa 9 el email es la puerta al perfil: es donde el
+              // usuario ya busca "su cuenta".
+              <Link href="/portal/perfil" className={s.user} title={`${email} — tu perfil`}>
                 {email}
-              </span>
+              </Link>
             )}
             <LogoutButton />
           </div>

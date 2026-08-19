@@ -624,6 +624,30 @@
   color: var(--text-dim);
 }
 
+/* Vincular un guion existente (etapa 9): la entrada sin guion muestra el
+   selector en el mismo lugar donde iría el guion. */
+.modalScriptActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.linkPicker {
+  display: grid;
+  gap: 10px;
+}
+
+.linkRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.linkRow select {
+  flex: 1;
+  min-width: 0;
+}
+
 .modalActions {
   display: flex;
   align-items: center;

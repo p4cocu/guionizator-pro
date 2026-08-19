@@ -142,6 +142,36 @@
   white-space: nowrap;
 }
 
+/* Estrella clicable del cliente (etapa 9). Escribe la misma columna
+   `is_favorite` que la del estudio: no hay dos curadurías, hay una. */
+.cardTopRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.starBtn {
+  font-size: 17px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.12s ease;
+}
+
+.starBtn:hover {
+  color: var(--signal);
+  transform: scale(1.12);
+}
+
+.starOn {
+  color: var(--signal);
+}
+
 .transcriptFlag {
   font-size: 11px;
   font-weight: 600;

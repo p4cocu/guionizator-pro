@@ -2,8 +2,8 @@
 
 /**
  * Lo que el cliente puede DISPARAR desde `/portal/[clientId]/competencia`:
- * transcribir un post y adaptarlo a su marca. Las dos cuestan crédito — a
- * diferencia de comentar o aprobar, que son gratis.
+ * transcribir un post, adaptarlo a su marca y marcarlo con la estrella. Las dos
+ * primeras cuestan crédito; la estrella es gratis, como comentar o aprobar.
  *
  * ⚠️ NO reexportar tipos (regla de `CLAUDE.md`): en un módulo `"use server"`
  * un `export type` sobrevive al bundle como referencia que en runtime no
@@ -148,5 +148,72 @@ export async function adaptPortalPost(
     rethrowIfNextControlFlow(e);
     const { message } = generationErrorInfo(e);
     return { ok: false, error: message };
+  }
+}
+
+export type FavoriteResult = { ok: true; value: boolean } | { ok: false; error: string };
+
+/**
+ * Estrella del post (etapa 9). Escribe en `competitor_posts.is_favorite`, **la
+ * misma columna que usa Paco desde `/competencia`** — decisión tomada a
+ * propósito para no partir la curaduría en dos: lo marcado es lo marcado,
+ * venga de quien venga. Consecuencias asumidas:
+ *
+ *  - El badge dejó de significar "lo elegimos nosotros" y el copy del portal se
+ *    reescribió para no mentir.
+ *  - En `/competencia` no se distingue quién marcó qué (no hay columna de
+ *    autor).
+ *  - La limpieza a 40 días (`cleanup-competencia-scheduled` y `runScrapeJob`)
+ *    ya excluye `is_favorite`, así que lo que marque el cliente se conserva
+ *    solo. Eso es lo que se quiere; también significa que un cliente que marque
+ *    todo llena la tabla del dueño.
+ *
+ * ⚠️ Va con **service role**: la policy `competitor_posts_member_select` de la
+ * `0006` le dio al miembro solo `select`, y no se le va a dar `update` — con su
+ * JWT podría llamar a PostgREST directo y tocar cualquier columna de la fila
+ * (`is_disliked`, la transcripción, la clasificación). Mismo patrón que
+ * `lib/portal/trash.ts`. Por eso el `client_id` se filtra a mano.
+ *
+ * Solo `collaborator` (y el dueño en modo preview): un `viewer` no modifica
+ * nada, igual que no aprueba guiones.
+ */
+export async function toggleClientFavorite(
+  clientId: string,
+  postId: string,
+  value: boolean,
+): Promise<FavoriteResult> {
+  try {
+    const { user } = await requirePortalSession();
+    const client = await requirePortalClient(user.id, clientId, "competencia");
+
+    if (client.role === "viewer") {
+      return {
+        ok: false,
+        error:
+          "Tu acceso es de solo lectura. Pídele a quien maneja tu contenido que te dé permiso de colaborador.",
+      };
+    }
+
+    const admin = createServiceClient();
+    const { data, error } = await admin
+      .from("competitor_posts")
+      .update({ is_favorite: value })
+      .eq("id", postId)
+      .eq("client_id", clientId)
+      .select("id");
+
+    if (error) return { ok: false, error: error.message };
+    if (!data?.length) {
+      return { ok: false, error: "Esa publicación no existe o no es de tu marca." };
+    }
+
+    revalidatePath(`/portal/${clientId}/competencia`);
+    return { ok: true, value };
+  } catch (e) {
+    rethrowIfNextControlFlow(e);
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo guardar la estrella.",
+    };
   }
 }

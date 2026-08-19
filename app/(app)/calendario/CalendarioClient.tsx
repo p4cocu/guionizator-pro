@@ -3,7 +3,12 @@
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
-import type { CalendarEntry, CalendarEntryInput, CalendarScript } from "./actions";
+import type {
+  CalendarEntry,
+  CalendarEntryInput,
+  CalendarScript,
+  LinkableScript,
+} from "./actions";
 import {
   createCalendarEntry,
   updateCalendarEntry,
@@ -14,6 +19,8 @@ import {
   sendToProduction,
   updateCalendarDate,
   getCalendarScript,
+  getLinkableScripts,
+  setCalendarScript,
 } from "./actions";
 import ScriptBody from "@/components/portal/ScriptBody";
 import s from "./calendario.module.css";
@@ -174,6 +181,16 @@ export default function DashboardClient({
   const [modalScriptLoading, setModalScriptLoading] = useState(false);
   const [modalScriptError, setModalScriptError] = useState<string | null>(null);
 
+  // Vincular un guion existente desde el modal (etapa 9). La mayoría de las
+  // entradas nace sin guion —las del generador de calendario, y las que se
+  // escriben a mano antes que el guion—, así que sin esto el bloque de arriba
+  // no se dibujaba nunca.
+  const [linkables, setLinkables] = useState<LinkableScript[]>([]);
+  const [linkablesLoading, setLinkablesLoading] = useState(false);
+  const [linkPick, setLinkPick] = useState("");
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+
   // Local entries state for optimistic drag-and-drop updates
   const [entries, setEntries] = useState<CalendarEntry[]>(initialEntries);
   useEffect(() => { setEntries(initialEntries); }, [initialEntries]);
@@ -235,9 +252,61 @@ export default function DashboardClient({
       .finally(() => setModalScriptLoading(false));
   }
 
+  /**
+   * Los guiones candidatos a vincular. Se piden al abrir el modal de una
+   * entrada que no tiene guion; si ya lo tiene, no hay nada que elegir.
+   */
+  function loadLinkables(clientId: string | null) {
+    setLinkables([]);
+    setLinkPick("");
+    setLinkError(null);
+    setLinkablesLoading(true);
+    getLinkableScripts(clientId)
+      .then(setLinkables)
+      .catch((e) =>
+        setLinkError(e instanceof Error ? e.message : "No se pudieron cargar los guiones."),
+      )
+      .finally(() => setLinkablesLoading(false));
+  }
+
+  /**
+   * Vincula (`scriptId`) o desvincula (`null`). Actualiza la entrada abierta y
+   * la grilla en memoria para no depender del refresh, y captura el error para
+   * mostrarlo en línea (regla dura de `CLAUDE.md`).
+   */
+  async function handleLinkScript(scriptId: string | null) {
+    if (!editingEntry) return;
+    const entryId = editingEntry.id;
+
+    setLinkBusy(true);
+    setLinkError(null);
+    try {
+      await setCalendarScript(entryId, scriptId);
+      setEditingEntry((prev) => (prev ? { ...prev, script_id: scriptId } : prev));
+      setEntries((prev) =>
+        prev.map((e) => (e.id === entryId ? { ...e, script_id: scriptId } : e)),
+      );
+      loadModalScript(scriptId);
+      if (scriptId) {
+        setLinkPick("");
+      } else {
+        loadLinkables(editingEntry.client_id);
+      }
+      router.refresh();
+    } catch (e) {
+      setLinkError(
+        e instanceof Error ? e.message : "No se pudo guardar el guion vinculado.",
+      );
+    } finally {
+      setLinkBusy(false);
+    }
+  }
+
   function openNew(weekNumber: number, date?: string) {
     setEditingEntry(null);
     loadModalScript(null);
+    setLinkables([]);
+    setLinkError(null);
     setForm({
       ...EMPTY_FORM,
       month,
@@ -253,6 +322,12 @@ export default function DashboardClient({
   function openEdit(entry: CalendarEntry) {
     setEditingEntry(entry);
     loadModalScript(entry.script_id);
+    if (entry.script_id) {
+      setLinkables([]);
+      setLinkError(null);
+    } else {
+      loadLinkables(entry.client_id);
+    }
     setForm({
       client_id: entry.client_id,
       title: entry.title,
@@ -1220,38 +1295,112 @@ export default function DashboardClient({
                 ver lo que había que grabar. Se dibuja con el mismo componente
                 que usa el portal: un solo criterio de lectura del `content`.
               */}
-              {editingEntry?.script_id && (
+              {editingEntry && (
                 <div className={s.modalScript}>
                   <div className={s.modalScriptHead}>
                     <span className="eyebrow">Guion vinculado</span>
-                    <Link
-                      href={`/guiones/${editingEntry.script_id}`}
-                      className="btn btn-secondary"
-                      style={{ fontSize: 12, padding: "6px 14px" }}
-                    >
-                      Editar guion →
-                    </Link>
+                    {editingEntry.script_id && (
+                      <div className={s.modalScriptActions}>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ fontSize: 12, padding: "6px 12px" }}
+                          onClick={() => handleLinkScript(null)}
+                          disabled={linkBusy}
+                        >
+                          {linkBusy ? "…" : "Desvincular"}
+                        </button>
+                        {/*
+                          El link va al id RESUELTO, no al guardado: si la
+                          entrada apunta a una versión vieja, "Editar guion"
+                          tiene que abrir la vigente.
+                        */}
+                        <Link
+                          href={`/guiones/${modalScript?.id ?? editingEntry.script_id}`}
+                          className="btn btn-secondary"
+                          style={{ fontSize: 12, padding: "6px 14px" }}
+                        >
+                          Editar guion →
+                        </Link>
+                      </div>
+                    )}
                   </div>
 
-                  {modalScriptLoading && (
-                    <p className={s.modalScriptHint}>Cargando el guion…</p>
-                  )}
-                  {modalScriptError && (
-                    <p className={s.formError}>{modalScriptError}</p>
-                  )}
-                  {modalScript && (
+                  {editingEntry.script_id ? (
                     <>
-                      {modalScript.title && (
-                        <p className={s.modalScriptTitle}>{modalScript.title}</p>
+                      {modalScriptLoading && (
+                        <p className={s.modalScriptHint}>Cargando el guion…</p>
                       )}
-                      <ScriptBody
-                        content={modalScript.content}
-                        type={modalScript.type}
-                        framed={false}
-                        compact
-                      />
+                      {modalScriptError && (
+                        <p className={s.formError}>{modalScriptError}</p>
+                      )}
+                      {modalScript && (
+                        <>
+                          {modalScript.title && (
+                            <p className={s.modalScriptTitle}>{modalScript.title}</p>
+                          )}
+                          {modalScript.resolved_from_older && (
+                            <p className={s.modalScriptHint}>
+                              La entrada apuntaba a la primera versión. Estás
+                              viendo la v{modalScript.version_number ?? "—"}, que
+                              es la vigente.
+                            </p>
+                          )}
+                          <ScriptBody
+                            content={modalScript.content}
+                            type={modalScript.type}
+                            framed={false}
+                            compact
+                          />
+                        </>
+                      )}
                     </>
+                  ) : (
+                    <div className={s.linkPicker}>
+                      <p className={s.modalScriptHint}>
+                        Esta pieza todavía no tiene guion. Puedes vincular uno
+                        que ya escribiste
+                        {editingEntry.client_id ? " para esta marca" : ""}.
+                      </p>
+
+                      {linkablesLoading ? (
+                        <p className={s.modalScriptHint}>Cargando guiones…</p>
+                      ) : linkables.length === 0 ? (
+                        <p className={s.modalScriptHint}>
+                          No hay guiones disponibles para vincular.
+                        </p>
+                      ) : (
+                        <div className={s.linkRow}>
+                          <select
+                            className="input"
+                            value={linkPick}
+                            onChange={(e) => setLinkPick(e.target.value)}
+                            disabled={linkBusy}
+                            aria-label="Elegir guion para vincular"
+                          >
+                            <option value="">Elige un guion…</option>
+                            {linkables.map((g) => (
+                              <option key={g.id} value={g.id}>
+                                {(g.title?.trim() || "Sin título").slice(0, 70)}
+                                {g.client_label ? ` · ${g.client_label}` : ""}
+                                {g.linked_elsewhere ? " · ya agendado" : ""}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => handleLinkScript(linkPick)}
+                            disabled={linkBusy || !linkPick}
+                          >
+                            {linkBusy ? "Vinculando…" : "Vincular"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   )}
+
+                  {linkError && <p className={s.formError}>{linkError}</p>}
                 </div>
               )}
 

@@ -97,6 +97,19 @@ export default function Sidebar({ isOpen, onClose }: Props) {
           <span>{NAV_PORTAL.label}</span>
         </Link>
 
+        {/* El perfil también está en el email de la topbar, pero ese se oculta
+            en móvil: sin esta entrada no habría forma de llegar desde el
+            teléfono (etapa 9). */}
+        <Link
+          href="/perfil"
+          className={`${styles.link} ${
+            pathname === "/perfil" ? styles.active : ""
+          }`}
+          onClick={onClose}
+        >
+          <span>Tu perfil</span>
+        </Link>
+
         {process.env.NODE_ENV === "development" && (
           <>
             <span className="eyebrow" style={{ paddingLeft: 14, opacity: 0.5, marginTop: 8 }}>

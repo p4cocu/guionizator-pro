@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import styles from "./Topbar.module.css";
 import LogoutButton from "./LogoutButton";
@@ -10,6 +11,7 @@ const TITLES: Record<string, string> = {
   "/guiones": "Guiones",
   "/prompts": "Prompts de imagen",
   "/cerebro": "Cerebro",
+  "/perfil": "Tu perfil",
 };
 
 function titleFor(pathname: string): string {
@@ -40,9 +42,11 @@ export default function Topbar({ email, onMenuToggle }: Props) {
       </div>
       <div className={styles.right}>
         {email && (
-          <span className={styles.user} title={email}>
+          // Link al perfil desde la etapa 9 (mismo criterio que la topbar del
+          // portal): el email es donde uno busca su cuenta.
+          <Link href="/perfil" className={styles.user} title={`${email} — tu perfil`}>
             {email}
-          </span>
+          </Link>
         )}
         <LogoutButton />
       </div>

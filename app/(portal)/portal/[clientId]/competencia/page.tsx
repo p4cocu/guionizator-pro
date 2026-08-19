@@ -5,10 +5,15 @@
  * Candado 2: revalida el flag `competencia` antes de consultar.
  *
  * Qué SIGUE sin tener, a diferencia de `/competencia` (la pantalla de Paco):
- * buscar/agregar competidores, clasificar, marcar favoritos, borrar y
- * seleccionar para reporte. Son mutaciones internas de taller, no algo que el
- * cliente necesite — y la RLS del miembro tampoco las permitiría (la policy
+ * buscar/agregar competidores, clasificar, descartar, borrar y seleccionar
+ * para reporte. Son mutaciones internas de taller, no algo que el cliente
+ * necesite — y la RLS del miembro tampoco las permitiría (la policy
  * `competitor_posts_member_select` es solo `select`).
+ *
+ * Sí puede, desde la etapa 9, **marcar la estrella** (`toggleClientFavorite`),
+ * y escribe en la misma columna `is_favorite` que usa Paco: la curaduría es
+ * una sola. Va con service role por lo mismo de arriba — el miembro no tiene
+ * `update` sobre la tabla.
  *
  * Lo que SÍ tiene (etapa 7): la portada del post (mismo embed de Instagram que
  * el estudio), transcribir y adaptar a su marca — las dos gastan crédito, así
@@ -42,6 +47,9 @@ export default async function PortalCompetenciaPage({
   const client = await requirePortalClient(user.id, clientId, "competencia");
 
   const canAdapt = hasFeature(client.features, AI_FEATURE_SLUG);
+  // Un `viewer` no modifica nada, igual que no aprueba guiones. El dueño en
+  // modo preview sí, que es como se prueba la pantalla.
+  const canFavorite = client.role !== "viewer";
 
   const { data } = await supabase
     .from("competitor_posts")
@@ -86,6 +94,7 @@ export default async function PortalCompetenciaPage({
       clientId={client.id}
       clientLabel={portalClientLabel(client)}
       canAdapt={canAdapt}
+      canFavorite={canFavorite}
       transcriptionRemaining={transcriptionUsage?.remaining ?? null}
       adaptRemaining={adaptUsage?.remaining ?? null}
     />

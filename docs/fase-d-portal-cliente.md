@@ -1,8 +1,8 @@
 # Fase D — Portal de cliente (login propio + secciones configurables)
 
 > Plan aprobado 2026-08-12. Reemplaza el esbozo de "Fase D" en `pendientes.md`.
-> **Estado: etapas 1 a 8 hechas** (etapa 8: 2026-08-18). Migraciones desde `0006`.
-> El detalle de la etapa 8 está en `CLAUDE.md` → "Etapa 8".
+> **Estado: etapas 1 a 9 hechas** (etapa 9: 2026-08-19). Migraciones desde `0006`.
+> El detalle de las etapas 8 y 9 está en `CLAUDE.md`.
 > Queda solo Instagram, que está **en pausa** (no pendiente) por decisión de Paco.
 
 ## Desvíos del plan original (decididos sobre la marcha)
@@ -365,6 +365,19 @@ Decisiones que conviene no re-discutir:
   (esas rutas son handlers, no módulos importables). Al tocar uno, revisar el
   otro: si se desincronizan, el cliente recibe guiones con otro criterio.
 
+### Etapa 9 — perfil, estrella del cliente y calendario
+
+**Sin migración.** Detalle completo en `CLAUDE.md` → "Etapa 9". Los dos cambios
+que revierten decisiones anteriores, para que no se relean como bugs:
+
+1. **El miembro sí puede renombrarse** (la etapa 8 decía que no). Lo que
+   sostiene la atribución pasó a ser la unicidad del nombre **dentro de una
+   misma marca**, no la inmutabilidad. Entre marcas distintas se permite repetir.
+2. **La estrella del cliente escribe `is_favorite`, la columna del dueño**
+   (decidido por Paco el 2026-08-19, contra la opción de una columna aparte).
+   Se gana simplicidad; se pierde saber quién marcó qué, y lo que marque el
+   cliente queda protegido de la limpieza a 40 días.
+
 ### Etapa 7 — transcripción online, Competencia en el portal, papelera y agenda
 
 Migraciones `0010_transcripcion_online.sql` y `0011_papelera_guiones.sql`.
@@ -405,6 +418,7 @@ poco que hoy devuelven esas métricas. El slug **no se borra** de
 | ✅ 6 | Add-on de IA: pantalla, tope, `ai_usage_log`, corte al pasarse (migración `0009`) | Poner tope 2, generar 3 veces: la tercera corta sin llamar a la API |
 | ✅ 7 | Transcripción online (Whisper), Competencia con portada/adaptar/transcribir en el portal, agenda automática al aprobar, papelera de guiones (migraciones `0010` y `0011`) | Transcribir desde el portal, adaptar un post, aprobar un guion sin idea previa y verlo en `/calendario`, tirar un guion y verlo en `/guiones/papelera` |
 | ✅ 8 | Edición del guion desde el portal (antes y después de guardar), nombre de usuario (`portal_profiles`, migración `0012`), Portadas y Copy Expert con tope, copiar/descargar, filtros separados en Competencia, guion en el modal del calendario, link a `/portal` en el sidebar | Editar un guion como `collaborator` y ver el aviso en `/guiones/[id]`; comentar y ver el nombre en vez del email; con tope 1, generar portadas y que el copy corte |
+| ✅ 9 | Perfil de usuario (nombre + contraseña) en portal y estudio, estrella del cliente en Competencia, guion vinculado en el modal del calendario (resolver versión vigente + vincular/desvincular). **Sin migración** | Cambiar tu nombre y que el comentario lo muestre; intentar el nombre de un compañero de la misma marca y que lo rechace; marcar una estrella como `collaborator` y que sobreviva al recargar; abrir una entrada de julio y ver la versión vigente; vincular un guion a una entrada de agosto |
 | — | Instagram en el portal: **necesita migración** (hoy `instagram_media` es owner-only) | |
 
 Etapas 1–3 no cambian nada de lo que Paco ve hoy. La 1 es la única con riesgo

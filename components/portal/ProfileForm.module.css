@@ -1,0 +1,53 @@
+/* Perfil del usuario (etapa 9). Dos tarjetas apiladas, mismas medidas que las
+   secciones de `/clientes/[id]`: es un formulario de producto, no una landing. */
+
+.wrap {
+  display: grid;
+  gap: 18px;
+  max-width: 620px;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 6px 0 8px;
+}
+
+.hint {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.error {
+  font-size: 13px;
+  color: var(--flare);
+  margin: 0;
+}
+
+.ok {
+  font-size: 13px;
+  color: var(--emerald);
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 2px;
+}

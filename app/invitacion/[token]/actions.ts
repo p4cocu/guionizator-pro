@@ -12,7 +12,7 @@
  */
 
 import { createClient } from "@/lib/supabase/server";
-import { acceptInvite } from "@/lib/portal/invites";
+import { acceptInvite, getInvitePreview } from "@/lib/portal/invites";
 import { setOwnDisplayName, DisplayNameError } from "@/lib/portal/profiles";
 
 export type AcceptInviteResult =
@@ -43,7 +43,13 @@ export async function acceptInviteAction(
     }
 
     if (displayName?.trim()) {
-      await setOwnDisplayName(user.id, displayName);
+      // La marca de la invitación se le pasa a mano: la membresía todavía no
+      // existe (se crea recién en `acceptInvite`), así que sin esto el chequeo
+      // de "ese nombre ya está en uso" no tendría con quién comparar.
+      const preview = await getInvitePreview(token);
+      await setOwnDisplayName(user.id, displayName, {
+        extraClientIds: preview ? [preview.clientId] : [],
+      });
     }
 
     const result = await acceptInvite(token, { id: user.id, email: user.email });

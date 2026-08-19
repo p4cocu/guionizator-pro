@@ -111,11 +111,20 @@ a.link:hover {
 .sidebarFooter {
   margin-top: auto;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0 0;
   font-size: 12px;
   color: var(--text-dim);
+}
+
+/* La leyenda "Portal de cliente" quedó en su propia fila cuando el pie sumó el
+   link al perfil (etapa 9). */
+.sidebarFooterNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
 }
 
 .dot {
@@ -321,4 +330,51 @@ a.link:hover {
     z-index: 299;
     backdrop-filter: blur(2px);
   }
+}
+
+/* ── Perfil del usuario (etapa 9) ──
+   `/portal/perfil` vive fuera de `[clientId]`, así que no tiene el shell: se
+   dibuja como pantalla suelta, con las mismas medidas que el selector de
+   marcas. */
+
+.profileWrap {
+  min-height: 100dvh;
+  padding: 40px 20px;
+  background: var(--forest);
+}
+
+.profileInner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.profileBack {
+  display: inline-block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.profileBack:hover {
+  color: var(--paper);
+}
+
+.profileTitle {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 6px 0 20px;
+}
+
+.profileFooter {
+  margin-top: 24px;
+}
+
+/* El email de la topbar es link al perfil desde la etapa 9. */
+a.user:hover {
+  color: var(--paper);
 }

@@ -38,7 +38,16 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0009 | `0009_portal_generacion_ia.sql` | ✅ 2026-08-17 (antes del deploy) |
 | 0010 | `0010_transcripcion_online.sql` | ✅ 2026-08-17 (antes del deploy) |
 | 0011 | `0011_papelera_guiones.sql` | ✅ 2026-08-17 (antes del deploy) |
-| 0012 | `0012_portal_display_names.sql` | ⬜ pendiente — **antes** del deploy |
+| 0012 | `0012_portal_display_names.sql` | ✅ 2026-08-18 (antes del deploy) |
+
+### La etapa 9 no llevó migración
+
+Las tres cosas de la etapa 9 (perfil de usuario, estrella del cliente en
+Competencia, guion vinculado en el calendario) corren sobre columnas que ya
+existían. En particular la estrella del portal escribe en
+`competitor_posts.is_favorite`, **la misma columna del estudio**: se decidió
+compartirla en vez de agregar `is_client_favorite`, así que no hay `ALTER TABLE`
+que aplicar. La contra está documentada en `CLAUDE.md` → "Etapa 9".
 
 ### 0012 va ANTES del deploy (mismo caso que 0008–0011)
 
