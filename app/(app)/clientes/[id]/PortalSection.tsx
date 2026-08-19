@@ -18,6 +18,7 @@
 
 import { useState, useTransition } from "react";
 import {
+  createPasswordRecoveryLink,
   inviteClientMember,
   regenerateInviteLink,
   removeClientMember,
@@ -136,6 +137,11 @@ export default function PortalSection({
   // El link solo existe en memoria: en la base queda su sha256, así que si se
   // recarga la página no hay forma de volver a mostrarlo (hay que regenerarlo).
   const [freshLink, setFreshLink] = useState<{ email: string; url: string } | null>(null);
+  // Link para que un miembro ponga contraseña nueva (etapa 9). Va aparte del
+  // de invitación: son dos cosas distintas y mostrarlos en la misma caja se
+  // presta a mandar el que no era.
+  const [passLink, setPassLink] = useState<{ email: string; url: string } | null>(null);
+  const [passCopied, setPassCopied] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -472,6 +478,41 @@ export default function PortalSection({
         setBusyId(null);
       }
     });
+  }
+
+  /**
+   * Genera el link de contraseña nueva para ese miembro. Es el respaldo del
+   * "¿Olvidaste tu contraseña?" de `/login`, para cuando el correo no llega.
+   */
+  function recoveryLink(member: PortalMember) {
+    setError(null);
+    setOk(null);
+    setPassLink(null);
+    setBusyId(member.id);
+    start(async () => {
+      try {
+        const res = await createPasswordRecoveryLink(clientId, member.id);
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+        setPassLink({ email: res.email, url: res.url });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "No se pudo generar el link.");
+      } finally {
+        setBusyId(null);
+      }
+    });
+  }
+
+  async function copyPassLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setPassCopied(true);
+      setTimeout(() => setPassCopied(false), 1800);
+    } catch {
+      setError("No se pudo copiar solo. Selecciona el link y cópialo a mano.");
+    }
   }
 
   async function copyLink(url: string) {
@@ -882,12 +923,52 @@ export default function PortalSection({
                   className="btn btn-ghost"
                   style={{ fontSize: 13 }}
                   disabled={isPending && busyId === member.id}
+                  onClick={() => recoveryLink(member)}
+                  title="Genera un link para que ponga una contraseña nueva sin saber la anterior"
+                >
+                  Contraseña
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ fontSize: 13 }}
+                  disabled={isPending && busyId === member.id}
                   onClick={() => revoke(member)}
                 >
                   Revocar
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {passLink && (
+          <div className={s.linkBox}>
+            <p className={s.linkBoxTitle}>Contraseña nueva para {passLink.email}</p>
+            <p className={s.linkBoxText}>
+              Mándaselo por donde quieras. Al abrirlo elige una contraseña nueva
+              y entra directo, sin necesitar la anterior. Sirve una sola vez y
+              por un rato corto; si se vence, generas otro. Antes de usar esto,
+              que pruebe el &ldquo;¿Olvidaste tu contraseña?&rdquo; de la
+              pantalla de entrada: ahí se lo manda solo por correo.
+            </p>
+            <div className={s.linkRow}>
+              <input
+                className={`input ${s.linkInput}`}
+                readOnly
+                value={passLink.url}
+                onFocus={(e) => e.currentTarget.select()}
+              />
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ fontSize: 13 }}
+                onClick={() => copyPassLink(passLink.url)}
+              >
+                {passCopied ? "¡Copiado!" : "Copiar"}
+              </button>
+            </div>
           </div>
         )}
 

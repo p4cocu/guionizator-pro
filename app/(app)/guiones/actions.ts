@@ -545,6 +545,56 @@ export async function saveScriptCovers(
   revalidatePath(`/guiones/${scriptId}`);
 }
 
+/**
+ * Vuelve a una versión anterior del guion (etapa 9).
+ *
+ * "La versión vigente" es la fila con `is_latest` dentro de la cadena
+ * (`parent_id ?? id` y sus hijas). Restaurar es mover esa marca, no copiar ni
+ * borrar nada: la v3 sigue en la tabla y se puede volver a ella igual de fácil.
+ *
+ * A propósito NO crea una versión nueva con el contenido viejo (que sería la
+ * otra forma de hacerlo): eso llenaría la cadena de duplicados cada vez que
+ * comparás dos versiones, y la lista de versiones dejaría de contar la historia
+ * real de lo que se escribió.
+ *
+ * ⚠️ Como efecto colateral útil, deja siempre la cadena consistente: si por un
+ * fallo anterior ninguna fila tenía `is_latest` (pasó con 6 cadenas al
+ * 2026-08-19, y esos guiones desaparecían de `/guiones`), llamar acá la
+ * repara.
+ */
+export async function restoreScriptVersion(scriptId: string): Promise<void> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data: target } = await supabase
+    .from("scripts")
+    .select("id, parent_id")
+    .eq("id", scriptId)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+
+  if (!target) throw new Error("Ese guion no existe o no es tuyo.");
+
+  const rootId = (target.parent_id as string | null) ?? (target.id as string);
+
+  const { error: clearError } = await supabase
+    .from("scripts")
+    .update({ is_latest: false })
+    .or(`id.eq.${rootId},parent_id.eq.${rootId}`)
+    .eq("owner_id", user.id);
+  if (clearError) throw new Error(clearError.message);
+
+  const { error } = await supabase
+    .from("scripts")
+    .update({ is_latest: true })
+    .eq("id", scriptId)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/guiones");
+  revalidatePath(`/guiones/${scriptId}`);
+  revalidatePath("/calendario");
+}
+
 export async function linkScriptToCalendar(
   scriptId: string,
   calendarId: string,

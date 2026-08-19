@@ -18,6 +18,7 @@ import {
   updateScriptTitle,
   updateScriptRecordingType,
   addScriptToCalendar,
+  restoreScriptVersion,
 } from "../actions";
 import { RECORDING_TYPE_LABELS } from "../page";
 import { ReelEditor, CarouselEditor } from "./ScriptEditors";
@@ -533,6 +534,26 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
   const isReel = script.type === "reel";
   const content = script.content as ReelContent | CarouselContent;
   const showVersions = versions.length > 1;
+  // Restaurar una versión (etapa 9). "Vigente" es la fila con `is_latest`;
+  // restaurar mueve esa marca, no copia ni borra nada, así que se puede ir y
+  // volver entre versiones sin perder ninguna.
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+
+  async function handleRestoreVersion() {
+    setRestoring(true);
+    setRestoreError(null);
+    try {
+      await restoreScriptVersion(script.id);
+      router.refresh();
+    } catch (e) {
+      setRestoreError(
+        e instanceof Error ? e.message : "No se pudo volver a esta versión.",
+      );
+    } finally {
+      setRestoring(false);
+    }
+  }
 
   useEffect(() => {
     if (!downloadMenuOpen) return;
@@ -861,6 +882,32 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
               {v.is_latest && <span className={styles.versionLatestDot} />}
             </Link>
           ))}
+
+          {/*
+            Estás parado en una versión vieja: hasta la etapa 9 no había forma
+            de volver a ella, y nada te avisaba que lo que estabas leyendo no
+            era lo vigente (el calendario y el portal muestran la que tiene el
+            punto verde).
+          */}
+          {!script.is_latest && (
+            <div className={styles.versionRestore}>
+              <span className={styles.versionRestoreHint}>
+                Estás viendo una versión anterior.
+              </span>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ fontSize: 12, padding: "6px 12px" }}
+                onClick={handleRestoreVersion}
+                disabled={restoring}
+              >
+                {restoring ? "Volviendo…" : "Volver a esta versión"}
+              </button>
+            </div>
+          )}
+          {restoreError && (
+            <span className={styles.versionRestoreError}>{restoreError}</span>
+          )}
         </div>
       )}
 

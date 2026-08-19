@@ -21,6 +21,8 @@ import { sanitizeFeatures, type PortalFeatureSlug } from "@/lib/portal/features"
 import { isGenerationMode, type PortalGenerationMode } from "@/lib/portal/generationMode";
 import { isPortalMemberRole, listClientMembers } from "@/lib/portal/members";
 import { setMemberDisplayName, setOwnDisplayName } from "@/lib/portal/profiles";
+import { createServiceClient } from "@/lib/supabase/service";
+import { RECOVERY_PATH } from "@/lib/auth/recovery";
 import {
   createInvite,
   deleteInvite,
@@ -477,4 +479,64 @@ export async function setOwnPortalName(
 
   revalidatePath(`/clientes/${clientId}`);
   return { ok: true };
+}
+
+// ─── Link de recuperación de contraseña (etapa 9) ────────────────────────────
+
+export type RecoveryLinkResult =
+  | { ok: true; email: string; url: string }
+  | { ok: false; error: string };
+
+/**
+ * Genera un link para que un miembro ponga una contraseña nueva sin saber la
+ * anterior. Es el respaldo del "¿Olvidaste tu contraseña?" de `/login`, para
+ * cuando el correo no llega (el SMTP default de Supabase es limitado) — se
+ * entrega copiado a mano, igual que la invitación.
+ *
+ * Va con **service role** (`auth.admin.generateLink`), así que la pertenencia
+ * se valida antes a mano: primero que la marca sea de quien llama
+ * (`assertOwnsClient`), después que ese miembro sea de esa marca. Sin los dos
+ * pasos, esta action generaría un link de acceso a **cualquier** cuenta de la
+ * base.
+ *
+ * El link cae en `/auth/callback?next=/nueva-contrasena`, que es lo único que
+ * pone la cookie que habilita esa pantalla. Sirve una sola vez.
+ */
+export async function createPasswordRecoveryLink(
+  clientId: string,
+  memberId: string,
+): Promise<RecoveryLinkResult> {
+  try {
+    const { supabase, user } = await getAuthUser();
+    await assertOwnsClient(supabase, clientId, user.id);
+
+    const members = await listClientMembers(supabase, clientId, user.id);
+    const member = members.find((m) => m.id === memberId);
+    if (!member) return { ok: false, error: "Ese miembro no existe en esta marca." };
+    if (!member.email) {
+      return {
+        ok: false,
+        error: "No se pudo leer el correo de esa persona, así que no hay a quién generarle el link.",
+      };
+    }
+
+    const origin = await requestOrigin();
+    const admin = createServiceClient();
+    const { data, error } = await admin.auth.admin.generateLink({
+      type: "recovery",
+      email: member.email,
+      options: { redirectTo: `${origin}/auth/callback?next=${RECOVERY_PATH}` },
+    });
+
+    if (error) return { ok: false, error: error.message };
+    const url = data?.properties?.action_link;
+    if (!url) return { ok: false, error: "Supabase no devolvió el link." };
+
+    return { ok: true, email: member.email, url };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo generar el link.",
+    };
+  }
 }

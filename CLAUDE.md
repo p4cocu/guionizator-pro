@@ -649,6 +649,39 @@ decisión de Paco (2026-08-19) contra la alternativa de una columna
   tocar `is_disliked`, la transcripción o la clasificación). Solo
   `collaborator` — un `viewer` no ve el botón y la action lo rechaza.
 
+**Volver a una versión anterior** (`restoreScriptVersion`, `/guiones/[id]`):
+mueve la marca `is_latest` dentro de la cadena, **no** copia ni borra nada, así
+que se puede ir y volver. A propósito no crea una versión nueva con el
+contenido viejo: eso llenaría la lista de duplicados y dejaría de contar la
+historia real. Como efecto colateral repara cadenas rotas.
+⚠️ El 2026-08-19 había **6 cadenas sin ninguna fila `is_latest`** (guiones que
+por eso no aparecían en `/guiones`, aunque su texto estuviera intacto);
+se arreglaron a mano marcando la versión más alta de cada una.
+
+**Contraseña olvidada** — dos puertas, una sola pantalla:
+
+- `/login` → "¿Olvidaste tu contraseña?" manda el mail con
+  `resetPasswordForEmail` (autoservicio; depende del SMTP default de Supabase,
+  que es limitado).
+- `/clientes/[id]` → botón "Contraseña" por miembro:
+  `createPasswordRecoveryLink` usa `auth.admin.generateLink` con **service
+  role**, así que valida a mano que la marca sea del que llama y que el miembro
+  sea de esa marca — sin esos dos pasos generaría acceso a cualquier cuenta de
+  la base. Se entrega copiado, igual que la invitación.
+- Los dos apuntan a `/auth/callback?next=/nueva-contrasena`. ⚠️ Esa pantalla
+  cambia la contraseña **sin pedir la anterior**, así que lo único que la
+  habilita es la cookie `gz_pwd_recovery` (httpOnly, 15 min) que pone el
+  callback **después** de canjear un `code` válido. Sin esa cookie sería un
+  agujero: cualquiera con una sesión abierta ajena se quedaría con la cuenta.
+  Constantes en `lib/auth/recovery.ts` (módulo puro: un `export const` dentro
+  de un `"use server"` rompe el build). **No** va en `PUBLIC_PATHS`: cuando el
+  usuario llega ya tiene sesión.
+
+**Calendario del portal**: la tarjeta linkea al guion cuando la pieza tiene uno
+y el cliente puede verlo (`is_latest` de la cadena, sin `trashed_at`, y estado
+dentro de los mismos `VISIBLE_SCRIPT_STATUSES` que lista `/portal/…/guiones` —
+`idea` y `baul` siguen escondidos). Las demás no son clicables y no lo aparentan.
+
 **Guion en el modal del calendario** (`app/(app)/calendario/`):
 
 - ⚠️ `content_calendar.script_id` apunta a la fila que existía al crear la

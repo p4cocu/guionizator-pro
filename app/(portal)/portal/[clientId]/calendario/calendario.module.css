@@ -85,6 +85,22 @@
   box-shadow: var(--glass-inset), var(--glass-shadow);
 }
 
+/* Solo las piezas que ya tienen guion visible son clicables (etapa 9): el
+   resto no linkea a ningún lado y no debe parecer que sí. */
+.entryClickable {
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+
+.entryClickable:hover {
+  border-color: rgba(0, 159, 125, 0.5);
+  transform: translateY(-1px);
+}
+
+.entryLink {
+  color: var(--emerald);
+  font-weight: 600;
+}
+
 .entryTop {
   display: flex;
   align-items: center;

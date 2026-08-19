@@ -10,11 +10,25 @@
  *
  * Las etiquetas de estado son distintas a las internas a propósito: "Etapa 0"
  * es jerga del taller y no le dice nada al cliente.
+ *
+ * Desde la etapa 9 la tarjeta **se abre** cuando esa pieza ya tiene guion y el
+ * cliente puede verlo: linkea a `/portal/[clientId]/guiones/[id]`. Antes no
+ * pasaba nada al hacer clic y parecía roto. Las que no tienen guion visible
+ * siguen sin ser clicables — y se nota, porque no llevan la marca de "Ver el
+ * guion".
  */
 
 import Link from "next/link";
 import { requirePortalClient, requirePortalSession, portalClientLabel } from "@/lib/portal/access";
+import { hasFeature } from "@/lib/portal/features";
 import s from "./calendario.module.css";
+
+/**
+ * Los mismos estados que lista `/portal/[clientId]/guiones`. Si el guion de la
+ * pieza está en `idea` o en el baúl, la tarjeta no linkea: el portal esconde
+ * esos dos a propósito y un link acá los dejaría entrar por la ventana.
+ */
+const VISIBLE_SCRIPT_STATUSES = ["listo", "produccion", "preproduccion", "publicado"];
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -45,6 +59,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 type Entry = {
   id: string;
+  script_id: string | null;
   title: string;
   format: string;
   status: string;
@@ -95,7 +110,7 @@ export default async function PortalCalendarioPage({
 
   const { data } = await supabase
     .from("content_calendar")
-    .select("id, title, format, status, pillar, week_number, publish_date, brief, weekly_theme")
+    .select("id, script_id, title, format, status, pillar, week_number, publish_date, brief, weekly_theme")
     .eq("client_id", client.id)
     .eq("month", month)
     .eq("year", year)
@@ -103,6 +118,47 @@ export default async function PortalCalendarioPage({
     .order("position", { ascending: true });
 
   const entries = (data ?? []) as Entry[];
+
+  // ── Guion de cada pieza ──
+  //
+  // ⚠️ `content_calendar.script_id` apunta a la fila que existía cuando se creó
+  // la entrada, y guardar una versión crea una fila NUEVA (`parent_id` = raíz,
+  // `is_latest` en la última). Sin resolver la cadena, la mitad de las piezas
+  // linkearían a la primera versión. Se traen todas las filas de la marca de
+  // una vez (son decenas) y se resuelve en memoria.
+  const puedeVerGuiones = hasFeature(client.features, "guiones");
+  const scriptByEntry = new Map<string, string>();
+
+  if (puedeVerGuiones && entries.some((e) => e.script_id)) {
+    const { data: scriptRows } = await supabase
+      .from("scripts")
+      .select("id, parent_id, is_latest, status, trashed_at")
+      .eq("client_id", client.id);
+
+    const rows = (scriptRows ?? []) as {
+      id: string;
+      parent_id: string | null;
+      is_latest: boolean;
+      status: string;
+      trashed_at: string | null;
+    }[];
+
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const latestByRoot = new Map<string, (typeof rows)[number]>();
+    for (const r of rows) {
+      if (r.is_latest) latestByRoot.set(r.parent_id ?? r.id, r);
+    }
+
+    for (const e of entries) {
+      if (!e.script_id) continue;
+      const linked = byId.get(e.script_id);
+      if (!linked) continue;
+      const vigente = latestByRoot.get(linked.parent_id ?? linked.id) ?? linked;
+      if (vigente.trashed_at) continue;
+      if (!VISIBLE_SCRIPT_STATUSES.includes(vigente.status)) continue;
+      scriptByEntry.set(e.id, vigente.id);
+    }
+  }
 
   const weeks = new Map<number | null, Entry[]>();
   for (const e of entries) {
@@ -160,30 +216,48 @@ export default async function PortalCalendarioPage({
               </div>
 
               <div className={s.list}>
-                {items.map((e) => (
-                  <article key={e.id} className={s.entry}>
-                    <div className={s.entryTop}>
-                      <span className={s.format}>
-                        {FORMAT_LABELS[e.format] ?? e.format}
-                      </span>
-                      <span
-                        className={s.status}
-                        style={{ color: STATUS_COLORS[e.status] ?? "var(--text-dim)" }}
-                      >
-                        ● {STATUS_LABELS[e.status] ?? e.status}
-                      </span>
-                    </div>
+                {items.map((e) => {
+                  const scriptId = scriptByEntry.get(e.id);
+                  const cuerpo = (
+                    <>
+                      <div className={s.entryTop}>
+                        <span className={s.format}>
+                          {FORMAT_LABELS[e.format] ?? e.format}
+                        </span>
+                        <span
+                          className={s.status}
+                          style={{ color: STATUS_COLORS[e.status] ?? "var(--text-dim)" }}
+                        >
+                          ● {STATUS_LABELS[e.status] ?? e.status}
+                        </span>
+                      </div>
 
-                    <h4 className={s.entryTitle}>{e.title}</h4>
+                      <h4 className={s.entryTitle}>{e.title}</h4>
 
-                    {e.brief && <p className={s.brief}>{e.brief}</p>}
+                      {e.brief && <p className={s.brief}>{e.brief}</p>}
 
-                    <div className={s.entryMeta}>
-                      {formatDate(e.publish_date) && <span>{formatDate(e.publish_date)}</span>}
-                      {e.pillar && <span>{e.pillar}</span>}
-                    </div>
-                  </article>
-                ))}
+                      <div className={s.entryMeta}>
+                        {formatDate(e.publish_date) && <span>{formatDate(e.publish_date)}</span>}
+                        {e.pillar && <span>{e.pillar}</span>}
+                        {scriptId && <span className={s.entryLink}>Ver el guion →</span>}
+                      </div>
+                    </>
+                  );
+
+                  return scriptId ? (
+                    <Link
+                      key={e.id}
+                      href={`/portal/${client.id}/guiones/${scriptId}`}
+                      className={`${s.entry} ${s.entryClickable}`}
+                    >
+                      {cuerpo}
+                    </Link>
+                  ) : (
+                    <article key={e.id} className={s.entry}>
+                      {cuerpo}
+                    </article>
+                  );
+                })}
               </div>
             </section>
           ))}

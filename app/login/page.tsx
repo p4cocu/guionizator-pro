@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { RECOVERY_PATH } from "@/lib/auth/recovery";
 import styles from "./login.module.css";
 
 type Mode = "login" | "signup";
@@ -52,6 +53,38 @@ export default function LoginPage() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Algo salió mal.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /**
+   * "Olvidé mi contraseña" (etapa 9). Supabase manda el mail y el link cae en
+   * `/auth/callback?next=/nueva-contrasena`, que es lo único que habilita esa
+   * pantalla.
+   *
+   * El aviso es el mismo mande o no mande el correo: decir "ese correo no
+   * existe" le confirmaría a cualquiera quién tiene cuenta acá.
+   */
+  async function handleRecovery() {
+    if (!email.trim()) {
+      setError("Escribe tu correo arriba y vuelve a tocar el enlace.");
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+    setLoading(true);
+    try {
+      const supabase = createClient();
+      await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/auth/callback?next=${RECOVERY_PATH}`,
+      });
+      setNotice(
+        "Si ese correo tiene cuenta, te llega un link para poner una contraseña nueva. Revisa también el spam; si no llega, pídeselo a quien maneja tu contenido.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo enviar el correo.");
     } finally {
       setLoading(false);
     }
@@ -124,6 +157,17 @@ export default function LoginPage() {
                 : "Crear cuenta"}
           </button>
         </form>
+
+        {mode === "login" && (
+          <button
+            type="button"
+            className={styles.toggle}
+            onClick={handleRecovery}
+            disabled={loading}
+          >
+            ¿Olvidaste tu contraseña?
+          </button>
+        )}
 
         <button
           type="button"

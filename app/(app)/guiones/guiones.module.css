@@ -972,6 +972,25 @@
   margin-right: 4px;
 }
 
+/* Aviso + botón de "volver a esta versión" (etapa 9). */
+.versionRestore {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+}
+
+.versionRestoreHint {
+  font-size: 12px;
+  color: var(--signal);
+}
+
+.versionRestoreError {
+  font-size: 12px;
+  color: var(--flare);
+  flex-basis: 100%;
+}
+
 .versionPill {
   display: inline-flex;
   align-items: center;
