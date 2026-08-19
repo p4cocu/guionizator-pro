@@ -325,6 +325,35 @@
 
 /* ── Estados ── */
 
+/* Alternar ver / editar el guion generado (etapa 8). */
+.editToggleRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.editToggle {
+  appearance: none;
+  background: none;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  padding: 5px 12px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.editToggle:hover:not(:disabled) {
+  border-color: var(--emerald);
+  color: var(--emerald);
+}
+
+.editToggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .savedBox {
   margin-top: 16px;
   padding: 16px 18px;

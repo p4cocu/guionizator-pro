@@ -66,17 +66,34 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { script_content, script_type, platform } = (await req.json()) as {
-      script_content: Record<string, unknown>;
-      script_type: string;
-      platform: string;
+    const { script_id, platform } = (await req.json()) as {
+      script_id?: string;
+      platform?: string;
     };
 
-    if (!script_content || !platform) {
+    if (!script_id || !platform) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
 
-    const userPrompt = buildPrompt(platform, script_content, script_type);
+    // Igual que en `/api/ai/cover` (etapa 8): el contenido sale de la base
+    // filtrando `owner_id`, no del body. Una ruta que solo pide sesión y
+    // acepta el texto que le manden es una canilla de tokens abierta.
+    const { data: script } = await supabase
+      .from("scripts")
+      .select("type, content")
+      .eq("id", script_id)
+      .eq("owner_id", user.id)
+      .maybeSingle();
+
+    if (!script) {
+      return NextResponse.json({ error: "Ese guion no existe o no es tuyo." }, { status: 404 });
+    }
+
+    const userPrompt = buildPrompt(
+      platform,
+      (script.content as Record<string, unknown> | null) ?? {},
+      (script.type as string | null) ?? "reel",
+    );
 
     let result: { copy: string; hashtags: string };
     try {

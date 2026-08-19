@@ -513,6 +513,93 @@ tiene `insert` sobre `content_calendar`.
   `is_latest`) pero el cron de 30 días tampoco las alcanza. Fuga menor de filas
   viejas, aceptada a propósito en vez de reconstruir la cadena de versiones.
 
+### Etapa 8 — edición desde el portal, nombres de usuario y herramientas del guion
+
+Migración `0012_portal_display_names.sql` (aditiva, **antes** del deploy). Es la
+única de la etapa: todo lo demás usa tablas y policies que ya existían.
+
+**Nombre de usuario del portal (`portal_profiles`).** Hasta la etapa 7 el
+cliente veía el **email crudo** del autor de cada comentario — la dirección
+personal de Paco. Ahora cada persona elige un nombre y es lo único que se
+muestra del lado del cliente.
+
+- Tabla con **RLS activa y sin ninguna policy** + `revoke all … from anon,
+  authenticated`: solo service role, vía `lib/portal/profiles.ts` (mismo patrón
+  que `client_secrets`). No va en `user_metadata` porque el usuario puede
+  editarse el suyo con su JWT y firmar como otro. Por lo mismo **el miembro no
+  puede cambiarse el nombre después**: lo elige una vez y corregirlo es
+  atribución del dueño.
+- Tres puertas de alta: el formulario de `/invitacion/[token]`, el **gate de
+  `app/(portal)/portal/layout.tsx`** (sin fila en `portal_profiles` no se
+  entra a ninguna pantalla del portal — aplica también a Paco, y es lo que hace
+  que sus comentarios dejen de mostrar el email) y el panel de
+  `/clientes/[id]`, donde Paco edita el nombre de cualquier miembro y el suyo.
+- Etiquetas de respaldo en `profiles.ts`: `OWNER_FALLBACK_LABEL` ("Equipo de
+  contenido") y `UNKNOWN_AUTHOR_LABEL`. **En el portal nunca se muestra un
+  email**; en el estudio sí, junto al nombre, porque Paco necesita saber qué
+  cuenta escribió.
+
+**El cliente edita el texto de sus guiones.**
+
+- `lib/portal/scriptEdit.ts` (puro) + `components/portal/ScriptTextEditor.tsx`.
+  Solo texto: voz en off del reel, titular y cuerpo de cada slide. Bloques,
+  duraciones, tags, música, `visual` y micro-anchor no se tocan desde el portal.
+- ⚠️ `applyTextDraft` **mergea sobre el `content` original**. El `content` es
+  jsonb sin esquema y trae claves que el portal ni dibuja: si el editor
+  devolviera un objeto nuevo, corregir una coma borraría el guion de producción
+  entero.
+- `updateScriptText` (`portal/[clientId]/guiones/actions.ts`) va con la **sesión
+  del miembro**, no con service role: la policy `scripts_member_update` ya
+  restringe al rol `collaborator` y el trigger `scripts_guard_update` llena
+  `last_edited_by`/`last_edited_at`. (La papelera sí usa service role porque ahí
+  se quiere que el `viewer` también pueda.)
+- **No crea versión nueva** (a diferencia de `saveScriptVersion` del estudio):
+  los comentarios y la aprobación cuelgan de `script_id`, y una fila nueva
+  dejaría el hilo huérfano y cambiaría la URL. Editar **no** borra la
+  aprobación; `ClientFeedbackPanel` avisa "editó el texto … después de
+  aprobarlo".
+- El mismo editor corre **antes de guardar** en `AdaptModal` y en
+  `/generar`: regenerar cuesta crédito, corregir una frase no.
+
+**Herramientas del guion en el portal** (`ScriptToolsPanel`, `lib/portal/scriptTools.ts`):
+
+- **Copiar y descargar** (`lib/portal/scriptExport.ts`) son gratis y solo piden
+  la sección `guiones`. El export **no** lleva estructura narrativa ni número de
+  versión: son datos de taller.
+- **Portadas y Copy Expert** llaman a Claude, así que gastan el **mismo cupo que
+  generar guiones** (`ai_generation_limit`, una fila de `ai_usage_log` por
+  llamada) y exigen `generar_ia` prendido, igual que "Adaptar a mi marca".
+  Se guardan en `script_covers` / `script_copies`, que son **owner-only**
+  (`0006` no les dio policies de miembro): se leen y escriben con service role,
+  con `owner_id` del dueño. Prompts duplicados de `/api/ai/{cover,copy}`, misma
+  disciplina que el resto de este archivo.
+- **`ImagePromptsPanel` no se porta**: queda como herramienta interna.
+
+**Endurecimiento de `/api/ai/cover` y `/api/ai/copy`.** Las dos recibían el
+`content` en el body y solo pedían sesión: cualquier usuario logueado —un
+miembro del portal incluido— podía quemar tokens sin pasar por ningún medidor.
+Ahora reciben `script_id` y leen el guion filtrando `owner_id`.
+
+⚠️ **`next.config.ts`**: `outputFileTracingIncludes` ahora incluye `knowledge/**`
+y `brain/**` también para `/portal/**`. Sin eso, los `fs.readFileSync` que corren
+desde server actions del portal (`loadClientKnowledge` al adaptar, la guía de
+portadas) devuelven vacío **en silencio** en Netlify: genera igual, pero con
+menos contexto que en local.
+
+**Competencia del portal**: "Destacados" (`is_outlier`, automático) y "Nuestra
+selección" (`is_favorite`, curaduría) ahora son **dos filtros y dos badges**
+distintos — antes iban en un solo checkbox y el favorito no-outlier entraba al
+filtro sin ninguna marca en la tarjeta. Con los dos prendidos se muestra la
+unión. Se sumó filtro "Con transcripción" y un chip 🎤 en la tarjeta.
+
+**Calendario del estudio**: el modal de la vista "Calendario" muestra el guion
+vinculado (`getCalendarScript`, carga bajo demanda) con botón a `/guiones/[id]`.
+
+**`components/portal/ScriptBody.tsx`** es ahora el único render de un guion en
+modo lectura: lo usan la pantalla del portal, `AdaptModal`, `/generar` y el
+modal del calendario. Antes había tres copias que ya se estaban
+desincronizando.
+
 ## Respuestas JSON de la IA (`lib/ai/json.ts`)
 
 Todo endpoint que le pide JSON a Claude pasa por `lib/ai/json.ts` — **nunca

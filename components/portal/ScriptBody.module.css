@@ -1,0 +1,152 @@
+/*
+ * Estilos del guion dibujado (lectura). Copiados 1:1 de los que tenía
+ * `app/(portal)/portal/[clientId]/guiones/guiones.module.css` antes de la
+ * etapa 8, para que mover el render a un componente compartido no cambiara ni
+ * un pixel de lo que ya veía el cliente.
+ */
+
+.script {
+  display: grid;
+  gap: 22px;
+}
+
+/* Marco de tarjeta. Opcional: el modal del calendario dibuja el suyo. */
+.framed {
+  padding: 24px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+  background-color: var(--glass-base);
+  background-image: var(--glass-overlay);
+  box-shadow: var(--glass-inset), var(--glass-shadow);
+}
+
+.compact {
+  gap: 14px;
+}
+
+.block {
+  display: grid;
+  gap: 8px;
+}
+
+.blockTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.duration {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--emerald);
+}
+
+.voiceOff {
+  font-size: 16px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.compact .voiceOff {
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+.line {
+  font-size: 14.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.tag {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-right: 8px;
+}
+
+.voiceOff mark,
+.line mark,
+.slideText mark,
+.slideBody mark {
+  background: rgba(255, 210, 58, 0.28);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.voiceOff em,
+.line em,
+.slideText em,
+.slideBody em {
+  font-style: normal;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ── Carrusel ── */
+
+.slides {
+  display: grid;
+  gap: 16px;
+}
+
+.compact .slides {
+  gap: 10px;
+}
+
+.slide {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--glass-border);
+}
+
+.slideNumber {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.slideText {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.compact .slideText {
+  font-size: 14.5px;
+}
+
+.slideBody {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.slideVisual,
+.slideAnchor {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.emptyText {
+  font-size: 14px;
+  color: var(--text-muted);
+}

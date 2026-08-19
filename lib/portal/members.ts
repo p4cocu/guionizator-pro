@@ -18,6 +18,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "../supabase/service";
 import { isPortalMemberRole, type PortalMemberRole } from "./roles";
+import { getDisplayNames } from "./profiles";
 
 // Los roles viven en `./roles` (módulo puro) para que la UI pueda importarlos
 // sin arrastrar el service role al browser. Se reexportan acá por comodidad de
@@ -34,6 +35,12 @@ export type PortalMember = {
   userId: string;
   /** `null` si no se pudo resolver (falta la service role key, o el user ya no existe). */
   email: string | null;
+  /**
+   * Nombre que eligió al entrar (`portal_profiles`, etapa 8). `null` si todavía
+   * no entró al portal desde que existe el campo. Es lo que ve el cliente en
+   * los comentarios, y Paco lo puede corregir desde el perfil de la marca.
+   */
+  displayName: string | null;
   role: PortalMemberRole;
   createdAt: string;
 };
@@ -95,12 +102,17 @@ export async function listClientMembers(
   if (error) throw new Error(error.message);
 
   const rows = data ?? [];
-  const emails = await resolveEmails(rows.map((r) => r.user_id as string));
+  const userIds = rows.map((r) => r.user_id as string);
+  const [emails, names] = await Promise.all([
+    resolveEmails(userIds),
+    getDisplayNames(userIds),
+  ]);
 
   return rows.map((r) => ({
     id: r.id as string,
     userId: r.user_id as string,
     email: emails.get(r.user_id as string) ?? null,
+    displayName: names.get(r.user_id as string) ?? null,
     role: (isPortalMemberRole(r.role as string) ? r.role : "viewer") as PortalMemberRole,
     createdAt: r.created_at as string,
   }));

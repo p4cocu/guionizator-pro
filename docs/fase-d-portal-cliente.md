@@ -1,7 +1,8 @@
 # Fase D — Portal de cliente (login propio + secciones configurables)
 
 > Plan aprobado 2026-08-12. Reemplaza el esbozo de "Fase D" en `pendientes.md`.
-> **Estado: etapas 1 a 7 hechas** (2026-08-17). Migraciones desde `0006`.
+> **Estado: etapas 1 a 8 hechas** (etapa 8: 2026-08-18). Migraciones desde `0006`.
+> El detalle de la etapa 8 está en `CLAUDE.md` → "Etapa 8".
 > Queda solo Instagram, que está **en pausa** (no pendiente) por decisión de Paco.
 
 ## Desvíos del plan original (decididos sobre la marcha)
@@ -403,6 +404,7 @@ poco que hoy devuelven esas métricas. El slug **no se borra** de
 | ✅ 5 | Guiones (+ comentarios/aprobación), Calendario, Competencia, Investigación | Comentar desde el portal y ver el hilo en `/guiones/[id]` |
 | ✅ 6 | Add-on de IA: pantalla, tope, `ai_usage_log`, corte al pasarse (migración `0009`) | Poner tope 2, generar 3 veces: la tercera corta sin llamar a la API |
 | ✅ 7 | Transcripción online (Whisper), Competencia con portada/adaptar/transcribir en el portal, agenda automática al aprobar, papelera de guiones (migraciones `0010` y `0011`) | Transcribir desde el portal, adaptar un post, aprobar un guion sin idea previa y verlo en `/calendario`, tirar un guion y verlo en `/guiones/papelera` |
+| ✅ 8 | Edición del guion desde el portal (antes y después de guardar), nombre de usuario (`portal_profiles`, migración `0012`), Portadas y Copy Expert con tope, copiar/descargar, filtros separados en Competencia, guion en el modal del calendario, link a `/portal` en el sidebar | Editar un guion como `collaborator` y ver el aviso en `/guiones/[id]`; comentar y ver el nombre en vez del email; con tope 1, generar portadas y que el copy corte |
 | — | Instagram en el portal: **necesita migración** (hoy `instagram_media` es owner-only) | |
 
 Etapas 1–3 no cambian nada de lo que Paco ve hoy. La 1 es la única con riesgo

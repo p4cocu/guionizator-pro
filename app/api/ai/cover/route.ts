@@ -107,23 +107,37 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const body = (await req.json()) as {
-      script_type: string;
-      brief: string;
-      structure_name: string;
-      content: Record<string, unknown>;
-    };
+    const body = (await req.json()) as { script_id?: string };
 
-    if (!body.content || !body.script_type) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+    if (!body.script_id) {
+      return NextResponse.json({ error: "Missing script_id" }, { status: 400 });
     }
 
+    // El guion se lee de la base filtrando `owner_id`, NO se acepta el
+    // contenido del body (etapa 8). Antes cualquier usuario con sesión —un
+    // miembro del portal incluido— podía mandar texto arbitrario y quemar
+    // tokens sin pasar por ningún medidor.
+    const { data: script } = await supabase
+      .from("scripts")
+      .select("type, brief, structure_name, content")
+      .eq("id", body.script_id)
+      .eq("owner_id", user.id)
+      .maybeSingle();
+
+    if (!script) {
+      return NextResponse.json({ error: "Ese guion no existe o no es tuyo." }, { status: 404 });
+    }
+
+    const scriptType = (script.type as string | null) ?? "reel";
     const knowledge = readKnowledge("knowledge/portadas-reels-carruseles-alto-ctr.md");
-    const contentSummary = summarizeContent(body.script_type, body.content);
+    const contentSummary = summarizeContent(
+      scriptType,
+      (script.content as Record<string, unknown> | null) ?? {},
+    );
     const userMessage = buildUserMessage(
-      body.script_type,
-      body.brief ?? "",
-      body.structure_name ?? "",
+      scriptType,
+      (script.brief as string | null) ?? "",
+      (script.structure_name as string | null) ?? "",
       contentSummary,
       knowledge,
     );

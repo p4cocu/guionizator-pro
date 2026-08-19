@@ -1063,24 +1063,12 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
 
       {/* ── Copy Expert Panel ── */}
       {showCopyPanel && (
-        <CopyExpertPanel
-          scriptId={script.id}
-          scriptContent={script.content}
-          scriptType={script.type}
-          initialCopies={initialCopies}
-        />
+        <CopyExpertPanel scriptId={script.id} initialCopies={initialCopies} />
       )}
 
       {/* ── Cover Creator Panel ── */}
       {showCoverPanel && (
-        <CoverCreatorPanel
-          scriptId={script.id}
-          scriptBrief={script.brief}
-          scriptContent={script.content}
-          scriptType={script.type}
-          structureName={script.structure_name}
-          initialCovers={initialCovers}
-        />
+        <CoverCreatorPanel scriptId={script.id} initialCovers={initialCovers} />
       )}
 
       {/* ── Modal: Agregar al calendario ── */}

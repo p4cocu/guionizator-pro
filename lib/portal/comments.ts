@@ -5,7 +5,13 @@
  * quedar en un WhatsApp. Lo escriben los dos lados: el miembro del portal y
  * Paco desde `/guiones/[id]`.
  *
- * SERVER-ONLY: resuelve emails con service role. Nunca desde un `"use client"`.
+ * SERVER-ONLY: resuelve emails y nombres con service role. Nunca desde un
+ * `"use client"`.
+ *
+ * ⚠️ Desde la etapa 8 el portal muestra `authorName` (de `portal_profiles`) y
+ * **nunca el email**: antes le mostraba al cliente la dirección personal de
+ * Paco. El email sigue viajando porque la pantalla de Paco sí lo usa para
+ * saber qué cuenta del cliente escribió.
  *
  * ## Lo que hace la base y acá no se repite
  *
@@ -21,6 +27,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "../supabase/service";
+import { getDisplayNames } from "./profiles";
 
 export type ScriptComment = {
   id: string;
@@ -28,8 +35,16 @@ export type ScriptComment = {
   authorId: string;
   /** `null` si no se pudo resolver (falta la service role key, o el user ya no existe). */
   authorEmail: string | null;
-  /** ¿Lo escribió quien está mirando? Para poner "Tú" en vez del mail. */
+  /**
+   * Nombre elegido por esa persona (`portal_profiles`, etapa 8). `null` si
+   * todavía no eligió. **Es lo único que se le muestra al cliente**: el email
+   * se reserva para la pantalla de Paco.
+   */
+  authorName: string | null;
+  /** ¿Lo escribió quien está mirando? Para poner "Tú" en vez del nombre. */
   isMine: boolean;
+  /** ¿Lo escribió el dueño de la marca? Decide la etiqueta de respaldo. */
+  isOwner: boolean;
   body: string;
   createdAt: string;
 };
@@ -72,6 +87,8 @@ export async function listScriptComments(
   supabase: SupabaseClient,
   scriptId: string,
   viewerId: string,
+  /** Dueño de la marca, para marcar `isOwner`. Lo pasa quien ya lo tenía a mano. */
+  ownerId?: string,
 ): Promise<ScriptComment[]> {
   const { data, error } = await supabase
     .from("script_comments")
@@ -82,14 +99,20 @@ export async function listScriptComments(
   if (error) throw new Error(error.message);
 
   const rows = data ?? [];
-  const emails = await resolveAuthorEmails(rows.map((r) => r.author_id as string));
+  const authorIds = rows.map((r) => r.author_id as string);
+  const [emails, names] = await Promise.all([
+    resolveAuthorEmails(authorIds),
+    getDisplayNames(authorIds),
+  ]);
 
   return rows.map((r) => ({
     id: r.id as string,
     scriptId: r.script_id as string,
     authorId: r.author_id as string,
     authorEmail: emails.get(r.author_id as string) ?? null,
+    authorName: names.get(r.author_id as string) ?? null,
     isMine: (r.author_id as string) === viewerId,
+    isOwner: ownerId !== undefined && (r.author_id as string) === ownerId,
     body: r.body as string,
     createdAt: r.created_at as string,
   }));

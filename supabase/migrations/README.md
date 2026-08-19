@@ -36,8 +36,22 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0007 | `0007_drop_apify_cols_de_clients.sql` | ✅ 2026-08-13 (después del deploy) |
 | 0008 | `0008_competitor_posts_public_id.sql` | ✅ 2026-08-14 (antes del deploy) |
 | 0009 | `0009_portal_generacion_ia.sql` | ✅ 2026-08-17 (antes del deploy) |
-| 0010 | `0010_transcripcion_online.sql` | ⬜ pendiente — **antes** del deploy |
-| 0011 | `0011_papelera_guiones.sql` | ⬜ pendiente — **antes** del deploy |
+| 0010 | `0010_transcripcion_online.sql` | ✅ 2026-08-17 (antes del deploy) |
+| 0011 | `0011_papelera_guiones.sql` | ✅ 2026-08-17 (antes del deploy) |
+| 0012 | `0012_portal_display_names.sql` | ⬜ pendiente — **antes** del deploy |
+
+### 0012 va ANTES del deploy (mismo caso que 0008–0011)
+
+Crea `portal_profiles`: el nombre visible de cada usuario del portal. Es
+puramente aditiva y el código publicado hoy no conoce la tabla, así que la app
+vieja sigue funcionando entre la migración y el deploy. Al revés no: el gate de
+`/portal` y cada lectura de comentarios la consultan.
+
+La tabla queda con **RLS activa y sin ninguna policy**, más `revoke all … from
+anon, authenticated` — se lee y escribe solo con service role
+(`lib/portal/profiles.ts`), igual que `client_secrets`. Si el miembro pudiera
+hacer `update` de su propia fila, se renombraría igual que otro y firmaría
+comentarios en su nombre.
 
 ### 0010 y 0011 van ANTES del deploy (mismo caso que la 0008 y la 0009)
 

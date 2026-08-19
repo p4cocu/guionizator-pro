@@ -591,6 +591,39 @@
   margin: 0;
 }
 
+/* ── Guion vinculado dentro del modal de la pieza (etapa 8) ── */
+
+.modalScript {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.02);
+  max-height: 44vh;
+  overflow-y: auto;
+}
+
+.modalScriptHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.modalScriptTitle {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.modalScriptHint {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
 .modalActions {
   display: flex;
   align-items: center;

@@ -4,10 +4,9 @@ import { useState, useTransition } from "react";
 import { saveScriptCopy, type ScriptCopy } from "../actions";
 import styles from "../guiones.module.css";
 
+/** Ver la nota de `CoverCreatorPanel`: el contenido lo lee la ruta (etapa 8). */
 type Props = {
   scriptId: string;
-  scriptContent: Record<string, unknown>;
-  scriptType: string;
   initialCopies: ScriptCopy[];
 };
 
@@ -17,12 +16,7 @@ const PLATFORMS = [
   { id: "youtube", label: "YouTube", disabled: true },
 ];
 
-export default function CopyExpertPanel({
-  scriptId,
-  scriptContent,
-  scriptType,
-  initialCopies,
-}: Props) {
+export default function CopyExpertPanel({ scriptId, initialCopies }: Props) {
   const [activePlatform, setActivePlatform] = useState("instagram");
   const [copies, setCopies] = useState<Record<string, { copy: string; hashtags: string }>>(() => {
     const map: Record<string, { copy: string; hashtags: string }> = {};
@@ -46,11 +40,8 @@ export default function CopyExpertPanel({
       const res = await fetch("/api/ai/copy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          script_content: scriptContent,
-          script_type: scriptType,
-          platform: activePlatform,
-        }),
+        // Solo el id + la plataforma: el contenido lo lee la ruta (etapa 8).
+        body: JSON.stringify({ script_id: scriptId, platform: activePlatform }),
       });
       if (!res.ok) {
         const err = await res.json();

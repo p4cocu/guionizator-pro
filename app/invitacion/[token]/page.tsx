@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getInvitePreview, type InvitePreview } from "@/lib/portal/invites";
+import { getDisplayName, DISPLAY_NAME_HINT, DISPLAY_NAME_MAX } from "@/lib/portal/profiles";
 import AcceptInvite from "./AcceptInvite";
 import s from "../invitacion.module.css";
 
@@ -86,7 +87,7 @@ export default async function InvitacionPage({ params }: Props) {
     return (
       <Invalid
         title="Esta invitación ya fue aceptada"
-        text="Tu acceso ya está activo. Entra con tu cuenta cuando el portal esté disponible."
+        text="Tu acceso ya está activo: entra con tu cuenta desde el inicio."
       />
     );
   }
@@ -100,6 +101,11 @@ export default async function InvitacionPage({ params }: Props) {
     );
   }
 
+  // ¿Hay que pedirle el nombre acá? (etapa 8) Quien todavía no tiene cuenta,
+  // siempre. Quien ya la tiene, solo si nunca eligió uno. Si se saltea igual
+  // este paso, el gate de `/portal` lo vuelve a pedir antes de dejarlo entrar.
+  const needsName = user ? (await getDisplayName(user.id)) === null : true;
+
   return (
     <Shell>
       <AcceptInvite
@@ -108,6 +114,9 @@ export default async function InvitacionPage({ params }: Props) {
         invitedEmail={preview.email}
         role={preview.role}
         sessionEmail={user?.email ?? null}
+        needsName={needsName}
+        nameHint={DISPLAY_NAME_HINT}
+        nameMaxLength={DISPLAY_NAME_MAX}
       />
     </Shell>
   );

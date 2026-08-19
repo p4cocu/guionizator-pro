@@ -318,6 +318,32 @@
   line-height: 1.5;
 }
 
+/* Copiar / descargar (etapa 8). Gratis: no toca la IA. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 16px 0 4px;
+}
+
+/* ── Barra de edición del guion (etapa 8) ── */
+
+.editBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.editSaved {
+  font-size: 13px;
+  color: var(--emerald);
+  font-weight: 600;
+}
+
 .sourceNote {
   font-size: 12.5px;
   color: var(--text-dim);
@@ -453,4 +479,154 @@
   font-size: 14px;
   color: var(--text-muted);
   max-width: 46ch;
+}
+
+/* ── Herramientas del guion: portadas y copy (etapa 8) ── */
+
+.tools {
+  display: grid;
+  gap: 14px;
+  margin-top: 28px;
+  padding: 20px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+  background-color: var(--glass-base);
+  background-image: var(--glass-overlay);
+}
+
+.toolsHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolsTitle {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.toolsQuota {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.tool {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.toolTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolName {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.toolControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toolControls :global(.input) {
+  width: auto;
+  min-width: 140px;
+  font-size: 13px;
+  padding: 8px 12px;
+}
+
+.toolHint {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.coverList {
+  display: grid;
+  gap: 12px;
+}
+
+.cover {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--glass-border);
+}
+
+.coverNum {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.coverText {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.coverWhy {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.coverPrompt {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--glass-border);
+  overflow-wrap: anywhere;
+}
+
+.copyBox {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--glass-border);
+}
+
+.copyText {
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.copyTags {
+  font-size: 13px;
+  color: var(--emerald);
+  overflow-wrap: anywhere;
+}
+
+.copyLink {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  justify-self: start;
+  font-size: 12.5px;
+  color: var(--emerald);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

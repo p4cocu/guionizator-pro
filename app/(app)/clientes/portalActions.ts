@@ -20,6 +20,7 @@ import { createClient } from "@/lib/supabase/server";
 import { sanitizeFeatures, type PortalFeatureSlug } from "@/lib/portal/features";
 import { isGenerationMode, type PortalGenerationMode } from "@/lib/portal/generationMode";
 import { isPortalMemberRole, listClientMembers } from "@/lib/portal/members";
+import { setMemberDisplayName, setOwnDisplayName } from "@/lib/portal/profiles";
 import {
   createInvite,
   deleteInvite,
@@ -410,6 +411,67 @@ export async function revokeClientInvite(
     return {
       ok: false,
       error: e instanceof Error ? e.message : "No se pudo cancelar la invitación.",
+    };
+  }
+
+  revalidatePath(`/clientes/${clientId}`);
+  return { ok: true };
+}
+
+/**
+ * Cambia el nombre visible de un miembro (etapa 8).
+ *
+ * El nombre lo elige la persona una sola vez, al entrar; de ahí en adelante
+ * corregirlo es atribución del dueño de la marca. `portal_profiles` no tiene
+ * policies para nadie, así que el `update` va con service role dentro de
+ * `setMemberDisplayName`, que revalida la pertenencia con el cliente de sesión
+ * antes de escribir — sin eso, esta action renombraría a cualquier usuario de
+ * la base.
+ */
+export async function setMemberName(
+  memberId: string,
+  clientId: string,
+  displayName: string,
+): Promise<MemberActionResult> {
+  try {
+    const { supabase, user } = await getAuthUser();
+    await assertOwnsClient(supabase, clientId, user.id);
+    await setMemberDisplayName(supabase, {
+      memberId,
+      clientId,
+      ownerId: user.id,
+      displayName,
+    });
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo guardar el nombre.",
+    };
+  }
+
+  revalidatePath(`/clientes/${clientId}`);
+  return { ok: true };
+}
+
+/**
+ * El nombre con el que el propio Paco aparece en los comentarios del portal.
+ *
+ * Es un ajuste **global** (una fila por usuario, no por marca), pero se edita
+ * desde el perfil de cualquier marca porque es ahí donde se ve el efecto. Sin
+ * esto, sus comentarios le muestran al cliente la etiqueta genérica hasta que
+ * entre a `/portal` y pase por el gate.
+ */
+export async function setOwnPortalName(
+  clientId: string,
+  displayName: string,
+): Promise<MemberActionResult> {
+  try {
+    const { user } = await getAuthUser();
+    await setOwnDisplayName(user.id, displayName);
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo guardar tu nombre.",
     };
   }
 

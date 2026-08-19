@@ -20,6 +20,12 @@ import { requirePortalSession, requirePortalClient } from "@/lib/portal/access";
 import { addScriptComment } from "@/lib/portal/comments";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ensureCalendarEntry } from "@/lib/portal/scheduling";
+import {
+  applyTextDraft,
+  assertValidDraft,
+  ScriptTextError,
+  type ScriptTextDraft,
+} from "@/lib/portal/scriptEdit";
 import { trashScript as trashScriptRow } from "@/lib/portal/trash";
 
 export type CommentResult = { ok: true } | { ok: false; error: string };
@@ -167,5 +173,93 @@ export async function trashScript(clientId: string, scriptId: string): Promise<C
 
   revalidatePath(`/portal/${clientId}/guiones`);
   revalidatePath("/guiones");
+  return { ok: true };
+}
+
+/**
+ * Guarda el texto editado de un guion (etapa 8).
+ *
+ * ## Por qué va con la sesión del miembro y no con service role
+ *
+ * La policy `scripts_member_update` (migración `0006`) ya le da `update` al rol
+ * `collaborator`, y el trigger `scripts_guard_update` congela
+ * `owner_id`/`client_id`/`generated_by` y llena `last_edited_by` /
+ * `last_edited_at`. Usar service role acá saltearía justo el control de rol que
+ * la base ya hace: un `viewer` terminaría pudiendo editar. (La papelera sí va
+ * con service role porque ahí queremos que el viewer pueda.)
+ *
+ * ## Por qué NO crea una versión nueva
+ *
+ * En el estudio, guardar un guion inserta otra fila (`saveScriptVersion`). Acá
+ * no: los comentarios y la aprobación cuelgan de `script_id`, así que una fila
+ * nueva dejaría el hilo huérfano y cambiaría la URL abajo de los pies del
+ * cliente. Y el miembro no tiene `insert` sobre `scripts`, a propósito.
+ *
+ * ## Por qué el merge y no un content nuevo
+ *
+ * `applyTextDraft` pisa solo las claves de texto: sin eso, editar una frase
+ * desde el portal borraría los bloques de producción, la música y el `visual`
+ * de cada slide, que el portal ni dibuja. Ver `lib/portal/scriptEdit.ts`.
+ *
+ * La aprobación **no se toca**: si el cliente edita algo que ya había aprobado,
+ * sigue aprobado y el aviso le llega a Paco por `ClientFeedbackPanel`, que
+ * muestra la fecha de la última edición.
+ */
+export async function updateScriptText(
+  clientId: string,
+  scriptId: string,
+  draft: ScriptTextDraft,
+): Promise<CommentResult> {
+  try {
+    const { supabase, user } = await requirePortalSession();
+    const client = await requirePortalClient(user.id, clientId, "guiones");
+
+    if (client.role === "viewer") {
+      return {
+        ok: false,
+        error:
+          "Tu acceso es de solo lectura. Pídele a quien maneja tu contenido que te dé permiso de colaborador.",
+      };
+    }
+
+    assertValidDraft(draft);
+
+    const { data: current, error: readError } = await supabase
+      .from("scripts")
+      .select("id, content")
+      .eq("id", scriptId)
+      .eq("client_id", clientId)
+      .maybeSingle();
+
+    if (readError) return { ok: false, error: readError.message };
+    if (!current) return { ok: false, error: "Ese guion no existe o no es de esta marca." };
+
+    const content = applyTextDraft(
+      (current.content as Record<string, unknown> | null) ?? null,
+      draft,
+    );
+
+    const { data, error } = await supabase
+      .from("scripts")
+      .update({ content })
+      .eq("id", scriptId)
+      .eq("client_id", clientId)
+      .select("id");
+
+    if (error) return { ok: false, error: error.message };
+    if (!data?.length) {
+      return { ok: false, error: "No tienes permiso para editar este guion." };
+    }
+  } catch (e) {
+    if (e instanceof ScriptTextError) return { ok: false, error: e.message };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudieron guardar los cambios.",
+    };
+  }
+
+  revalidatePath(`/portal/${clientId}/guiones/${scriptId}`);
+  revalidatePath(`/portal/${clientId}/guiones`);
+  revalidatePath(`/guiones/${scriptId}`);
   return { ok: true };
 }

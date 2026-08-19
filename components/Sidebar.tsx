@@ -29,6 +29,14 @@ const NAV_LOCAL: NavItem[] = [
   { href: "/publicar", label: "Publicar" },
 ];
 
+/**
+ * `/portal` no es una sección del estudio: es la misma app vista con los ojos
+ * del cliente (Fase D). Por eso va en su propio bloque al pie y no dentro de
+ * `NAV`. Si Paco tiene varias marcas, `app/(portal)/portal/page.tsx` muestra el
+ * selector; si tiene una sola, entra derecho.
+ */
+const NAV_PORTAL: NavItem = { href: "/portal", label: "Ver como cliente" };
+
 type Props = {
   isOpen?: boolean;
   onClose?: () => void;
@@ -77,6 +85,17 @@ export default function Sidebar({ isOpen, onClose }: Props) {
             </Link>
           );
         })}
+
+        <span className="eyebrow" style={{ paddingLeft: 14, opacity: 0.7, marginTop: 8 }}>
+          Portal
+        </span>
+        <Link
+          href={NAV_PORTAL.href}
+          className={styles.link}
+          onClick={onClose}
+        >
+          <span>{NAV_PORTAL.label}</span>
+        </Link>
 
         {process.env.NODE_ENV === "development" && (
           <>

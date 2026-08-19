@@ -3,7 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
-import type { CalendarEntry, CalendarEntryInput } from "./actions";
+import type { CalendarEntry, CalendarEntryInput, CalendarScript } from "./actions";
 import {
   createCalendarEntry,
   updateCalendarEntry,
@@ -13,7 +13,9 @@ import {
   postponeCalendarEntry,
   sendToProduction,
   updateCalendarDate,
+  getCalendarScript,
 } from "./actions";
+import ScriptBody from "@/components/portal/ScriptBody";
 import s from "./calendario.module.css";
 
 const MONTHS = [
@@ -166,6 +168,12 @@ export default function DashboardClient({
   // View mode
   const [viewMode, setViewMode] = useState<"semanas" | "calendario">("semanas");
 
+  // Guion de la entrada abierta en el modal (etapa 8). Se carga bajo demanda:
+  // el `content` es jsonb pesado y la mayoría de las entradas ni se abren.
+  const [modalScript, setModalScript] = useState<CalendarScript | null>(null);
+  const [modalScriptLoading, setModalScriptLoading] = useState(false);
+  const [modalScriptError, setModalScriptError] = useState<string | null>(null);
+
   // Local entries state for optimistic drag-and-drop updates
   const [entries, setEntries] = useState<CalendarEntry[]>(initialEntries);
   useEffect(() => { setEntries(initialEntries); }, [initialEntries]);
@@ -203,8 +211,33 @@ export default function DashboardClient({
     navigate(selectedClientId, d.getMonth() + 1, d.getFullYear());
   }
 
+  /**
+   * Trae el guion vinculado, si lo hay. Un fallo acá no puede tumbar el modal:
+   * la entrada del calendario se sigue pudiendo editar aunque el guion no
+   * cargue, así que el error se muestra en línea y nada más.
+   */
+  function loadModalScript(scriptId: string | null) {
+    setModalScript(null);
+    setModalScriptError(null);
+    if (!scriptId) {
+      setModalScriptLoading(false);
+      return;
+    }
+    setModalScriptLoading(true);
+    getCalendarScript(scriptId)
+      .then((script) => {
+        setModalScript(script);
+        if (!script) setModalScriptError("No se encontró el guion vinculado.");
+      })
+      .catch((e) => {
+        setModalScriptError(e instanceof Error ? e.message : "No se pudo cargar el guion.");
+      })
+      .finally(() => setModalScriptLoading(false));
+  }
+
   function openNew(weekNumber: number, date?: string) {
     setEditingEntry(null);
+    loadModalScript(null);
     setForm({
       ...EMPTY_FORM,
       month,
@@ -219,6 +252,7 @@ export default function DashboardClient({
 
   function openEdit(entry: CalendarEntry) {
     setEditingEntry(entry);
+    loadModalScript(entry.script_id);
     setForm({
       client_id: entry.client_id,
       title: entry.title,
@@ -1178,6 +1212,48 @@ export default function DashboardClient({
                   onChange={(e) => setForm((p) => ({ ...p, brief: e.target.value }))}
                 />
               </div>
+
+              {/*
+                Guion vinculado (etapa 8). La vista "Semanas" ya tenía su link
+                "Ver guion →"; en la grilla del mes el clic abre este modal, que
+                hasta ahora solo editaba los campos del calendario y no dejaba
+                ver lo que había que grabar. Se dibuja con el mismo componente
+                que usa el portal: un solo criterio de lectura del `content`.
+              */}
+              {editingEntry?.script_id && (
+                <div className={s.modalScript}>
+                  <div className={s.modalScriptHead}>
+                    <span className="eyebrow">Guion vinculado</span>
+                    <Link
+                      href={`/guiones/${editingEntry.script_id}`}
+                      className="btn btn-secondary"
+                      style={{ fontSize: 12, padding: "6px 14px" }}
+                    >
+                      Editar guion →
+                    </Link>
+                  </div>
+
+                  {modalScriptLoading && (
+                    <p className={s.modalScriptHint}>Cargando el guion…</p>
+                  )}
+                  {modalScriptError && (
+                    <p className={s.formError}>{modalScriptError}</p>
+                  )}
+                  {modalScript && (
+                    <>
+                      {modalScript.title && (
+                        <p className={s.modalScriptTitle}>{modalScript.title}</p>
+                      )}
+                      <ScriptBody
+                        content={modalScript.content}
+                        type={modalScript.type}
+                        framed={false}
+                        compact
+                      />
+                    </>
+                  )}
+                </div>
+              )}
 
               {error && <p className={s.formError}>{error}</p>}
 

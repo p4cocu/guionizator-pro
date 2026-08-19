@@ -38,11 +38,14 @@ export default function ClientFeedbackPanel({
   scriptId,
   clientId,
   approvedAt,
+  lastClientEdit,
   comments,
 }: {
   scriptId: string;
   clientId: string;
   approvedAt: string | null;
+  /** Última edición hecha desde el portal (etapa 8). `null` si solo editaste vos. */
+  lastClientEdit: { author: string; at: string; afterApproval: boolean } | null;
   comments: Comment[];
 }) {
   const router = useRouter();
@@ -83,6 +86,18 @@ export default function ClientFeedbackPanel({
           <span className={s.pending}>Sin aprobar</span>
         )}
       </div>
+
+      {/*
+        Desde la etapa 8 el cliente puede editar el texto del guion, así que
+        hace falta que se note: si no, Paco graba una versión que el cliente ya
+        cambió. El aviso sube de tono cuando la edición fue DESPUÉS de aprobar.
+      */}
+      {lastClientEdit && (
+        <p className={lastClientEdit.afterApproval ? s.editedWarn : s.edited}>
+          ✎ {lastClientEdit.author} editó el texto el {formatWhen(lastClientEdit.at)}
+          {lastClientEdit.afterApproval ? " — después de aprobarlo, conviene releerlo." : "."}
+        </p>
+      )}
 
       {comments.length === 0 ? (
         <p className={s.empty}>

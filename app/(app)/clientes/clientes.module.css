@@ -822,6 +822,44 @@
 }
 
 /* ── Invitaciones al portal (etapa 3) ── */
+/* ── Nombres visibles del portal (etapa 8) ── */
+
+.ownNameRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ownNameField {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.memberNameEdit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.memberNameEdit :global(.input) {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.memberNameBtn {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--emerald);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .inviteForm {
   display: flex;
   gap: 8px;

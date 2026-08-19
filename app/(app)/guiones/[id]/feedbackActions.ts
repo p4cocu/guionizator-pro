@@ -17,10 +17,22 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { addScriptComment, listScriptComments } from "@/lib/portal/comments";
+import { getDisplayNames } from "@/lib/portal/profiles";
 
 export type ScriptFeedback = {
   clientId: string;
   approvedAt: string | null;
+  /**
+   * Última edición hecha por alguien que no es Paco (etapa 8). El trigger
+   * `scripts_guard_update` llena `last_edited_by`/`last_edited_at` en cada
+   * update, así que acá se filtra: las ediciones propias no son noticia.
+   */
+  lastClientEdit: {
+    author: string;
+    at: string;
+    /** ¿Tocó el guion DESPUÉS de aprobarlo? Ahí conviene releerlo. */
+    afterApproval: boolean;
+  } | null;
   comments: {
     id: string;
     author: string;
@@ -51,23 +63,46 @@ export async function getScriptFeedback(scriptId: string): Promise<ScriptFeedbac
 
   const { data: script } = await supabase
     .from("scripts")
-    .select("id, client_id, client_approved_at")
+    .select("id, client_id, client_approved_at, last_edited_by, last_edited_at")
     .eq("id", scriptId)
     .eq("owner_id", user.id)
     .maybeSingle();
 
   if (!script) return null;
 
-  const comments = await listScriptComments(supabase, scriptId, user.id);
+  const comments = await listScriptComments(supabase, scriptId, user.id, user.id);
+
+  const approvedAt = (script.client_approved_at as string | null) ?? null;
+  const editedBy = (script.last_edited_by as string | null) ?? null;
+  const editedAt = (script.last_edited_at as string | null) ?? null;
+
+  let lastClientEdit: ScriptFeedback["lastClientEdit"] = null;
+  if (editedBy && editedAt && editedBy !== user.id) {
+    const names = await getDisplayNames([editedBy]);
+    lastClientEdit = {
+      author: names.get(editedBy) ?? "El cliente",
+      at: editedAt,
+      afterApproval: approvedAt !== null && new Date(editedAt) > new Date(approvedAt),
+    };
+  }
 
   return {
     clientId: script.client_id as string,
-    approvedAt: (script.client_approved_at as string | null) ?? null,
+    approvedAt,
+    lastClientEdit,
     comments: comments.map((c) => ({
       id: c.id,
       // Del lado de Paco importa QUIÉN del cliente escribió, así que se muestra
       // el mail. "Tú" solo para lo suyo.
-      author: c.isMine ? "Tú" : (c.authorEmail ?? "El cliente"),
+      // Del lado de Paco importa QUIÉN del cliente escribió: el nombre que eligió
+      // (etapa 8) y, entre paréntesis, la cuenta con la que entra.
+      author: c.isMine
+        ? "Tú"
+        : c.authorName
+          ? c.authorEmail
+            ? `${c.authorName} (${c.authorEmail})`
+            : c.authorName
+          : (c.authorEmail ?? "El cliente"),
       isMine: c.isMine,
       body: c.body,
       createdAt: c.createdAt,

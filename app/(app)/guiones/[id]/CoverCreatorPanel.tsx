@@ -4,23 +4,17 @@ import { useState, useTransition } from "react";
 import { saveScriptCovers, type ScriptCoverIdea } from "../actions";
 import styles from "../guiones.module.css";
 
+/**
+ * El brief, el tipo y el contenido ya no viajan como props: desde la etapa 8 la
+ * ruta `/api/ai/cover` los lee de la base a partir del `script_id` (antes
+ * aceptaba cualquier contenido de cualquiera con sesión).
+ */
 type Props = {
   scriptId: string;
-  scriptBrief: string;
-  scriptContent: Record<string, unknown>;
-  scriptType: string;
-  structureName: string;
   initialCovers: ScriptCoverIdea[] | null;
 };
 
-export default function CoverCreatorPanel({
-  scriptId,
-  scriptBrief,
-  scriptContent,
-  scriptType,
-  structureName,
-  initialCovers,
-}: Props) {
+export default function CoverCreatorPanel({ scriptId, initialCovers }: Props) {
   const [covers, setCovers] = useState<ScriptCoverIdea[] | null>(initialCovers);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,12 +30,9 @@ export default function CoverCreatorPanel({
       const res = await fetch("/api/ai/cover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          script_type: scriptType,
-          brief: scriptBrief,
-          structure_name: structureName,
-          content: scriptContent,
-        }),
+        // Solo el id: la ruta lee el guion de la base (etapa 8). Ver el
+        // comentario en `app/api/ai/cover/route.ts`.
+        body: JSON.stringify({ script_id: scriptId }),
       });
 
       // Si el middleware de auth nos rebotó a /login, fetch sigue la

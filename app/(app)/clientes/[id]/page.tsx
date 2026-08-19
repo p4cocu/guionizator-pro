@@ -6,6 +6,7 @@ import {
   type ApifyTokenState,
 } from "@/lib/competencia/apifyToken";
 import { listClientMembers, type PortalMember } from "@/lib/portal/members";
+import { getDisplayName } from "@/lib/portal/profiles";
 import { listPendingInvites, type ClientInvite } from "@/lib/portal/invites";
 import { emptyAiUsage, getMonthlyAiUsage, type AiUsageSummary } from "@/lib/portal/usage";
 import {
@@ -70,6 +71,11 @@ export default async function ClienteDetailPage({ params }: Props) {
     },
   );
 
+  // El nombre propio en el portal es global (una fila por usuario), pero se
+  // edita desde acá porque es donde se ve el efecto. `getDisplayName` ya
+  // devuelve `null` en vez de lanzar si falla.
+  const ownNamePromise: Promise<string | null> = getDisplayName(user.id);
+
   const invitesPromise: Promise<ClientInvite[]> = listPendingInvites(supabase, id).catch((e) => {
     console.error("[clientes/[id]] no se pudieron leer las invitaciones:", e);
     return [];
@@ -94,6 +100,7 @@ export default async function ClienteDetailPage({ params }: Props) {
     aiUsage,
     invites,
     transcriptionUsage,
+    ownPortalName,
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -126,6 +133,7 @@ export default async function ClienteDetailPage({ params }: Props) {
     usagePromise,
     invitesPromise,
     transcriptionUsagePromise,
+    ownNamePromise,
   ]);
 
   if (!cliente) notFound();
@@ -159,6 +167,7 @@ export default async function ClienteDetailPage({ params }: Props) {
           usage={aiUsage}
           initialMembers={members}
           initialInvites={invites}
+          initialOwnName={ownPortalName}
         />
         {/* Solo el estado enmascarado: `apify_token_cipher` NUNCA cruza al cliente. */}
         <ApifySection clientId={id} initial={apify} />

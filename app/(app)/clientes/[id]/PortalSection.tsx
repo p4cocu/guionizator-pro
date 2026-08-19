@@ -26,6 +26,8 @@ import {
   setAiGenerationMode,
   setClientFeatures,
   setClientMemberRole,
+  setMemberName,
+  setOwnPortalName,
   setTranscriptionLimit,
 } from "../portalActions";
 import type { TranscriptionUsageSummary } from "@/lib/competencia/transcriptionUsage";
@@ -43,6 +45,7 @@ import {
   type PortalGenerationMode,
 } from "@/lib/portal/generationMode";
 import type { PortalMember } from "@/lib/portal/members";
+import { DISPLAY_NAME_HINT, DISPLAY_NAME_MAX } from "@/lib/portal/profiles";
 import {
   PORTAL_MEMBER_ROLES,
   portalMemberRoleLabel,
@@ -61,6 +64,8 @@ type Props = {
   transcriptionUsage: TranscriptionUsageSummary;
   initialMembers: PortalMember[];
   initialInvites: ClientInvite[];
+  /** Nombre con el que Paco aparece en el portal. Global, no por marca. */
+  initialOwnName: string | null;
 };
 
 function formatDate(iso: string): string {
@@ -106,6 +111,7 @@ export default function PortalSection({
   transcriptionUsage,
   initialMembers,
   initialInvites,
+  initialOwnName,
 }: Props) {
   const [features, setFeatures] = useState<string[]>(() => sanitizeFeatures(initialFeatures));
   const [limit, setLimit] = useState<number | null>(initialLimit);
@@ -121,6 +127,10 @@ export default function PortalSection({
   const [limitDraft, setLimitDraft] = useState(initialLimit === null ? "" : String(initialLimit));
   const [members, setMembers] = useState<PortalMember[]>(initialMembers);
   const [invites, setInvites] = useState<ClientInvite[]>(initialInvites);
+  const [ownName, setOwnName] = useState(initialOwnName ?? "");
+  const [ownNameSaved, setOwnNameSaved] = useState(initialOwnName ?? "");
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<PortalMemberRole>("viewer");
   // El link solo existe en memoria: en la base queda su sha256, así que si se
@@ -252,6 +262,67 @@ export default function PortalSection({
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "No se pudo guardar el tope de transcripción.");
+      }
+    });
+  }
+
+  /**
+   * Guarda el nombre visible de un miembro. Optimista con reversión, igual que
+   * el cambio de rol: si la action falla, la fila vuelve a lo que era y el
+   * error se muestra arriba (nunca se deja la UI mintiendo).
+   */
+  function saveMemberName(member: PortalMember) {
+    const nuevo = nameDraft.trim();
+    if (!nuevo || nuevo === (member.displayName ?? "")) {
+      setEditingNameId(null);
+      return;
+    }
+
+    const previous = members;
+    setMembers((prev) =>
+      prev.map((m) => (m.id === member.id ? { ...m, displayName: nuevo } : m)),
+    );
+    setEditingNameId(null);
+    setError(null);
+    setOk(null);
+    setBusyId(member.id);
+
+    start(async () => {
+      try {
+        const res = await setMemberName(member.id, clientId, nuevo);
+        if (res.ok) {
+          setOk(`Nombre actualizado a ${nuevo}.`);
+        } else {
+          setMembers(previous);
+          setError(res.error);
+        }
+      } catch (e) {
+        setMembers(previous);
+        setError(e instanceof Error ? e.message : "No se pudo guardar el nombre.");
+      } finally {
+        setBusyId(null);
+      }
+    });
+  }
+
+  /** El nombre propio de Paco: lo mismo, pero para su propia fila. */
+  function saveOwnName() {
+    const nuevo = ownName.trim();
+    if (!nuevo || nuevo === ownNameSaved) return;
+
+    setError(null);
+    setOk(null);
+    start(async () => {
+      try {
+        const res = await setOwnPortalName(clientId, nuevo);
+        if (res.ok) {
+          setOwnNameSaved(nuevo);
+          setOk("Listo: tus comentarios en el portal salen con ese nombre.");
+        } else {
+          setError(res.error);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "No se pudo guardar tu nombre.");
       }
     });
   }
@@ -578,6 +649,44 @@ export default function PortalSection({
       <div className={s.portalGroup}>
         <p className={s.portalGroupTitle}>Quién tiene acceso</p>
 
+        {/*
+          Nombre propio (etapa 8). Es un ajuste GLOBAL —una fila por usuario en
+          `portal_profiles`, no por marca— pero se edita acá porque es donde se
+          ve el efecto: hasta la etapa 7 el cliente veía el email personal de
+          Paco en cada respuesta.
+        */}
+        <div className={s.ownNameRow}>
+          <div className={s.ownNameField}>
+            <label className="field-label" style={{ fontSize: 12 }} htmlFor="own-portal-name">
+              Tu nombre en el portal
+            </label>
+            <input
+              id="own-portal-name"
+              className="input"
+              value={ownName}
+              maxLength={DISPLAY_NAME_MAX}
+              placeholder="Paco"
+              disabled={isPending}
+              onChange={(e) => setOwnName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveOwnName();
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ fontSize: 13 }}
+            disabled={isPending || ownName.trim().length < 2 || ownName.trim() === ownNameSaved}
+            onClick={saveOwnName}
+          >
+            {isPending ? "…" : "Guardar"}
+          </button>
+        </div>
+        <p className={s.memberMeta} style={{ marginTop: 6, marginBottom: 14 }}>
+          {DISPLAY_NAME_HINT} Vale para todas tus marcas.
+        </p>
+
         <form onSubmit={invite} className={s.inviteForm}>
           <div className={s.inviteEmailField}>
             <label className="field-label" style={{ fontSize: 12 }} htmlFor="invite-email">
@@ -697,12 +806,60 @@ export default function PortalSection({
             {members.map((member) => (
               <div key={member.id} className={s.memberRow}>
                 <div className={s.memberInfo}>
-                  <p className={s.memberEmail}>
-                    {member.email ?? <span style={{ opacity: 0.7 }}>{member.userId}</span>}
-                  </p>
+                  {editingNameId === member.id ? (
+                    <div className={s.memberNameEdit}>
+                      <input
+                        className="input"
+                        value={nameDraft}
+                        maxLength={DISPLAY_NAME_MAX}
+                        autoFocus
+                        disabled={isPending && busyId === member.id}
+                        onChange={(e) => setNameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveMemberName(member);
+                          if (e.key === "Escape") setEditingNameId(null);
+                        }}
+                        aria-label={`Nombre de ${member.email ?? member.userId}`}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ fontSize: 12, padding: "6px 12px" }}
+                        disabled={isPending && busyId === member.id}
+                        onClick={() => saveMemberName(member)}
+                      >
+                        Guardar
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        style={{ fontSize: 12, padding: "6px 10px" }}
+                        onClick={() => setEditingNameId(null)}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <p className={s.memberEmail}>
+                      {member.displayName ?? (
+                        <span style={{ opacity: 0.7 }}>Sin nombre todavía</span>
+                      )}{" "}
+                      <button
+                        type="button"
+                        className={s.memberNameBtn}
+                        onClick={() => {
+                          setNameDraft(member.displayName ?? "");
+                          setEditingNameId(member.id);
+                        }}
+                      >
+                        editar
+                      </button>
+                    </p>
+                  )}
                   <p className={s.memberMeta}>
-                    Con acceso desde el {formatDate(member.createdAt)}
-                    {member.email ? "" : " · no se pudo resolver el email"}
+                    {member.email ?? member.userId} · con acceso desde el{" "}
+                    {formatDate(member.createdAt)}
+                    {member.displayName ? "" : " · elige su nombre al entrar al portal"}
                   </p>
                 </div>
 

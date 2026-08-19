@@ -12,11 +12,22 @@
  * El tipo de destino (reel/carrusel) se deriva del post fuente: un carrusel de
  * competencia se adapta a carrusel, cualquier otra cosa a reel. Sin selector —
  * es una decisión de menos para alguien que solo quiere el resultado.
+ *
+ * Etapa 8: el resultado ya no es solo lectura. Se puede corregir el texto
+ * ANTES de guardar (lo generado por IA casi nunca sale perfecto, y volver a
+ * generar cuesta otro crédito). Lo que se guarda es lo que quedó en pantalla.
  */
 
 import { useState } from "react";
 import Link from "next/link";
-import { toScriptView, parseMarkup, type TextChunk } from "@/lib/portal/scriptView";
+import ScriptBody from "@/components/portal/ScriptBody";
+import ScriptTextEditor from "@/components/portal/ScriptTextEditor";
+import {
+  applyTextDraft,
+  toTextDraft,
+  isEditableDraft,
+  type ScriptTextDraft,
+} from "@/lib/portal/scriptEdit";
 import { adaptPortalPost } from "./actions";
 import { guardarGuion } from "../generar/actions";
 import s from "./competencia.module.css";
@@ -24,19 +35,6 @@ import s from "./competencia.module.css";
 type ScriptType = "reel" | "carousel";
 
 type Preview = { content: Record<string, unknown>; structureName: string; brief: string };
-
-function Rich({ text }: { text: string }) {
-  return (
-    <>
-      {parseMarkup(text).map((chunk: TextChunk, i) => {
-        if (chunk.bold) return <strong key={i}>{chunk.text}</strong>;
-        if (chunk.mark) return <mark key={i}>{chunk.text}</mark>;
-        if (chunk.underline) return <em key={i}>{chunk.text}</em>;
-        return <span key={i}>{chunk.text}</span>;
-      })}
-    </>
-  );
-}
 
 export default function AdaptModal({
   clientId,
@@ -54,6 +52,8 @@ export default function AdaptModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [draft, setDraft] = useState<ScriptTextDraft | null>(null);
+  const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -67,6 +67,8 @@ export default function AdaptModal({
       const res = await adaptPortalPost(clientId, post.id, type);
       if (res.ok) {
         setPreview({ content: res.content, structureName: res.structureName, brief: res.brief });
+        setDraft(toTextDraft(res.content, type));
+        setEditing(false);
         onAdapted();
       } else {
         setError(res.error);
@@ -83,13 +85,17 @@ export default function AdaptModal({
     setSaving(true);
     setError(null);
     try {
+      // Se guarda lo editado, no lo que devolvió la IA. `applyTextDraft`
+      // mergea sobre el content original para no perder lo que el portal no
+      // dibuja (bloques, música, `visual` de cada slide).
+      const content = draft ? applyTextDraft(preview.content, draft) : preview.content;
       const res = await guardarGuion({
         clientId,
         type,
         brief: preview.brief,
         structureName: preview.structureName,
         title: title.trim() || null,
-        content: preview.content,
+        content,
       });
       if (res.ok) setSavedId(res.scriptId);
       else setError(res.error);
@@ -150,8 +156,31 @@ export default function AdaptModal({
 
         {!loading && preview && (
           <div className={s.modalBody}>
+            {!savedId && draft && isEditableDraft(draft) && (
+              <div className={s.editToggleRow}>
+                <button
+                  type="button"
+                  className={s.editToggle}
+                  onClick={() => setEditing((v) => !v)}
+                  disabled={saving}
+                >
+                  {editing ? "Ver como queda" : "✎ Editar el texto"}
+                </button>
+              </div>
+            )}
+
             <article className={s.script}>
-              <ScriptPreview content={preview.content} type={type} />
+              {editing && draft ? (
+                <ScriptTextEditor draft={draft} onChange={setDraft} disabled={saving} />
+              ) : (
+                <ScriptBody
+                  content={draft ? applyTextDraft(preview.content, draft) : preview.content}
+                  type={type}
+                  framed={false}
+                  compact
+                  emptyText="La adaptación llegó vacía. Prueba de nuevo."
+                />
+              )}
             </article>
 
             {savedId ? (
@@ -198,35 +227,5 @@ export default function AdaptModal({
         )}
       </div>
     </div>
-  );
-}
-
-function ScriptPreview({ content, type }: { content: Record<string, unknown>; type: ScriptType }) {
-  const view = toScriptView(content, type);
-
-  if (view.kind === "empty") {
-    return <p className={s.emptyText}>La adaptación llegó vacía. Prueba de nuevo.</p>;
-  }
-
-  if (view.kind === "carousel") {
-    return (
-      <div className={s.slides}>
-        {view.slides.map((slide) => (
-          <section key={slide.number} className={s.slideCard}>
-            <span className={s.slideNumber}>Slide {slide.number}</span>
-            <p className={s.slideText}>
-              <Rich text={slide.text} />
-            </p>
-            {slide.visual && <p className={s.slideVisual}>Visual: {slide.visual}</p>}
-          </section>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <p className={s.voiceOff}>
-      <Rich text={view.voiceOff} />
-    </p>
   );
 }

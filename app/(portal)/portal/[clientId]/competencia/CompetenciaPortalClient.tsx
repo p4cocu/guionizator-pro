@@ -86,7 +86,13 @@ export default function CompetenciaPortalClient({
   const [posts, setPosts] = useState(initialPosts);
   const [query, setQuery] = useState("");
   const [cuenta, setCuenta] = useState("");
+  // Destacados y "nuestra selección" son dos cosas distintas (etapa 8): el
+  // primero es automático (el post rindió muy por encima de su propia cuenta),
+  // el segundo es curaduría a mano. Antes iban en un solo checkbox y un post
+  // que entraba solo por favorito no llevaba ninguna marca en la tarjeta.
   const [soloDestacados, setSoloDestacados] = useState(false);
+  const [soloSeleccion, setSoloSeleccion] = useState(false);
+  const [soloTranscritos, setSoloTranscritos] = useState(false);
   const [orden, setOrden] = useState<Orden>("recientes");
   const [abierto, setAbierto] = useState<string | null>(null);
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
@@ -123,7 +129,15 @@ export default function CompetenciaPortalClient({
 
     const filtrados = posts.filter((p) => {
       if (cuenta && p.username !== cuenta) return false;
-      if (soloDestacados && !p.is_outlier && !p.is_favorite) return false;
+      // Los dos marcadores se suman (unión) cuando están los dos prendidos: la
+      // intersección "outlier Y favorito" devolvería casi nada. La
+      // transcripción sí va en AND — es otra dimensión, no otro marcador.
+      if (soloDestacados || soloSeleccion) {
+        const marcado =
+          (soloDestacados && p.is_outlier) || (soloSeleccion && p.is_favorite);
+        if (!marcado) return false;
+      }
+      if (soloTranscritos && !p.transcription) return false;
       if (!q) return true;
       return (
         p.public_id === idQuery ||
@@ -137,7 +151,7 @@ export default function CompetenciaPortalClient({
     else if (orden === "vistas")
       ordenados.sort((a, b) => (b.video_views ?? 0) - (a.video_views ?? 0));
     return ordenados;
-  }, [posts, query, cuenta, soloDestacados, orden]);
+  }, [posts, query, cuenta, soloDestacados, soloSeleccion, soloTranscritos, orden]);
 
   // ── Procesar embeds cada vez que cambia lo visible ──
   useEffect(() => {
@@ -175,11 +189,12 @@ export default function CompetenciaPortalClient({
         <span className="eyebrow">{clientLabel}</span>
         <h2 className={s.title}>Competencia</h2>
         <p className={s.subtitle}>
-          Lo que están publicando las cuentas que seguimos en tu categoría. Los
-          marcados como <strong>destacados</strong> son los que rindieron muy por
-          encima de lo normal para esa cuenta. Cada pieza tiene un código de 6
-          caracteres: si quieres pedir algo sobre una en particular, mándanos ese
-          código.
+          Lo que están publicando las cuentas que seguimos en tu categoría.{" "}
+          <strong>🔥 Destacado</strong> es el que rindió muy por encima de lo
+          normal para su propia cuenta; <strong>⭐ Nuestra selección</strong> es
+          el que elegimos a mano porque nos parece que da para algo tuyo. Cada
+          pieza tiene un código de 6 caracteres: si quieres pedir algo sobre una
+          en particular, mándanos ese código.
         </p>
       </div>
 
@@ -231,7 +246,23 @@ export default function CompetenciaPortalClient({
                 checked={soloDestacados}
                 onChange={(e) => setSoloDestacados(e.target.checked)}
               />
-              <span>Solo destacados</span>
+              <span>🔥 Destacados</span>
+            </label>
+            <label className={s.check}>
+              <input
+                type="checkbox"
+                checked={soloSeleccion}
+                onChange={(e) => setSoloSeleccion(e.target.checked)}
+              />
+              <span>⭐ Nuestra selección</span>
+            </label>
+            <label className={s.check}>
+              <input
+                type="checkbox"
+                checked={soloTranscritos}
+                onChange={(e) => setSoloTranscritos(e.target.checked)}
+              />
+              <span>🎤 Con transcripción</span>
             </label>
           </div>
 
@@ -328,10 +359,28 @@ function PostCard({
   ].filter((c) => c.slug);
 
   return (
-    <article className={`${s.card} ${post.is_outlier ? s.cardOutlier : ""}`}>
+    <article
+      className={`${s.card} ${post.is_outlier ? s.cardOutlier : ""} ${
+        !post.is_outlier && post.is_favorite ? s.cardPicked : ""
+      }`}
+    >
       <div className={s.cardTop}>
         <span className={s.account}>@{post.username}</span>
-        {post.is_outlier && <span className={s.outlier}>Destacado</span>}
+        {/*
+          Un post puede ser las dos cosas; en ese caso manda el dato duro
+          (outlier), que es el que explica los números de abajo. El favorito
+          sin números excepcionales entra por curaduría y hasta la etapa 8 no
+          llevaba ninguna marca, aunque el filtro sí lo devolvía.
+        */}
+        {post.is_outlier ? (
+          <span className={s.outlier} title="Rindió muy por encima de lo normal para esa cuenta">
+            🔥 Destacado
+          </span>
+        ) : post.is_favorite ? (
+          <span className={s.picked} title="Lo elegimos a mano para esta marca">
+            ⭐ Nuestra selección
+          </span>
+        ) : null}
       </div>
 
       {post.permalink ? (
@@ -373,6 +422,15 @@ function PostCard({
         <span title="Vistas">▶ {formatNumber(post.video_views)}</span>
         <span title="Me gusta">♥ {formatNumber(post.likes)}</span>
         <span title="Comentarios">💬 {formatNumber(post.comments)}</span>
+        {/*
+          Antes la transcripción solo se notaba al expandir la tarjeta, así que
+          no había forma de barrer la grilla y ver qué estaba transcrito.
+        */}
+        {post.transcription && (
+          <span className={s.transcriptFlag} title="Este video ya está transcrito">
+            🎤 Transcrito
+          </span>
+        )}
         <button
           type="button"
           className={s.idBadge}

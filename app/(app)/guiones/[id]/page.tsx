@@ -30,7 +30,10 @@ export default async function ScriptDetailPage({
   // bloque vacío en cada guion, con la mayoría de las marcas todavía sin portal,
   // sería ruido permanente.
   const showFeedback =
-    feedback && (feedback.comments.length > 0 || feedback.approvedAt !== null);
+    feedback &&
+    (feedback.comments.length > 0 ||
+      feedback.approvedAt !== null ||
+      feedback.lastClientEdit !== null);
 
   return (
     <>
@@ -49,6 +52,7 @@ export default async function ScriptDetailPage({
           scriptId={id}
           clientId={feedback.clientId}
           approvedAt={feedback.approvedAt}
+          lastClientEdit={feedback.lastClientEdit}
           comments={feedback.comments}
         />
       )}

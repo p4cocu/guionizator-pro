@@ -22,7 +22,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { toScriptView, parseMarkup, type TextChunk } from "@/lib/portal/scriptView";
+import ScriptBody from "@/components/portal/ScriptBody";
+import ScriptTextEditor from "@/components/portal/ScriptTextEditor";
+import {
+  applyTextDraft,
+  toTextDraft,
+  isEditableDraft,
+  type ScriptTextDraft,
+} from "@/lib/portal/scriptEdit";
 import { generationModeSteps, type PortalGenerationMode } from "@/lib/portal/generationMode";
 import { guardarGuion } from "./actions";
 import s from "./generar.module.css";
@@ -50,54 +57,6 @@ type Props = {
   initialUsage: Usage;
 };
 
-/** Texto con el markdown ligero resuelto a JSX (sin `dangerouslySetInnerHTML`). */
-function Rich({ text }: { text: string }) {
-  return (
-    <>
-      {parseMarkup(text).map((chunk: TextChunk, i) => {
-        if (chunk.bold) return <strong key={i}>{chunk.text}</strong>;
-        if (chunk.mark) return <mark key={i}>{chunk.text}</mark>;
-        if (chunk.underline) return <em key={i}>{chunk.text}</em>;
-        return <span key={i}>{chunk.text}</span>;
-      })}
-    </>
-  );
-}
-
-function ScriptPreview({ content, type }: { content: Record<string, unknown>; type: ScriptType }) {
-  const view = toScriptView(content, type);
-
-  if (view.kind === "empty") {
-    return <p className={s.emptyText}>La IA devolvió un guion vacío. Prueba generarlo de nuevo.</p>;
-  }
-
-  if (view.kind === "carousel") {
-    return (
-      <div className={s.slides}>
-        {view.slides.map((slide) => (
-          <section key={slide.number} className={s.slide}>
-            <span className={s.slideNumber}>Slide {slide.number}</span>
-            <p className={s.slideText}>
-              <Rich text={slide.text} />
-            </p>
-            {slide.visual && <p className={s.slideVisual}>Visual: {slide.visual}</p>}
-            {slide.microAnchor && <p className={s.slideAnchor}>{slide.microAnchor}</p>}
-          </section>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <h4 className={s.blockTitle}>Voz en off</h4>
-      <p className={s.voiceOff}>
-        <Rich text={view.voiceOff} />
-      </p>
-    </>
-  );
-}
-
 export default function GenerarClient({ clientId, mode, canSeeScripts, initialUsage }: Props) {
   const completo = mode === "completo";
   const steps = generationModeSteps(mode);
@@ -111,6 +70,10 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
   const [chosen, setChosen] = useState<Structure | null>(null);
 
   const [generated, setGenerated] = useState<Generated | null>(null);
+  // Borrador editable del guion generado (etapa 8): lo que se guarda es esto,
+  // no lo que devolvió la IA. Regenerar cuesta crédito; corregir una frase no.
+  const [draft, setDraft] = useState<ScriptTextDraft | null>(null);
+  const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
   const [savedId, setSavedId] = useState<string | null>(null);
 
@@ -138,6 +101,8 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
     setStructures([]);
     setChosen(null);
     setGenerated(null);
+    setDraft(null);
+    setEditing(false);
     setTitle("");
     setSavedId(null);
     setError(null);
@@ -164,6 +129,8 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
       });
 
       setGenerated({ content: data.content, structureName: data.structure_name });
+      setDraft(toTextDraft(data.content, type));
+      setEditing(false);
       setUsage(data.usage);
       setSavedId(null);
       setStep(lastStep);
@@ -236,7 +203,8 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
         brief,
         structureName: generated.structureName,
         title: title.trim() || null,
-        content: generated.content,
+        // Lo editado, mergeado sobre el content original (ver `scriptEdit.ts`).
+        content: draft ? applyTextDraft(generated.content, draft) : generated.content,
       });
       if (res.ok) {
         setSavedId(res.scriptId);
@@ -458,9 +426,31 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
       {/* ── Último paso: el guion ── */}
       {step === lastStep && generated && (
         <div>
+          {!savedId && draft && isEditableDraft(draft) && (
+            <div className={s.editToggleRow}>
+              <button
+                type="button"
+                className={s.editToggle}
+                onClick={() => setEditing((v) => !v)}
+                disabled={!!loading}
+              >
+                {editing ? "Ver como queda" : "✎ Editar el texto"}
+              </button>
+            </div>
+          )}
+
           <article className={s.script}>
             <p className={s.scriptMeta}>{generated.structureName}</p>
-            <ScriptPreview content={generated.content} type={type} />
+            {editing && draft ? (
+              <ScriptTextEditor draft={draft} onChange={setDraft} disabled={!!loading} />
+            ) : (
+              <ScriptBody
+                content={draft ? applyTextDraft(generated.content, draft) : generated.content}
+                type={type}
+                framed={false}
+                emptyText="La IA devolvió un guion vacío. Prueba generarlo de nuevo."
+              />
+            )}
           </article>
 
           {savedId ? (

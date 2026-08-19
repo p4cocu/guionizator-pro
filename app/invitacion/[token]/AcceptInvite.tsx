@@ -29,6 +29,10 @@ type Props = {
   invitedEmail: string;
   role: PortalMemberRole;
   sessionEmail: string | null;
+  /** ¿Todavía no eligió nombre visible? (etapa 8) */
+  needsName: boolean;
+  nameHint: string;
+  nameMaxLength: number;
 };
 
 type Mode = "signup" | "login";
@@ -39,10 +43,14 @@ export default function AcceptInvite({
   invitedEmail,
   role,
   sessionEmail,
+  needsName,
+  nameHint,
+  nameMaxLength,
 }: Props) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("signup");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -56,7 +64,7 @@ export default function AcceptInvite({
     setNotice(null);
     setLoading(true);
     try {
-      const res = await acceptInviteAction(token);
+      const res = await acceptInviteAction(token, needsName ? displayName : undefined);
       if (res.ok) {
         setDone(true);
         router.refresh();
@@ -132,9 +140,11 @@ export default function AcceptInvite({
           {portalMemberRoleLabel(role).toLowerCase()}.
         </p>
         <p className={s.footNote}>
-          El portal donde vas a ver tu contenido todavía se está terminando. Te
-          avisamos apenas esté disponible — no hace falta que hagas nada más.
+          Ya puedes entrar a ver tu contenido.
         </p>
+        <Link href="/portal" className="btn btn-primary" style={{ width: "100%", marginTop: 12 }}>
+          Ir a mi portal →
+        </Link>
       </div>
     );
   }
@@ -172,12 +182,33 @@ export default function AcceptInvite({
         </>
       ) : emailMatches ? (
         <>
+          {needsName && (
+            <div className={s.form} style={{ marginBottom: 16 }}>
+              <div>
+                <label className="field-label" htmlFor="display-name">
+                  ¿Cómo te llamamos?
+                </label>
+                <input
+                  id="display-name"
+                  className="input"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Ej: Ana Martínez"
+                  maxLength={nameMaxLength}
+                  required
+                />
+                <p className={s.footNote} style={{ marginTop: 8 }}>
+                  {nameHint}
+                </p>
+              </div>
+            </div>
+          )}
           <button
             type="button"
             className="btn btn-primary"
             style={{ width: "100%" }}
             onClick={accept}
-            disabled={loading}
+            disabled={loading || (needsName && displayName.trim().length < 2)}
           >
             {loading ? "Un momento…" : `Aceptar acceso a ${clientName}`}
           </button>
@@ -204,6 +235,26 @@ export default function AcceptInvite({
                 disabled
               />
             </div>
+            {needsName && mode === "signup" && (
+              <div>
+                <label className="field-label" htmlFor="display-name-signup">
+                  ¿Cómo te llamamos?
+                </label>
+                <input
+                  id="display-name-signup"
+                  className="input"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Ej: Ana Martínez"
+                  maxLength={nameMaxLength}
+                  minLength={2}
+                  required
+                />
+                <p className={s.footNote} style={{ marginTop: 8 }}>
+                  {nameHint}
+                </p>
+              </div>
+            )}
             <div>
               <label className="field-label" htmlFor="password">
                 {mode === "signup" ? "Elige una contraseña" : "Contraseña"}

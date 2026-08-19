@@ -325,3 +325,37 @@ export async function reorderCalendarEntry(
 
   revalidatePath("/calendario");
 }
+
+/**
+ * El guion vinculado a una entrada del calendario (etapa 8).
+ *
+ * La vista "Calendario" (grilla del mes) abre un modal que solo editaba los
+ * campos del calendario: para leer el guion había que cambiar a la vista
+ * "Semanas", que sí tiene su link. Esto lo carga bajo demanda —al abrir el
+ * modal— en vez de traer el `content` de todos los guiones del mes en el
+ * server component, que es jsonb pesado y casi nunca se mira.
+ *
+ * `owner_id` filtrado a mano además de la RLS: el `script_id` viene del
+ * cliente, y un id de otro dueño tiene que devolver `null`, no una fila.
+ */
+export type CalendarScript = {
+  id: string;
+  type: string | null;
+  title: string | null;
+  brief: string | null;
+  status: string | null;
+  content: Record<string, unknown> | null;
+};
+
+export async function getCalendarScript(scriptId: string): Promise<CalendarScript | null> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data } = await supabase
+    .from("scripts")
+    .select("id, type, title, brief, status, content")
+    .eq("id", scriptId)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+
+  return (data as CalendarScript | null) ?? null;
+}
