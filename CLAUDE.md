@@ -793,6 +793,24 @@ en `2022-08-01`), no con la que el SDK tiene pinneada — por eso el mismo objet
 llega con una forma u otra según por dónde entró, y por eso los tres helpers
 leen **las dos formas**.
 
+### ⚠️ Las cuatro acciones de IA exigen rol `collaborator`
+
+`requireGenerationAccess` chequea **cuatro** candados: sesión + acceso a la
+marca, el flag `generar_ia`, el cobro, y **el rol**. Un `viewer` recibe 403.
+
+El flag `generar_ia` es de la MARCA, así que hasta el 2026-08-26 cualquier
+miembro con acceso al portal podía quemar el cupo y los créditos comprados por
+otro — un `viewer` invitado solo para revisar guiones podía vaciarle la recarga
+al contacto de facturación. Mismo criterio que ya rige aprobar, editar y la
+estrella: `collaborator` sí, `viewer` no; el dueño siempre.
+
+Se aplica en **cinco lugares** y los cinco hacen falta: el candado real es
+`requireGenerationAccess` (cubre las rutas de `/api/portal/generar/*`,
+`toolsActions.ts` y `adaptPortalPost`), y las otras cuatro son para no
+ofrecerle al `viewer` un botón que le va a dar 403 — `/generar` (404),
+el sidebar de `PortalShell` (esconde la sección), `canAdapt` en Competencia y
+`canUseAi` en la pantalla del guion.
+
 ### ⚠️ Toda acción de IA del portal cierra con `settleGeneration`
 
 **Nunca con `logAiGeneration` pelado.** `logAiGeneration` deja la fila con

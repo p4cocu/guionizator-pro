@@ -80,7 +80,9 @@ export default async function PortalGuionDetallePage({
   // se lee con service role — `script_covers` y `script_copies` quedaron
   // owner-only en `0006`— y se degrada a vacío si algo falla: son un extra, no
   // el guion.
-  const canUseAi = hasFeature(client.features, AI_FEATURE_SLUG);
+  // Portadas y Copy Expert gastan cupo ⇒ mismo candado de rol que generar.
+  const canUseAi =
+    hasFeature(client.features, AI_FEATURE_SLUG) && client.role !== "viewer";
   const [covers, copies, aiUsage] = canUseAi
     ? await Promise.all([
         loadCovers(script.id).catch(() => null),

@@ -164,6 +164,27 @@ export async function requireGenerationAccess(clientId: string): Promise<{
     );
   }
 
+  // ⚠️ Cuarto candado: el ROL. Un `viewer` mira; no gasta el cupo de la marca.
+  //
+  // Hasta acá el acceso a la IA se decidía solo por el flag `generar_ia`, que
+  // es de la MARCA — así que cualquier miembro con acceso al portal podía
+  // quemar generaciones y créditos comprados por otro. Con Fase D eso era
+  // molesto; con Fase E es plata: un `viewer` invitado para revisar guiones
+  // podía vaciarle la recarga al contacto de facturación.
+  //
+  // Se usa el mismo criterio que ya rige aprobar un guion, editarlo y marcar
+  // la estrella: `collaborator` sí, `viewer` no. El dueño siempre puede
+  // (entra por "ver como cliente").
+  //
+  // Detectado el 2026-08-26 probando Fase E: un `viewer` generó un guion y
+  // descontó un crédito sin que nada se lo impidiera.
+  if (client.role === "viewer") {
+    throw new PortalGenerationError(
+      "Tu acceso es de solo lectura. Pídele a quien administra la marca que genere esto.",
+      403,
+    );
+  }
+
   // Tercer candado, de Fase E: la marca tiene que estar pagada. El dueño queda
   // fuera del corte (puede revisar la marca de un cliente moroso), igual que en
   // `requirePortalClient`.

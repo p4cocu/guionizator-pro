@@ -28,6 +28,7 @@
         "npm:pdfkit@~0.19.1",
         "npm:react-dom@19.2.4",
         "npm:react@19.2.4",
+        "npm:stripe@^22.5.0",
         "npm:typescript@5"
       ]
     }

@@ -24,6 +24,12 @@ export type PortalShellClient = {
   id: string;
   label: string;
   features: string[];
+  /**
+   * Rol en esta marca. Solo se usa para esconderle "Generación con IA" al
+   * `viewer`, que no puede generar (ver `requireGenerationAccess`). Dibujar el
+   * link igual sería ofrecerle una pantalla que le va a dar 404.
+   */
+  role: "owner" | "collaborator" | "viewer";
 };
 
 type Props = {
@@ -68,7 +74,10 @@ export default function PortalShell({
     };
   }, [menuOpen]);
 
-  const features = enabledPortalFeatures(client.features);
+  const features = enabledPortalFeatures(client.features).filter(
+    // La IA gasta el cupo de la marca: el `viewer` mira, no gasta.
+    (f) => !(f.slug === "generar_ia" && client.role === "viewer"),
+  );
   const current = features.find((f) => isActive(pathname, client.id, f));
 
   return (

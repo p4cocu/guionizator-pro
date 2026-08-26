@@ -54,6 +54,7 @@ export default async function PortalClientLayout({
         id: client.id,
         label: portalClientLabel(client),
         features: client.features,
+        role: client.role,
       }}
       otherClients={all
         .filter((c) => c.id !== client.id)

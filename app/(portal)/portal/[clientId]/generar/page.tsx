@@ -13,6 +13,7 @@
  * `/api/portal/generar/guion`.
  */
 
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
   portalClientLabel,
@@ -50,6 +51,10 @@ export default async function PortalGenerarPage({
   const { clientId } = await params;
   const { supabase, user } = await requirePortalSession();
   const client = await requirePortalClient(user.id, clientId, "generar_ia");
+
+  // Un `viewer` no genera (ver `requireGenerationAccess`). 404 y no 403, mismo
+  // criterio que un flag apagado: no se confirma que la pantalla exista.
+  if (client.role === "viewer") notFound();
 
   const usage = await getClientOwnerId(client.id)
     .then((ownerId) => getGenerationState(client.id, ownerId, client.aiGenerationLimit))

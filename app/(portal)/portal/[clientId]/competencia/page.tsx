@@ -48,7 +48,9 @@ export default async function PortalCompetenciaPage({
   const { supabase, user } = await requirePortalSession();
   const client = await requirePortalClient(user.id, clientId, "competencia");
 
-  const canAdapt = hasFeature(client.features, AI_FEATURE_SLUG);
+  // Adaptar gasta el mismo cupo que generar un guion ⇒ mismo candado de rol.
+  const canAdapt =
+    hasFeature(client.features, AI_FEATURE_SLUG) && client.role !== "viewer";
   // Un `viewer` no modifica nada, igual que no aprueba guiones. El dueño en
   // modo preview sí, que es como se prueba la pantalla.
   const canFavorite = client.role !== "viewer";
