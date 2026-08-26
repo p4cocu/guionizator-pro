@@ -41,7 +41,11 @@ import { AiJsonError, generateJson } from "../ai/json";
 import { loadClientKnowledge } from "../ai/clientKnowledge";
 import { getPortalClient, requirePortalSession, type PortalClient } from "./access";
 import { AI_FEATURE_SLUG, hasFeature } from "./features";
-import { getAiUsageState, type AiUsageState } from "./usage";
+import { getAiUsageState, logAiGeneration, type AiUsageState } from "./usage";
+import { billingMessage, getBillingState } from "../billing/access";
+import { consumeCredit } from "../billing/credits";
+import { readSubscription } from "../billing/subscription";
+import { effectiveLimit, PLAN_AI_CREDITS, type AiPaymentSource } from "../billing/plan";
 
 export type ScriptType = "reel" | "carousel";
 
@@ -160,6 +164,16 @@ export async function requireGenerationAccess(clientId: string): Promise<{
     );
   }
 
+  // Tercer candado, de Fase E: la marca tiene que estar pagada. El dueño queda
+  // fuera del corte (puede revisar la marca de un cliente moroso), igual que en
+  // `requirePortalClient`.
+  if (client.role !== "owner") {
+    const billing = await getBillingState(clientId);
+    if (!billing.ok) {
+      throw new PortalGenerationError(billingMessage(billing), 402);
+    }
+  }
+
   const ctx = await loadGenerationContext(client.id);
   return { user, client, ctx };
 }
@@ -169,13 +183,42 @@ export async function requireGenerationAccess(clientId: string): Promise<{
 /**
  * Estado del tope. Se lee con service role: el miembro no tiene select sobre
  * `ai_usage_log`, así que con su sesión el conteo daría 0 y no cortaría nunca.
+ *
+ * Desde Fase E el tope se mide contra el **ciclo de facturación** de la marca
+ * (no contra el mes calendario) y suma el saldo de recargas compradas. El
+ * `limit` que recibe es el override de `clients.ai_generation_limit`; acá se
+ * resuelve contra el número del plan y contra la exención.
  */
 export async function getGenerationState(
   clientId: string,
   ownerId: string,
   limit: number | null,
+  options?: {
+    /**
+     * Releer el saldo salteando el `cache()` de React.
+     *
+     * ⚠️ Hace falta cuando se consulta DESPUÉS de haber descontado un crédito
+     * en el mismo request (el resumen que devuelve `/api/portal/generar/guion`):
+     * `getSubscription` está cacheado por request, así que sin esto devolvería
+     * el saldo de antes del descuento y el cliente vería un crédito de más.
+     */
+    freshBalance?: boolean;
+  },
 ): Promise<AiUsageState> {
-  return getAiUsageState(createServiceClient(), clientId, ownerId, limit);
+  const billing = await getBillingState(clientId);
+
+  // El ciclo y la exención no cambian a mitad de un request; el saldo sí.
+  const creditBalance = options?.freshBalance
+    ? ((await readSubscription(clientId))?.creditBalance ?? 0)
+    : (billing.subscription?.creditBalance ?? 0);
+
+  return getAiUsageState(
+    createServiceClient(),
+    clientId,
+    ownerId,
+    effectiveLimit(limit, billing.reason === "exempt", PLAN_AI_CREDITS),
+    { cycleStart: billing.cycleStart, cycleEnd: billing.cycleEnd, creditBalance },
+  );
 }
 
 /**
@@ -206,12 +249,70 @@ export async function assertCanGenerate(
 
   if (state.blocked) {
     throw new PortalGenerationError(
-      `Llegaste al tope de ${state.limit} ${state.limit === 1 ? "guion" : "guiones"} de este mes. El contador se reinicia el día 1; si necesitas más, pídeselo a quien maneja tu contenido.`,
+      `Llegaste al tope de ${state.limit} ${
+        state.limit === 1 ? "generación" : "generaciones"
+      } de este ciclo y no te quedan créditos comprados. Puedes recargar desde Facturación, o esperar al próximo ciclo.`,
       429,
     );
   }
 
   return state;
+}
+
+/**
+ * Cierra el ciclo de una generación: descuenta lo que corresponda y deja la
+ * fila en `ai_usage_log`.
+ *
+ * Se llama **después** de que la IA respondió — un error de la API no le cuesta
+ * el cupo al cliente. Ese orden viene de Fase D y con dinero de por medio
+ * importa más, no menos.
+ *
+ * El `state` que recibe es el que devolvió `assertCanGenerate` antes de llamar
+ * a la IA: si ahí ya se había agotado el cupo del ciclo, esta generación se
+ * paga con una recarga. El descuento va con `where credit_balance > 0`, así que
+ * en el peor caso de dos pestañas simultáneas se regala una generación (que ya
+ * se pagó a Anthropic igual) en vez de dejar el saldo negativo.
+ *
+ * **Nunca lanza**: si el registro falla, el cliente ya recibió su guion y
+ * tumbarle la pantalla por el medidor sería el peor intercambio posible. Queda
+ * en el log del servidor.
+ */
+export async function settleGeneration(input: {
+  state: AiUsageState;
+  ownerId: string;
+  clientId: string;
+  userId: string;
+  endpoint: string;
+  inputTokens?: number;
+  outputTokens?: number;
+}): Promise<void> {
+  let paidWith: AiPaymentSource = input.state.nextSource;
+
+  if (paidWith === "credit") {
+    try {
+      const ok = await consumeCredit(input.clientId);
+      // No había saldo (otra pestaña se llevó el último): se registra como
+      // 'plan' para no mentir sobre de dónde salió. Es una generación regalada.
+      if (!ok) paidWith = "plan";
+    } catch (e) {
+      console.error("[portal/generate] no se pudo descontar el crédito:", e);
+      paidWith = "plan";
+    }
+  }
+
+  try {
+    await logAiGeneration(createServiceClient(), {
+      ownerId: input.ownerId,
+      clientId: input.clientId,
+      userId: input.userId,
+      endpoint: input.endpoint,
+      inputTokens: input.inputTokens,
+      outputTokens: input.outputTokens,
+      paidWith,
+    });
+  } catch (e) {
+    console.error("[portal/generate] no se pudo registrar el consumo:", e);
+  }
 }
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────

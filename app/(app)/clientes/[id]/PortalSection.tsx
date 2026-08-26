@@ -53,6 +53,7 @@ import {
   type PortalMemberRole,
 } from "@/lib/portal/roles";
 import type { AiUsageSummary } from "@/lib/portal/usage";
+import { PLAN_AI_CREDITS, PLAN_TRANSCRIPTIONS } from "@/lib/billing/plan";
 import s from "../clientes.module.css";
 
 type Props = {
@@ -89,17 +90,31 @@ function expiryLabel(invite: ClientInvite): string {
 }
 
 /**
- * ⚠️ `timeZone: "UTC"` no es opcional: `usage.monthStart` es el día 1 a las
+ * Etiqueta del periodo que se está contando.
+ *
+ * Desde Fase E el corte de los dos medidores es el **ciclo de facturación** de
+ * la marca, no el mes calendario: si el cliente paga el día 20, su cupo se
+ * reinicia el 20. Cuando la marca no tiene suscripción de Stripe (exenta, o
+ * todavía sin pagar) no hay `cycleEnd` y se cae al mes calendario de siempre.
+ *
+ * ⚠️ `timeZone: "UTC"` no es opcional en ese caso: el fallback es el día 1 a las
  * 00:00 **UTC** (así lo corta `lib/portal/usage.ts`, para coincidir con el
  * `created_at` de Postgres). Formateado en la hora de México eso cae el último
  * día del mes anterior, y el panel decía "julio" estando en agosto.
  */
-function formatMonth(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-MX", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+function formatPeriod(cycleStart: string, cycleEnd: string | null): string {
+  if (!cycleEnd) {
+    return new Date(cycleStart).toLocaleDateString("es-MX", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  }
+
+  const day = (iso: string) =>
+    new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+
+  return `${day(cycleStart)} – ${day(cycleEnd)}`;
 }
 
 export default function PortalSection({
@@ -186,7 +201,7 @@ export default function PortalSection({
     const parsed = raw === "" ? null : Number(raw);
 
     if (parsed !== null && (!Number.isInteger(parsed) || parsed < 0)) {
-      setError("El tope tiene que ser un número entero mayor o igual a 0 (o vacío, para sin tope).");
+      setError("El tope tiene que ser un número entero mayor o igual a 0, o vacío para usar el del plan.");
       return;
     }
 
@@ -245,7 +260,7 @@ export default function PortalSection({
     const parsed = raw === "" ? null : Number(raw);
 
     if (parsed !== null && (!Number.isInteger(parsed) || parsed < 0)) {
-      setError("El tope tiene que ser un número entero mayor o igual a 0 (o vacío, para sin tope).");
+      setError("El tope tiene que ser un número entero mayor o igual a 0, o vacío para usar el del plan.");
       return;
     }
 
@@ -571,7 +586,7 @@ export default function PortalSection({
           <div className={s.addonBody} style={{ borderTop: "1px solid var(--glass-border)", marginTop: 12, paddingTop: 12 }}>
             <div className={s.limitField}>
               <label className="field-label" style={{ fontSize: 12 }} htmlFor="transcription-limit">
-                Tope de transcripción (Competencia)
+                Tope de transcripción por ciclo
               </label>
               <input
                 id="transcription-limit"
@@ -579,7 +594,7 @@ export default function PortalSection({
                 type="number"
                 min={0}
                 step={1}
-                placeholder="Sin tope"
+                placeholder={`${PLAN_TRANSCRIPTIONS} (plan)`}
                 value={transcriptionLimitDraft}
                 disabled={isPending}
                 onChange={(e) => setTranscriptionLimitDraft(e.target.value)}
@@ -595,12 +610,14 @@ export default function PortalSection({
               {isPending ? "…" : "Guardar tope"}
             </button>
             <p className={s.usageText}>
-              Consumo de {formatMonth(transcriptionUsage.monthStart)}:{" "}
+              Consumo de {formatPeriod(transcriptionUsage.cycleStart, transcriptionUsage.cycleEnd)}:{" "}
               <strong className={transcriptionOverLimit ? s.usageOver : undefined}>
                 {transcriptionUsage.used}
                 {transcriptionLimit !== null ? ` de ${transcriptionLimit}` : ""}
               </strong>{" "}
-              {transcriptionLimit === null ? "transcripciones (sin tope)" : "transcripciones"}
+              {transcriptionLimit === null
+                ? `transcripciones (usa el tope del plan: ${PLAN_TRANSCRIPTIONS}, salvo que la marca sea interna)`
+                : "transcripciones"}
               {transcriptionOverLimit ? " — tope alcanzado" : ""}
             </p>
           </div>
@@ -619,7 +636,7 @@ export default function PortalSection({
               <div className={s.addonBody}>
                 <div className={s.limitField}>
                   <label className="field-label" style={{ fontSize: 12 }} htmlFor="ai-limit">
-                    Tope mensual
+                    Tope de generaciones por ciclo
                   </label>
                   <input
                     id="ai-limit"
@@ -627,7 +644,7 @@ export default function PortalSection({
                     type="number"
                     min={0}
                     step={1}
-                    placeholder="Sin tope"
+                    placeholder={`${PLAN_AI_CREDITS} (plan)`}
                     value={limitDraft}
                     disabled={isPending}
                     onChange={(e) => setLimitDraft(e.target.value)}
@@ -673,12 +690,14 @@ export default function PortalSection({
                 </div>
 
                 <p className={s.usageText}>
-                  Consumo de {formatMonth(usage.monthStart)}:{" "}
+                  Consumo de {formatPeriod(usage.cycleStart, usage.cycleEnd)}:{" "}
                   <strong className={overLimit ? s.usageOver : undefined}>
                     {usage.used}
                     {limit !== null ? ` de ${limit}` : ""}
                   </strong>{" "}
-                  {limit === null ? "generaciones (sin tope)" : "generaciones"}
+                  {limit === null
+                    ? `generaciones (usa el tope del plan: ${PLAN_AI_CREDITS}, salvo que la marca sea interna)`
+                    : "generaciones"}
                   {overLimit ? " — tope alcanzado" : ""}
                 </p>
               </div>

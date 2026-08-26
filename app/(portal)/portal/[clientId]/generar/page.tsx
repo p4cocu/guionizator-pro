@@ -91,8 +91,17 @@ export default async function PortalGenerarPage({
         canSeeScripts={puedeVerGuiones}
         initialUsage={{
           used: usage?.used ?? 0,
-          limit: client.aiGenerationLimit,
+          // ⚠️ El tope EFECTIVO que ya resolvió `getGenerationState`, no el
+          // override crudo de `clients.ai_generation_limit`. Desde Fase E ese
+          // `null` significa "el tope del plan" (40), no "sin tope": pasarlo
+          // tal cual hacía que la pantalla anunciara generaciones ilimitadas
+          // mientras el servidor cortaba a las 40.
+          limit: usage?.limit ?? null,
           remaining: usage?.remaining ?? null,
+          // Sin el saldo, el cupo agotado del ciclo bloqueaba la pantalla
+          // aunque el cliente tuviera recargas pagadas.
+          creditBalance: usage?.creditBalance ?? 0,
+          nextSource: usage?.nextSource ?? "plan",
         }}
       />
 

@@ -33,6 +33,16 @@ type Props = {
   email?: string | null;
   /** El dueño ve un aviso de que está mirando el portal como su cliente. */
   isOwnerPreview?: boolean;
+  /**
+   * Facturación (Fase E). Solo la ve el contacto de facturación: es quien pagó
+   * y el único que puede comprar recargas o tocar la tarjeta.
+   */
+  showBilling?: boolean;
+  /**
+   * Aviso de pago vencido durante el periodo de gracia. Se muestra arriba de
+   * todo en cada pantalla: el cliente sigue entrando, pero tiene que enterarse.
+   */
+  billingWarning?: string | null;
   children: React.ReactNode;
 };
 
@@ -41,6 +51,8 @@ export default function PortalShell({
   otherClients,
   email,
   isOwnerPreview,
+  showBilling,
+  billingWarning,
   children,
 }: Props) {
   const pathname = usePathname();
@@ -122,6 +134,15 @@ export default function PortalShell({
         </nav>
 
         <div className={s.sidebarFooter}>
+          {showBilling && (
+            <Link
+              href={`/portal/${client.id}/facturacion`}
+              className={`${s.link} ${s.linkMuted}`}
+              onClick={close}
+            >
+              <span>Facturación</span>
+            </Link>
+          )}
           <Link href="/portal/perfil" className={`${s.link} ${s.linkMuted}`} onClick={close}>
             <span>Tu perfil</span>
           </Link>
@@ -156,6 +177,18 @@ export default function PortalShell({
 
         <div className={`${s.content} blueprint`}>
           <div className={s.inner}>
+            {billingWarning && (
+              <p className={s.billingWarning}>
+                {billingWarning}{" "}
+                {showBilling ? (
+                  <Link href={`/portal/${client.id}/facturacion`} className={s.previewLink}>
+                    Actualizar tarjeta
+                  </Link>
+                ) : (
+                  "Avísale a quien contrató el servicio."
+                )}
+              </p>
+            )}
             {isOwnerPreview && (
               <p className={s.preview}>
                 Estás viendo el portal como lo ve tu cliente. Para cambiar qué

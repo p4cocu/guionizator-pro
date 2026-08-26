@@ -2,17 +2,33 @@
  * Consumo del tope de transcripción por cliente — espejo de `lib/portal/usage.ts`
  * pero para `transcription_usage_log` (migración `0010`).
  *
- * Mismo corte en UTC, mismo criterio de "una fila = una unidad exitosa": acá
- * una fila es una transcripción que SÍ terminó con texto, no un intento.
+ * Mismo corte por **ciclo de facturación** desde Fase E, y mismo criterio de
+ * "una fila = una unidad exitosa": acá una fila es una transcripción que SÍ
+ * terminó con texto, no un intento.
+ *
+ * Es un medidor **aparte** del de IA a propósito: una transcripción cuesta un
+ * orden de magnitud menos que un guion (Whisper contra Sonnet), así que
+ * cobrarlas con el mismo crédito le saldría carísima al cliente. El plan trae
+ * 40 de cada una, con sus dos overrides independientes en `clients`.
+ *
+ * A diferencia de las generaciones, **las transcripciones no se pueden pagar
+ * con una recarga**: los paquetes de crédito son solo de IA. Cuando se agota el
+ * tope del ciclo, se acabó hasta el próximo — es un extra del plan, no un
+ * consumible.
  *
  * Se usa solo desde el portal — el estudio transcribe sin tope y por lo tanto
  * nunca llama a `assertCanTranscribe` ni a `logTranscription`.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { currentMonthStart } from "../portal/usage";
+import { currentMonthStart, resolveCycleStart } from "../portal/usage";
 
-export type TranscriptionUsageSummary = { used: number; monthStart: string };
+export type TranscriptionUsageSummary = {
+  used: number;
+  /** Inicio del ciclo (ISO), o el día 1 del mes en UTC si no hay suscripción. */
+  cycleStart: string;
+  cycleEnd: string | null;
+};
 
 export type TranscriptionUsageState = TranscriptionUsageSummary & {
   limit: number | null;
@@ -26,26 +42,29 @@ export type TranscriptionUsageState = TranscriptionUsageSummary & {
  * tope y bloqueo vive en `getTranscriptionUsageState`, que además la usa el
  * portal con service role.
  */
-export async function getMonthlyTranscriptionUsage(
+export async function getCycleTranscriptionUsage(
   supabase: SupabaseClient,
   clientId: string,
   ownerId: string,
+  cycleStart: string | null,
+  cycleEnd: string | null = null,
 ): Promise<TranscriptionUsageSummary> {
-  const monthStart = currentMonthStart();
+  const start = resolveCycleStart(cycleStart);
+
   const { count, error } = await supabase
     .from("transcription_usage_log")
     .select("id", { count: "exact", head: true })
     .eq("client_id", clientId)
     .eq("owner_id", ownerId)
-    .gte("created_at", monthStart.toISOString());
+    .gte("created_at", start);
 
   if (error) throw new Error(error.message);
-  return { used: count ?? 0, monthStart: monthStart.toISOString() };
+  return { used: count ?? 0, cycleStart: start, cycleEnd };
 }
 
 /** Fallback si la lectura falla: el panel muestra 0 en vez de tumbarse. */
 export function emptyTranscriptionUsage(): TranscriptionUsageSummary {
-  return { used: 0, monthStart: currentMonthStart().toISOString() };
+  return { used: 0, cycleStart: currentMonthStart().toISOString(), cycleEnd: null };
 }
 
 export async function getTranscriptionUsageState(
@@ -53,10 +72,18 @@ export async function getTranscriptionUsageState(
   clientId: string,
   ownerId: string,
   limit: number | null,
+  options: { cycleStart: string | null; cycleEnd?: string | null },
 ): Promise<TranscriptionUsageState> {
-  const { used, monthStart } = await getMonthlyTranscriptionUsage(supabase, clientId, ownerId);
+  const { used, cycleStart, cycleEnd } = await getCycleTranscriptionUsage(
+    supabase,
+    clientId,
+    ownerId,
+    options.cycleStart,
+    options.cycleEnd ?? null,
+  );
+
   const remaining = limit === null ? null : Math.max(0, limit - used);
-  return { used, monthStart, limit, remaining, blocked: limit !== null && used >= limit };
+  return { used, cycleStart, cycleEnd, limit, remaining, blocked: limit !== null && used >= limit };
 }
 
 /** Registra una transcripción exitosa. `supabase` debe ser service role. */

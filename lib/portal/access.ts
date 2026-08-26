@@ -40,6 +40,7 @@ import {
 } from "./features";
 import { isPortalMemberRole, type PortalMemberRole } from "./roles";
 import { sanitizeGenerationMode, type PortalGenerationMode } from "./generationMode";
+import { getBillingState } from "../billing/access";
 
 /**
  * `owner` = Paco mirando su propia marca desde el portal ("ver como cliente").
@@ -176,10 +177,33 @@ export async function requirePortalClient(
   userId: string,
   clientId: string,
   feature?: PortalFeatureSlug,
+  options?: {
+    /**
+     * Saltea el candado 3 (cobro). Lo usa **solo** `/portal/[id]/facturacion`:
+     * si el impago también cerrara esa pantalla, el cliente suspendido no
+     * tendría desde dónde actualizar su tarjeta y quedaría encerrado afuera.
+     */
+    skipBillingGate?: boolean;
+  },
 ): Promise<PortalClient> {
   const client = await getPortalClient(userId, clientId);
   if (!client) notFound();
   if (feature && !hasFeature(client.features, feature)) notFound();
+
+  // Candado 3 (Fase E): la marca tiene que estar pagada.
+  //
+  // ⚠️ **No aplica al dueño**, al revés que los flags de sección. Los flags
+  // cortan a Paco a propósito, porque `/portal` existe para ver lo que ve el
+  // cliente; pero si el impago lo cortara a él, no podría revisar la marca de
+  // un cliente moroso justo cuando más falta hace.
+  //
+  // Es `redirect` y no `notFound()`: un 404 le diría al cliente que algo se
+  // rompió, cuando lo que pasa es que hay que pagar.
+  if (!options?.skipBillingGate && client.role !== "owner") {
+    const billing = await getBillingState(clientId);
+    if (!billing.ok) redirect(`/portal/suscripcion/${clientId}`);
+  }
+
   return client;
 }
 

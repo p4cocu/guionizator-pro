@@ -1,0 +1,263 @@
+/* Pantalla de facturación del portal (Fase E). */
+
+.title {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: clamp(26px, 4vw, 34px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 4px 0 20px;
+}
+
+.block {
+  padding: 22px 24px;
+  margin-bottom: 18px;
+}
+
+/* ── Estado ── */
+
+.stateRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.planPrice {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 4px 0 0;
+}
+
+.badge {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.toneOk {
+  color: var(--emerald);
+  border-color: rgba(45, 168, 122, 0.4);
+  background: rgba(45, 168, 122, 0.1);
+}
+
+.toneWarn {
+  color: #b98700;
+  border-color: rgba(255, 210, 58, 0.5);
+  background: rgba(255, 210, 58, 0.12);
+}
+
+.toneBad {
+  color: var(--flare);
+  border-color: rgba(255, 111, 97, 0.45);
+  background: rgba(255, 111, 97, 0.1);
+}
+
+.meta {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 14px;
+}
+
+.metaWarn {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(255, 111, 97, 0.4);
+  background: rgba(255, 111, 97, 0.09);
+}
+
+.hint {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin: 10px 0 0;
+}
+
+/* ── Medidores ── */
+
+.meters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 14px;
+}
+
+@media (max-width: 640px) {
+  .meters {
+    grid-template-columns: 1fr;
+  }
+}
+
+.meter {
+  min-width: 0;
+}
+
+.meterHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.meterLabel {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.meterCount {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.meterCountOver {
+  composes: meterCount;
+  color: var(--flare);
+  font-weight: 700;
+}
+
+.meterTrack {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--glass-border);
+  overflow: hidden;
+}
+
+.meterFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--emerald);
+  transition: width 0.3s ease;
+}
+
+.meterFillOver {
+  composes: meterFill;
+  background: var(--flare);
+}
+
+.meterHint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  margin: 8px 0 0;
+}
+
+/* ── Paquetes de recarga ── */
+
+.packs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+@media (max-width: 640px) {
+  .packs {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  height: auto;
+  padding: 14px 16px;
+  white-space: normal;
+  /* `.btn` es una píldora; acá el botón es una tarjeta de tres líneas y el
+     radio completo lo deformaba. */
+  border-radius: 10px;
+}
+
+.packLabel {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.packPrice {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--emerald);
+}
+
+.packHint {
+  font-size: 11.5px;
+  line-height: 1.45;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+/* ── Historial ── */
+
+.history {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.historyRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.historyRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.historyMeta {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* ── Avisos ── */
+
+.flashOk,
+.flashNeutral,
+.error {
+  display: block;
+  margin-bottom: 18px;
+  padding: 11px 14px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.flashOk {
+  border: 1px solid rgba(45, 168, 122, 0.4);
+  background: rgba(45, 168, 122, 0.09);
+  color: var(--text);
+}
+
+.flashNeutral {
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+}
+
+.error {
+  border: 1px solid rgba(255, 111, 97, 0.45);
+  background: rgba(255, 111, 97, 0.09);
+  color: var(--flare);
+  font-weight: 500;
+  margin-top: 4px;
+}

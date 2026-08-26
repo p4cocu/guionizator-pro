@@ -8,6 +8,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { listPortalClients } from "../portal/access";
 import { hasFeature } from "../portal/features";
+import { getBillingState } from "../billing/access";
 import type { ReportSnapshot } from "./snapshot";
 
 export type LoadedReport = {
@@ -48,10 +49,12 @@ export async function loadReport(
  *
  *  - **Dueño**: filtra `owner_id`, exactamente como antes. No mira
  *    `enabled_features`: los flags son del portal, no de su propio estudio.
- *  - **Miembro del portal**: el reporte tiene que ser de una marca suya **y**
- *    esa marca tener la sección `reportes` prendida. Sin esa segunda condición,
- *    apagar el switch escondería la pantalla pero el link directo al .xlsx
- *    seguiría sirviendo — que es justo el agujero que el doble candado evita.
+ *  - **Miembro del portal**: el reporte tiene que ser de una marca suya, esa
+ *    marca tener la sección `reportes` prendida **y** estar pagada (Fase E).
+ *    Sin la segunda condición, apagar el switch escondería la pantalla pero el
+ *    link directo al .xlsx seguiría sirviendo; sin la tercera, lo mismo con una
+ *    marca suspendida por falta de pago. Es justo el agujero que el doble —
+ *    ahora triple — candado evita.
  *
  * La RLS (`reports_member_select`, migración `0006`) ya impide leer reportes de
  * otras marcas; el `.in("client_id", …)` de acá es defensa en profundidad.
@@ -64,9 +67,18 @@ export async function loadReportForUser(
   const asOwner = await loadReport(supabase, userId, reportId);
   if (asOwner) return asOwner;
 
-  const clientIds = (await listPortalClients(userId))
-    .filter((c) => hasFeature(c.features, "reportes"))
-    .map((c) => c.id);
+  const conReportes = (await listPortalClients(userId)).filter((c) =>
+    hasFeature(c.features, "reportes"),
+  );
+
+  // El estado de cobro se consulta por marca. `getBillingState` va cacheado por
+  // request, así que pedirlo para varias marcas no multiplica consultas cuando
+  // la pantalla ya lo pidió.
+  const estados = await Promise.all(
+    conReportes.map(async (c) => ({ id: c.id, ok: (await getBillingState(c.id)).ok })),
+  );
+
+  const clientIds = estados.filter((e) => e.ok).map((e) => e.id);
 
   if (clientIds.length === 0) return null;
 

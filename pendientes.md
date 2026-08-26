@@ -1,5 +1,35 @@
 # Pendientes — Guionizator Pro
 
+## 🔧 La pared de pago anuncia el cupo del PLAN, no el de la marca (Fase E)
+
+Detectado 2026-08-25 probando P1 con la marca `PRUEBA STRIPE`.
+
+`/portal/suscripcion/[clientId]` dibuja el plan con las constantes de
+`lib/billing/plan.ts` (`PLAN_AI_CREDITS` = 40 y `PLAN_TRANSCRIPTIONS` = 40),
+sin mirar el override de esa marca. La marca de prueba tenía
+`ai_generation_limit = 1` y la pantalla igual prometía *"40 generaciones con IA
+por mes"*.
+
+**Hoy no afecta a nadie**: los overrides son una herramienta interna de Paco y
+un cliente real no tiene ninguno, así que el número que ve es el correcto. Pero
+el día que se le ponga un tope distinto a alguien —por soporte, por un acuerdo
+especial— la pantalla de venta le va a prometer algo que la app después no le
+da.
+
+Además lista las transcripciones aunque la marca no tenga `competencia`
+prendida, que es la única sección desde donde se transcribe.
+
+Qué habría que decidir cuando se toque:
+
+- ¿La pantalla muestra lo que esa marca va a recibir de verdad
+  (`effectiveLimit(client.aiGenerationLimit, false, PLAN_AI_CREDITS)`), o
+  siempre lo del plan porque es una página de venta?
+- Si muestra lo real, esconder la línea de transcripciones cuando la marca no
+  tiene `competencia` habilitada.
+
+Archivo: `app/(portal)/portal/suscripcion/[clientId]/page.tsx`.
+
+
 ## 🎯 Reportes para clientes externos (plan aprobado 2026-08-07)
 
 Objetivo: que marcas de terceros usen la app con **su propia API key de Apify**

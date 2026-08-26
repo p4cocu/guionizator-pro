@@ -39,6 +39,35 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0010 | `0010_transcripcion_online.sql` | ✅ 2026-08-17 (antes del deploy) |
 | 0011 | `0011_papelera_guiones.sql` | ✅ 2026-08-17 (antes del deploy) |
 | 0012 | `0012_portal_display_names.sql` | ✅ 2026-08-18 (antes del deploy) |
+| 0013 | `0013_stripe_billing.sql` | ✅ 2026-08-24 (antes del deploy) |
+
+### 0013 va ANTES del deploy, y el backfill es lo que hace seguro el rollout
+
+Crea `client_subscriptions`, `credit_purchases` y `stripe_events`, más
+`ai_usage_log.paid_with` y dos funciones (`apply_credit_purchase`,
+`consume_client_credit`). Es puramente aditiva: el código publicado hoy no
+conoce nada de eso, así que la app vieja sigue funcionando entre la migración y
+el deploy. Al revés no: el código de Fase E consulta `client_subscriptions` en
+cada request del portal.
+
+**Lo más importante de esta migración es la última sentencia**: el `insert …
+select` que deja **todas las marcas existentes como `exempt`**. Eso es lo que
+garantiza que ningún cliente activo se quede afuera durante el rollout — entre
+la migración y el día que se encienda el cobro, absolutamente todas las marcas
+están exentas y el gate las deja pasar. Después se les quita la exención una por
+una, avisándole a cada cliente; las marcas propias de Paco quedan exentas para
+siempre.
+
+⚠️ También cambia el significado de `clients.ai_generation_limit` y
+`clients.transcription_limit`: antes `null` quería decir **sin tope**, ahora
+quiere decir **el tope del plan** (40 y 40). Para una marca exenta sigue
+queriendo decir sin tope, y por eso el backfill importa tanto.
+
+⚠️ Las dos funciones llevan `revoke all … from public, anon, authenticated`.
+PostgREST expone las funciones del esquema `public`: sin ese revoke, un miembro
+del portal con su JWT podría llamar a `apply_credit_purchase` y regalarse
+créditos. El revoke es la parte que sostiene la seguridad, no un detalle de
+prolijidad.
 
 ### La etapa 9 no llevó migración
 

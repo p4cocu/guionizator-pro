@@ -28,10 +28,12 @@ import {
   TranscribeCompetitorError,
 } from "@/lib/competencia/transcribe";
 import { getTranscriptionUsageState, logTranscription } from "@/lib/competencia/transcriptionUsage";
-import { logAiGeneration } from "@/lib/portal/usage";
+import { getBillingState } from "@/lib/billing/access";
+import { effectiveLimit, PLAN_TRANSCRIPTIONS } from "@/lib/billing/plan";
 import {
   adaptCompetitorPost,
   assertCanGenerate,
+  settleGeneration,
   generationErrorInfo,
   PortalGenerationError,
   requireGenerationAccess,
@@ -60,15 +62,20 @@ export async function transcribePortalPost(
     if (!clientRow) throw new TranscribeCompetitorError("Esa marca no existe.", 404);
     const ownerId = clientRow.owner_id as string;
 
+    // Desde Fase E el tope se mide contra el CICLO DE FACTURACIÓN de la marca,
+    // no contra el mes calendario, y sale del plan salvo que haya override.
+    // Una marca exenta no tiene tope.
+    const billing = await getBillingState(clientId);
     const usageState = await getTranscriptionUsageState(
       admin,
       clientId,
       ownerId,
-      client.transcriptionLimit,
+      effectiveLimit(client.transcriptionLimit, billing.reason === "exempt", PLAN_TRANSCRIPTIONS),
+      { cycleStart: billing.cycleStart, cycleEnd: billing.cycleEnd },
     );
     if (usageState.blocked) {
       throw new TranscribeCompetitorError(
-        `Llegaste al tope de ${usageState.limit} transcripciones de este mes. Se reinicia el día 1.`,
+        `Llegaste al tope de ${usageState.limit} transcripciones de este ciclo. Se reinicia cuando arranca el próximo.`,
         429,
       );
     }
@@ -113,7 +120,7 @@ export async function adaptPortalPost(
 ): Promise<AdaptResult> {
   try {
     const { user, client, ctx } = await requireGenerationAccess(clientId);
-    await assertCanGenerate(clientId, ctx.ownerId, client.aiGenerationLimit);
+    const state = await assertCanGenerate(clientId, ctx.ownerId, client.aiGenerationLimit);
 
     const admin = createServiceClient();
     const { data: post } = await admin
@@ -127,15 +134,14 @@ export async function adaptPortalPost(
     const sourcePost = post as AdaptSourcePost;
     const generated = await adaptCompetitorPost(ctx, sourcePost, type);
 
-    await logAiGeneration(admin, {
+    await settleGeneration({
+      state,
       ownerId: ctx.ownerId,
       clientId,
       userId: user.id,
       endpoint: "portal:adapt-competitor",
       inputTokens: generated.inputTokens,
       outputTokens: generated.outputTokens,
-    }).catch((e) => {
-      console.error("[portal/competencia] no se pudo registrar el consumo de adaptación:", e);
     });
 
     return {

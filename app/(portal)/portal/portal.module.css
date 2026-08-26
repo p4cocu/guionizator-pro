@@ -228,6 +228,25 @@ a.link:hover {
   text-underline-offset: 2px;
 }
 
+/*
+  Aviso de pago vencido durante el periodo de gracia (Fase E). Más fuerte que
+  `.preview`: el cliente sigue entrando, pero si no actualiza la tarjeta se
+  queda afuera en días, así que tiene que verse como una alerta y no como una
+  nota al pie.
+*/
+.billingWarning {
+  display: block;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(232, 92, 74, 0.4);
+  background: rgba(232, 92, 74, 0.1);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  font-weight: 500;
+}
+
 .overlay {
   display: none;
 }
@@ -368,6 +387,17 @@ a.link:hover {
   font-weight: 700;
   letter-spacing: -0.02em;
   margin: 6px 0 20px;
+}
+
+/*
+  Texto de apoyo de las tarjetas sueltas del portal (perfil, suscripción).
+  Se agregó en Fase E para la pantalla de pago.
+*/
+.profileHint {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin: 0 0 4px;
 }
 
 .profileFooter {

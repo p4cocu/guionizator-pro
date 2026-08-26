@@ -30,6 +30,8 @@ import { withOutliers } from "@/lib/competencia/outliers";
 import { hasFeature, AI_FEATURE_SLUG } from "@/lib/portal/features";
 import { getClientOwnerId, getGenerationState } from "@/lib/portal/generate";
 import { getTranscriptionUsageState } from "@/lib/competencia/transcriptionUsage";
+import { getBillingState } from "@/lib/billing/access";
+import { effectiveLimit, PLAN_TRANSCRIPTIONS } from "@/lib/billing/plan";
 import { createServiceClient } from "@/lib/supabase/service";
 import CompetenciaPortalClient, { type PortalPostBase } from "./CompetenciaPortalClient";
 
@@ -69,10 +71,24 @@ export default async function PortalCompetenciaPage({
   // servidor en las server actions.
   const admin = createServiceClient();
 
+  // El periodo que se cuenta sale del ciclo de facturación (Fase E); sin
+  // suscripción cae al mes calendario UTC de siempre.
+  const billing = await getBillingState(client.id);
+
   const [transcriptionUsage, adaptUsage] = await Promise.all([
     getClientOwnerId(client.id)
       .then((ownerId) =>
-        getTranscriptionUsageState(admin, client.id, ownerId, client.transcriptionLimit),
+        getTranscriptionUsageState(
+          admin,
+          client.id,
+          ownerId,
+          effectiveLimit(
+            client.transcriptionLimit,
+            billing.reason === "exempt",
+            PLAN_TRANSCRIPTIONS,
+          ),
+          { cycleStart: billing.cycleStart, cycleEnd: billing.cycleEnd },
+        ),
       )
       .catch((e) => {
         console.error("[portal/competencia] no se pudo leer el cupo de transcripción:", e);
@@ -97,6 +113,7 @@ export default async function PortalCompetenciaPage({
       canFavorite={canFavorite}
       transcriptionRemaining={transcriptionUsage?.remaining ?? null}
       adaptRemaining={adaptUsage?.remaining ?? null}
+      adaptCreditBalance={adaptUsage?.creditBalance ?? 0}
     />
   );
 }

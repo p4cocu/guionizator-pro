@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ApifyError, getApifyAccount, getApifyUsage } from "@/lib/apify/client";
 import { isSecretsKeyConfigured } from "@/lib/crypto/secrets";
+import { ensureSubscription } from "@/lib/billing/subscription";
 import {
   ApifyTokenError,
   markApifyTokenChecked,
@@ -70,6 +71,20 @@ export async function createCliente(data: ClienteFormData) {
     .single();
 
   if (error) throw new Error(error.message);
+
+  // Fila de suscripción desde el día uno (Fase E). El backfill de la migración
+  // `0013` cubrió las marcas que ya existían; ésta necesita la suya.
+  //
+  // Nace SIN exención a propósito: una marca nueva es de un cliente que va a
+  // pagar. Las marcas propias se marcan internas con un clic desde el panel, y
+  // eso es mejor que el default silencioso al revés — una marca que debía pagar
+  // y nunca pagó porque nadie se acordó de sacarle la exención.
+  //
+  // Si esto falla no se rompe el alta: la marca ya existe, y
+  // `requireBillingContext` crea la fila al vuelo la primera vez que haga falta.
+  await ensureSubscription(cliente.id, user.id).catch((e) => {
+    console.error("[clientes] no se pudo crear la suscripción de la marca:", e);
+  });
 
   revalidatePath("/clientes");
   redirect(`/clientes/${cliente.id}`);

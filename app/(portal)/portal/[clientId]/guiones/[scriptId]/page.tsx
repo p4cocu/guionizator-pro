@@ -150,6 +150,7 @@ export default async function PortalGuionDetallePage({
           initialCovers={covers}
           initialCopies={copies}
           initialRemaining={aiUsage?.remaining ?? null}
+          creditBalance={aiUsage?.creditBalance ?? 0}
         />
       )}
 

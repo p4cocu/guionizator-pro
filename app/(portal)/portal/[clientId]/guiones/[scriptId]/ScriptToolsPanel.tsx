@@ -32,13 +32,20 @@ export default function ScriptToolsPanel({
   initialCovers,
   initialCopies,
   initialRemaining,
+  creditBalance,
 }: {
   clientId: string;
   scriptId: string;
   initialCovers: PortalCoverIdea[] | null;
   initialCopies: PortalScriptCopy[];
-  /** Generaciones que le quedan este mes. `null` = sin tope. */
+  /** Generaciones del PLAN que le quedan este ciclo. `null` = sin tope. */
   initialRemaining: number | null;
+  /**
+   * Saldo de recargas compradas (Fase E). ⚠️ Sin esto, agotar el cupo del ciclo
+   * apagaba Portadas y Copy Expert aunque el cliente tuviera créditos pagados:
+   * el servidor los habría generado descontándolos del saldo.
+   */
+  creditBalance: number;
 }) {
   const [covers, setCovers] = useState(initialCovers);
   const [copies, setCopies] = useState<PortalScriptCopy[]>(initialCopies);
@@ -48,7 +55,10 @@ export default function ScriptToolsPanel({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const blocked = remaining !== null && remaining <= 0;
+  // Espeja el `blocked` del servidor (`getAiUsageState`): el cupo del ciclo
+  // agotado no bloquea si quedan recargas compradas.
+  const planAgotado = remaining !== null && remaining <= 0;
+  const blocked = planAgotado && creditBalance <= 0;
   const currentCopy = copies.find((c) => c.platform === platform) ?? null;
 
   async function copiar(text: string, key: string) {
@@ -103,7 +113,11 @@ export default function ScriptToolsPanel({
       <div className={s.toolsHead}>
         <h3 className={s.toolsTitle}>Herramientas de este guion</h3>
         {remaining !== null && (
-          <span className={s.toolsQuota}>{remaining} generaciones este mes</span>
+          <span className={s.toolsQuota}>
+            {planAgotado && creditBalance > 0
+              ? `${creditBalance} créditos comprados`
+              : `${remaining} generaciones este ciclo`}
+          </span>
         )}
       </div>
 
@@ -118,7 +132,7 @@ export default function ScriptToolsPanel({
             className="btn btn-secondary"
             onClick={pedirPortadas}
             disabled={loading !== null || blocked}
-            title={blocked ? "Llegaste al tope de generaciones de este mes" : undefined}
+            title={blocked ? "Llegaste al tope del ciclo y no te quedan créditos" : undefined}
           >
             {loading === "covers"
               ? "Generando…"
@@ -180,7 +194,7 @@ export default function ScriptToolsPanel({
               className="btn btn-secondary"
               onClick={pedirCopy}
               disabled={loading !== null || blocked}
-              title={blocked ? "Llegaste al tope de generaciones de este mes" : undefined}
+              title={blocked ? "Llegaste al tope del ciclo y no te quedan créditos" : undefined}
             >
               {loading === "copy" ? "Generando…" : currentCopy ? "↺ Regenerar" : "✦ Generar copy"}
             </button>

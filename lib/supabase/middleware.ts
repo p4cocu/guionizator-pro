@@ -14,6 +14,14 @@ const PUBLIC_PATHS = [
   // Endpoint de ingesta del Shortcut: se autentica por token (Bearer), no por
   // sesión, así que no debe redirigir a /login.
   "/api/resources/ingest",
+  // Webhook de Stripe (Fase E): lo llama Stripe server-to-server, SIN cookies
+  // de sesión, y se autentica por FIRMA (HMAC contra STRIPE_WEBHOOK_SECRET), no
+  // por sesión. Si no estuviera acá, el middleware lo redirige (307) a /login
+  // antes de que corra su código: Stripe lo cuenta como entrega fallida,
+  // reintenta unas horas y se rinde. El síntoma es una suscripción que se cobra
+  // en Stripe y nunca se activa en la app, sin un solo error en los logs.
+  // Es la MISMA trampa que ya rompió Portadas y el scraper de Competencia.
+  "/api/stripe/webhook",
   // Netlify Background/Scheduled Functions: se llaman server-to-server (sin
   // cookies de sesión) y se autentican con su propio secreto de header
   // (ej. x-scrape-secret). Si el matcher las intercepta, el middleware las

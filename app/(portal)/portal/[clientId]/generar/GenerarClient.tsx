@@ -42,7 +42,24 @@ function isAlborna(name: string): boolean {
   return name.toLowerCase().includes("alborna");
 }
 
-type Usage = { used: number; limit: number | null; remaining: number | null };
+/**
+ * Lo que devuelve `/api/portal/generar/guion` en `usage`.
+ *
+ * ⚠️ `creditBalance` y `nextSource` NO son adorno: desde Fase E el tope del
+ * ciclo agotado ya no significa "bloqueado". Si la marca tiene recargas
+ * compradas, el servidor genera igual y las descuenta. Una UI que solo mire
+ * `remaining` deja al cliente mirando un botón muerto con créditos pagados en
+ * el saldo — que es exactamente lo que pasaba antes de este arreglo.
+ */
+type Usage = {
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+  /** Saldo de recargas compradas. No vence. */
+  creditBalance: number;
+  /** De dónde saldría la próxima generación. Espeja `AiPaymentSource`. */
+  nextSource: "plan" | "credit";
+};
 
 type Generated = {
   content: Record<string, unknown>;
@@ -81,7 +98,12 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
   const [loading, setLoading] = useState<null | string>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const blocked = usage.remaining !== null && usage.remaining <= 0;
+  // Espeja exactamente el `blocked` del servidor (`getAiUsageState`): el cupo
+  // del ciclo agotado NO alcanza para bloquear si quedan recargas compradas.
+  const planAgotado = usage.remaining !== null && usage.remaining <= 0;
+  const blocked = planAgotado && usage.creditBalance <= 0;
+  /** El cupo del plan se acabó pero las recargas lo mantienen andando. */
+  const usandoCreditos = planAgotado && usage.creditBalance > 0;
   const lastStep = steps.length - 1;
 
   async function post<T>(path: string, body: Record<string, unknown>): Promise<T> {
@@ -236,12 +258,18 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
         </div>
         <p className={s.usage}>
           {usage.limit === null ? (
-            <>Generaciones ilimitadas este mes</>
+            <>Generaciones ilimitadas</>
+          ) : usandoCreditos ? (
+            <>
+              Usando tus créditos comprados:{" "}
+              <strong>{usage.creditBalance}</strong>{" "}
+              {usage.creditBalance === 1 ? "disponible" : "disponibles"}
+            </>
           ) : (
             <>
               Te {usage.remaining === 1 ? "queda" : "quedan"}{" "}
               <strong className={blocked ? s.usageOver : undefined}>{usage.remaining ?? 0}</strong>{" "}
-              de {usage.limit} este mes
+              de {usage.limit} este ciclo
             </>
           )}
         </p>
@@ -249,10 +277,11 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
 
       {blocked && !generated && (
         <div className={s.blockedBox}>
-          <p className={s.blockedTitle}>Llegaste al tope de este mes</p>
+          <p className={s.blockedTitle}>Llegaste al tope de este ciclo</p>
           <p className={s.blockedText}>
-            El contador se reinicia el día 1. Si necesitas más guiones antes,
-            háblalo con quien maneja tu contenido.
+            El contador se reinicia cuando arranca tu próximo ciclo. Si necesitas
+            más guiones antes, puedes comprar créditos desde Facturación — no
+            vencen — o hablarlo con quien maneja tu contenido.
           </p>
         </div>
       )}
@@ -507,7 +536,7 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
                   disabled={!!loading || blocked}
                   title={
                     blocked
-                      ? "Llegaste al tope de este mes"
+                      ? "Llegaste al tope de este ciclo y no te quedan créditos"
                       : "Vuelve a escribirlo desde cero. Cuenta como una generación."
                   }
                 >

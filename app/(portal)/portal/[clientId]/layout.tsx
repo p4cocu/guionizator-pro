@@ -16,6 +16,8 @@ import {
   requirePortalClient,
   requirePortalSession,
 } from "@/lib/portal/access";
+import { billingMessage, getBillingState } from "@/lib/billing/access";
+import { getSubscription } from "@/lib/billing/subscription";
 import PortalShell from "../PortalShell";
 
 export default async function PortalClientLayout({
@@ -28,8 +30,23 @@ export default async function PortalClientLayout({
   const { clientId } = await params;
   const { user } = await requirePortalSession();
 
-  const client = await requirePortalClient(user.id, clientId);
+  // ⚠️ El layout NO aplica el candado de cobro: lo aplica cada página con su
+  // propio `requirePortalClient`. Si cortara acá, también cerraría
+  // `/facturacion`, que es justo la pantalla desde la que un cliente
+  // suspendido tiene que poder actualizar su tarjeta.
+  const client = await requirePortalClient(user.id, clientId, undefined, {
+    skipBillingGate: true,
+  });
   const all = await listPortalClients(user.id);
+
+  // Facturación la ve solo quien pagó (o Paco mirando como cliente): desde ahí
+  // se compran recargas y se cancela la suscripción de toda la marca.
+  const [billing, subscription] = await Promise.all([
+    getBillingState(clientId),
+    getSubscription(clientId),
+  ]);
+  const showBilling =
+    client.role === "owner" || subscription?.billingContactUserId === user.id;
 
   return (
     <PortalShell
@@ -43,6 +60,8 @@ export default async function PortalClientLayout({
         .map((c) => ({ id: c.id, label: portalClientLabel(c) }))}
       email={user.email}
       isOwnerPreview={client.role === "owner"}
+      showBilling={showBilling}
+      billingWarning={billing.warning ? billingMessage(billing) : null}
     >
       {children}
     </PortalShell>

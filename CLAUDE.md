@@ -63,6 +63,8 @@ estos, dilo explícitamente y entrega la migración a Paco.
 | `competitor_posts.script_structure` | `how_to`, `golpe_valor`, `vacio_info`, `espejo`, `controversial`, `momento_wtf`, `problema_invisible` |
 | `competitor_posts.value_pillar` | `utilidad_practica`, `validacion_emocional`, `revelacion`, `curaduria`, `disrupcion`, `actualidad` |
 | `clients.ai_generation_mode` | `simple`, `completo` (fuente de verdad en TS: `lib/portal/generationMode.ts`) |
+| `client_subscriptions.status` | `incomplete`, `active`, `past_due`, `canceled` (fuente de verdad en TS: `lib/billing/status.ts`) |
+| `ai_usage_log.paid_with` | `plan`, `credit` (fuente de verdad en TS: `lib/billing/plan.ts`) |
 
 `baul` = ideas buenas pero congeladas (falta pulir herramientas para producirlas).
 **Se oculta por defecto** en la lista de Guiones (`getScripts` filtra `neq baul` si no hay
@@ -109,7 +111,11 @@ corra. Como `fetch()` no lanza error en respuestas no-2xx (307 incluido), el fal
 queda silencioso: el caller cree que disparó el job y el job nunca se ejecuta.
 Ya pasó dos veces: Portadas (`d60badd`) y el scraper de Competencia
 (`scrape-competencia-background`, corregido agregando `/.netlify/functions` a
-`PUBLIC_PATHS`). **Regla dura:** toda ruta nueva que se autentique por su propio
+`PUBLIC_PATHS`). El tercer caso es **el webhook de Stripe**
+(`/api/stripe/webhook`, Fase E), que se autentica por firma HMAC y no por
+sesión: si no estuviera en `PUBLIC_PATHS`, Stripe recibiría un 307, lo contaría
+como entrega fallida y se rendiría — con el resultado de suscripciones que se
+cobran y nunca se activan, sin un solo error en los logs. **Regla dura:** toda ruta nueva que se autentique por su propio
 secreto/token (no por sesión de usuario) debe agregarse a `PUBLIC_PATHS`
 **en el mismo cambio** que la crea. Y todo `fetch()` que dispare un worker debe
 chequear `res.ok` y tratar respuestas no-2xx como error (no asumir éxito solo
@@ -700,6 +706,151 @@ dentro de los mismos `VISIBLE_SCRIPT_STATUSES` que lista `/portal/…/guiones` �
   marca "· ya agendado" a los que ya cuelgan de otra entrada (se permiten igual:
   a veces es mover de fecha).
 
+## Fase E — Cobro con Stripe (`lib/billing/*`, migración `0013`)
+
+Plan completo: `docs/fase-e-stripe.md`. Hasta Fase D el portal se prendía con un
+switch manual; ahora se paga solo. **$300 MXN/mes por MARCA** (no por persona):
+portal + 40 generaciones + 40 transcripciones por ciclo, con todos los miembros
+que quiera adentro. Recargas de **$100/20** y **$200/50** créditos, pago único,
+que **no vencen**.
+
+- **`client_subscriptions`** (PK `client_id`), **`credit_purchases`** y
+  **`stripe_events`**: las tres con **RLS activa y ninguna policy** +
+  `revoke all … from anon, authenticated`. Solo service role desde
+  `lib/billing/*`, mismo patrón que `client_secrets` y `portal_profiles`. Con su
+  JWT y la anon key el miembro puede llamar a PostgREST directo: una policy de
+  update sobre `credit_balance` sería regalarle el medidor de un producto de pago.
+- **`exempt` es columna aparte, no un valor de `status`.** `status` espeja
+  literalmente a Stripe y lo escribe solo el webhook; los webhooks **no llegan en
+  orden**, así que un evento tardío podría pisar una exención y cortarle el
+  acceso a una marca tuya. Separadas, ningún evento toca la decisión de negocio.
+- **Las marcas de hoy nacen exentas** (backfill al final de `0013`). Es lo que
+  hace que el rollout no le corte el acceso a nadie: entre la migración y el
+  encendido, todas las marcas pasan el gate.
+- ⚠️ **`clients.ai_generation_limit` y `clients.transcription_limit` cambiaron de
+  significado**: antes `null` = sin tope, ahora `null` = el tope del plan (40 y
+  40). Para una marca `exempt` sigue queriendo decir sin tope — de ahí que el
+  backfill importe tanto.
+- **El cupo se mide por CICLO DE FACTURACIÓN**, ya no por mes calendario
+  (`lib/portal/usage.ts` y `lib/competencia/transcriptionUsage.ts` reciben
+  `current_period_start`). Sin suscripción caen al mes UTC de siempre, así que
+  nada se rompe en el intervalo.
+- **Plan primero, recarga después**: mientras el consumo del ciclo esté bajo el
+  tope se gasta plan (`paid_with = 'plan'`); pasado el tope se descuenta
+  `credit_balance` (`paid_with = 'credit'`). Se mantiene el orden de Fase D
+  (chequear antes de llamar a la API, descontar después de que respondió), y el
+  `where credit_balance > 0` hace que el saldo **nunca quede negativo**.
+- **Dos funciones en la base, y su `REVOKE` es lo que las hace seguras.**
+  `apply_credit_purchase` mete la compra y el saldo en una sola transacción (por
+  separado, un fallo a mitad de camino dejaba al cliente pagando créditos que
+  nunca recibía); `consume_client_credit` existe porque PostgREST no acepta
+  `credit_balance = credit_balance - 1` en un `update`. PostgREST expone las
+  funciones de `public`: sin `revoke all … from public, anon, authenticated`,
+  cualquiera con un JWT se regala créditos.
+- **Quién paga**: `billing_contact_user_id` en la suscripción. **No** se agregó
+  un rol a `client_members`: tocar ese CHECK arrastra `roles.ts`, la UI de
+  miembros y las policies de `scripts`.
+- **Solo el primero paga**, sin contar personas: no hay lógica de "¿es el
+  primer miembro?" sino "¿la marca ya está pagada?". Si lo está,
+  `requirePortalClient` no redirige y el resto del equipo entra gratis.
+
+### ⚠️ `/api/stripe/webhook` va en `PUBLIC_PATHS`
+
+Se autentica por **firma HMAC**, no por sesión. Es el tercer caso de la trampa
+que ya rompió Portadas y el scraper de Competencia. Además: **cuerpo crudo**
+(`await req.text()`, nunca `req.json()` — el JSON re-serializado no es byte por
+byte el que Stripe firmó), **idempotencia** por `stripe_events` (Stripe reintenta
+y puede repetir eventos), y ningún handler lee el estado anterior para decidir el
+siguiente, porque los eventos llegan desordenados.
+
+⚠️ **Los créditos de una recarga salen del `price_id` que Stripe cobró**
+(`creditsForPriceId` sobre los line items), nunca del body del browser.
+
+### ⚠️ Tres trampas del SDK de Stripe v22 (API `2026-07-29.dahlia`)
+
+Encapsuladas en `lib/billing/stripe.ts` para que ningún handler tenga que
+acordarse:
+
+1. **`subscription.current_period_start/end` ya no existe** — vive en
+   `subscription.items.data[i].current_period_*` (`readSubscriptionPeriod`).
+2. **`invoice.subscription` tampoco** — es
+   `invoice.parent.subscription_details.subscription`
+   (`subscriptionIdFromInvoice`).
+3. **`subscription.cancel_at_period_end` puede quedar en `false` aunque el
+   cliente haya cancelado** — Stripe lo expresa poniendo `cancel_at` en la fecha
+   de fin de ciclo (`readCancelAtPeriodEnd`). Visto en vivo el 2026-08-26
+   cancelando desde el Customer Portal: `status: "active"`,
+   `cancel_at_period_end: false`, `cancel_at: <fin del ciclo>`,
+   `cancellation_details.reason: "cancellation_requested"`. El corte NO se
+   pierde (al llegar la fecha entra `customer.subscription.deleted`), pero
+   leyendo solo el booleano la app dice "Activa" durante todo el ciclo que
+   queda: el cliente que canceló no ve confirmación y vuelve a cancelar o
+   escribe preguntando.
+
+⚠️ Las tres se descubrieron **probando contra la cuenta real**, no leyendo la
+doc. Los webhooks se renderizan con la API version de la CUENTA (la de Paco está
+en `2022-08-01`), no con la que el SDK tiene pinneada — por eso el mismo objeto
+llega con una forma u otra según por dónde entró, y por eso los tres helpers
+leen **las dos formas**.
+
+### ⚠️ Toda acción de IA del portal cierra con `settleGeneration`
+
+**Nunca con `logAiGeneration` pelado.** `logAiGeneration` deja la fila con
+`paid_with = 'plan'` por defecto y **no toca `credit_balance`**: pasado el tope
+del ciclo, esa acción sale **gratis para siempre** y el rastro de auditoría
+miente sobre de dónde salió. `settleGeneration` (`lib/portal/generate.ts`)
+descuenta del saldo cuando corresponde y escribe el `paid_with` verdadero.
+
+Las cuatro acciones de `AI_CREDIT_ACTIONS` tienen que cerrar así:
+`/api/portal/generar/guion`, `adaptPortalPost` (competencia) y —desde el
+2026-08-26— `generarPortadas` y `generarCopy` (`toolsActions.ts`), que se
+habían quedado con el cierre de Fase D y por eso regalaban crédito. El bug se
+detectó probando: una fila `portal:copy` marcada `plan` con el cupo del ciclo ya
+agotado y el saldo sin moverse.
+
+`settleGeneration` necesita el `state` que devolvió `assertCanGenerate` — de ahí
+sale si esta acción se paga con el plan o con una recarga.
+
+### ⚠️ La UI del cupo tiene que espejar al servidor, no adivinarlo
+
+Desde Fase E, **tope del ciclo agotado ≠ bloqueado**: si la marca tiene
+recargas, el servidor genera igual y las descuenta. El `blocked` del cliente
+tiene que ser el mismo de `getAiUsageState`:
+
+```ts
+const planAgotado = remaining !== null && remaining <= 0;
+const blocked = planAgotado && creditBalance <= 0;   // ⚠️ las DOS condiciones
+```
+
+Con solo `remaining <= 0`, un cliente que acaba de pagar $100 de recarga se
+queda mirando un botón muerto. Le pasaba a `/generar` y a `ScriptToolsPanel`
+hasta el 2026-08-26; `CompetenciaPortalClient` ya estaba bien.
+
+Y la pantalla recibe el **tope efectivo** que resolvió `getGenerationState`,
+**no** `client.aiGenerationLimit` crudo: desde `0013` ese `null` significa "el
+tope del plan (40)", no "sin tope", así que pasarlo tal cual hacía que la UI
+anunciara *"Generaciones ilimitadas"* mientras el servidor cortaba a las 40.
+
+### Dónde corta el impago
+
+`lib/billing/access.ts` → `getBillingState()`, cacheado por request. `past_due`
+da **5 días de gracia** con banner visible; después, corte. El corte se calcula
+**en lectura** (`now >= grace_until`), no hay cron. `grace_until` lo escribe el
+webhook solo en el **primer** `invoice.payment_failed` — Stripe manda uno por
+reintento y si cada uno reiniciara el reloj la marca no se cortaría nunca.
+
+Se aplica en `requirePortalClient` (cubre todas las páginas y actions del
+portal), `requireGenerationAccess` (las rutas de IA son endpoints públicos) y
+`loadReportForUser` (si no, el link directo al `.xlsx` seguiría sirviendo).
+
+⚠️ **Dos excepciones a propósito:** el **dueño no se corta** (al revés que los
+flags de sección — si no, no podría revisar la marca de un cliente moroso), y
+**`/portal/[id]/facturacion` se saltea el candado** (`skipBillingGate`), porque
+si no un cliente suspendido no tendría desde dónde actualizar su tarjeta.
+
+**Facturación no lleva slug en `features.ts`** a propósito: agregarlo obligaría
+al `ALTER TABLE` del CHECK y no es algo que se prenda o apague por marca.
+
 ## Respuestas JSON de la IA (`lib/ai/json.ts`)
 
 Todo endpoint que le pide JSON a Claude pasa por `lib/ai/json.ts` — **nunca
@@ -765,6 +916,13 @@ knowledge/              # fuente original de la base de conocimiento
 leer `client_secrets`), `OPENAI_API_KEY` (server-only, desde la etapa 7 —
 Whisper; cuenta aparte de `ANTHROPIC_API_KEY`).
 
+Desde Fase E, además (todas **server-only**, ninguna con `NEXT_PUBLIC`):
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (distinto en local y en
+producción), `STRIPE_PRICE_SUBSCRIPTION`, `STRIPE_PRICE_CREDITS_20`,
+`STRIPE_PRICE_CREDITS_50` y `BILLING_ENFORCED` (`true` enciende el corte por
+impago). **No** hace falta publishable key: se usa Checkout hospedado, así que
+ningún dato de tarjeta pasa por esta app.
+
 ## Comandos
 
 - `npm run dev` — desarrollo local (http://localhost:3000)
@@ -803,6 +961,10 @@ Pasó el 2026-08-13, con el deploy de la etapa 1 de Fase D:
 - [~] **Fase 5** — Mejora continua: **descartada como sistema automático.** La mejora se hace
   puntualmente: (a) agregar campo "tono de voz" (archivo de texto plano) al perfil de cliente
   para enriquecer los guiones, (b) ajustes directos al knowledge cuando Paco los solicite.
+- [~] **Fase E** — Cobro con Stripe: $300 MXN/mes por marca (portal + 40 generaciones
+  + 40 transcripciones), recargas de crédito que no vencen, corte automático con 5 días
+  de gracia. **Código completo; falta correr `0013` y hacer el rollout**
+  (`docs/fase-e-stripe.md` → "Orden de encendido").
 - [ ] **Fase 6** — Hardening multi-tenant + base SaaS + placeholder YouTube.
 
 ## Integración Instagram (Etapa A — lectura de métricas)

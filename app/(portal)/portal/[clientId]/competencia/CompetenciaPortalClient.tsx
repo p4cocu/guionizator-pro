@@ -76,6 +76,7 @@ export default function CompetenciaPortalClient({
   canFavorite,
   transcriptionRemaining: initialTranscriptionRemaining,
   adaptRemaining: initialAdaptRemaining,
+  adaptCreditBalance,
 }: {
   posts: PortalPost[];
   clientId: string;
@@ -85,6 +86,8 @@ export default function CompetenciaPortalClient({
   canFavorite: boolean;
   transcriptionRemaining: number | null;
   adaptRemaining: number | null;
+  /** Saldo de recargas compradas (Fase E). No vence. */
+  adaptCreditBalance: number;
 }) {
   const [posts, setPosts] = useState(initialPosts);
   const [query, setQuery] = useState("");
@@ -108,7 +111,10 @@ export default function CompetenciaPortalClient({
   const [errorFor, setErrorFor] = useState<{ id: string; message: string } | null>(null);
 
   const transcriptionBlocked = transcriptionRemaining !== null && transcriptionRemaining <= 0;
-  const adaptBlocked = adaptRemaining !== null && adaptRemaining <= 0;
+  // Agotar el cupo del ciclo NO bloquea si quedan créditos comprados: esos no
+  // vencen y son justamente para esto.
+  const adaptBlocked =
+    adaptRemaining !== null && adaptRemaining <= 0 && adaptCreditBalance <= 0;
 
   // ── Script de embeds de Instagram: una vez por página ──
   useEffect(() => {
@@ -321,6 +327,7 @@ export default function CompetenciaPortalClient({
                 canAdapt={canAdapt && p.type !== "image"}
                 adaptBlocked={adaptBlocked}
                 adaptRemaining={adaptRemaining}
+                adaptCreditBalance={adaptCreditBalance}
                 onAdapt={() => setAdaptingPost(p)}
                 canFavorite={canFavorite}
                 onFavorite={() => handleFavorite(p)}
@@ -361,6 +368,7 @@ function PostCard({
   canAdapt,
   adaptBlocked,
   adaptRemaining,
+  adaptCreditBalance,
   onAdapt,
   canFavorite,
   onFavorite,
@@ -376,6 +384,7 @@ function PostCard({
   canAdapt: boolean;
   adaptBlocked: boolean;
   adaptRemaining: number | null;
+  adaptCreditBalance: number;
   onAdapt: () => void;
   canFavorite: boolean;
   onFavorite: () => void;
@@ -517,7 +526,7 @@ function PostCard({
             disabled={transcribing || (transcriptionBlocked && !post.transcription)}
             title={
               transcriptionBlocked && !post.transcription
-                ? "Llegaste al tope de transcripciones de este mes"
+                ? "Llegaste al tope de transcripciones de este ciclo"
                 : undefined
             }
           >
@@ -528,7 +537,7 @@ function PostCard({
                 : "🎤 Transcribir"}
           </button>
           {transcriptionRemaining !== null && (
-            <span className={s.creditHint}>{transcriptionRemaining} este mes</span>
+            <span className={s.creditHint}>{transcriptionRemaining} este ciclo</span>
           )}
         </div>
       )}
@@ -540,12 +549,16 @@ function PostCard({
             className={`${s.creditBtn} ${s.creditBtnPrimary}`}
             onClick={onAdapt}
             disabled={adaptBlocked}
-            title={adaptBlocked ? "Llegaste al tope de generaciones de este mes" : undefined}
+            title={adaptBlocked ? "Llegaste al tope del ciclo y no te quedan créditos" : undefined}
           >
             ✦ Adaptar a mi marca
           </button>
           {adaptRemaining !== null && (
-            <span className={s.creditHint}>{adaptRemaining} este mes</span>
+            <span className={s.creditHint}>
+              {adaptRemaining > 0
+                ? `${adaptRemaining} en este ciclo`
+                : `${adaptCreditBalance} créditos comprados`}
+            </span>
           )}
         </div>
       )}

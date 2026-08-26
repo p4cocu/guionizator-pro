@@ -8,12 +8,16 @@ import {
 import { listClientMembers, type PortalMember } from "@/lib/portal/members";
 import { getDisplayName } from "@/lib/portal/profiles";
 import { listPendingInvites, type ClientInvite } from "@/lib/portal/invites";
-import { emptyAiUsage, getMonthlyAiUsage, type AiUsageSummary } from "@/lib/portal/usage";
+import { emptyAiUsage, getCycleAiUsage, type AiUsageSummary } from "@/lib/portal/usage";
 import {
   emptyTranscriptionUsage,
-  getMonthlyTranscriptionUsage,
+  getCycleTranscriptionUsage,
   type TranscriptionUsageSummary,
 } from "@/lib/competencia/transcriptionUsage";
+import { getBillingState, type BillingState } from "@/lib/billing/access";
+import { listCreditPurchases, type CreditPurchase } from "@/lib/billing/credits";
+import { isStripeConfigured, isTestMode } from "@/lib/billing/stripe";
+import BillingSection from "./BillingSection";
 import ClienteForm from "../ClienteForm";
 import PortalSection from "./PortalSection";
 import ResearchSection from "./ResearchSection";
@@ -64,10 +68,27 @@ export default async function ClienteDetailPage({ params }: Props) {
     },
   );
 
-  const usagePromise: Promise<AiUsageSummary> = getMonthlyAiUsage(supabase, id, user.id).catch(
+  // El estado de cobro decide qué periodo se cuenta: desde Fase E los dos
+  // medidores cortan por CICLO DE FACTURACIÓN, no por mes calendario. Si la
+  // marca no tiene suscripción de Stripe (exenta, o todavía sin pagar),
+  // `cycleStart` viene `null` y los contadores caen al mes UTC de siempre.
+  const billing: BillingState = await getBillingState(id);
+
+  const usagePromise: Promise<AiUsageSummary> = getCycleAiUsage(
+    supabase,
+    id,
+    user.id,
+    billing.cycleStart,
+    billing.cycleEnd,
+  ).catch((e) => {
+    console.error("[clientes/[id]] no se pudo leer el consumo de IA:", e);
+    return emptyAiUsage();
+  });
+
+  const purchasesPromise: Promise<CreditPurchase[]> = listCreditPurchases(id, user.id).catch(
     (e) => {
-      console.error("[clientes/[id]] no se pudo leer el consumo de IA:", e);
-      return emptyAiUsage();
+      console.error("[clientes/[id]] no se pudieron leer las recargas:", e);
+      return [];
     },
   );
 
@@ -81,10 +102,12 @@ export default async function ClienteDetailPage({ params }: Props) {
     return [];
   });
 
-  const transcriptionUsagePromise: Promise<TranscriptionUsageSummary> = getMonthlyTranscriptionUsage(
+  const transcriptionUsagePromise: Promise<TranscriptionUsageSummary> = getCycleTranscriptionUsage(
     supabase,
     id,
     user.id,
+    billing.cycleStart,
+    billing.cycleEnd,
   ).catch((e) => {
     console.error("[clientes/[id]] no se pudo leer el consumo de transcripción:", e);
     return emptyTranscriptionUsage();
@@ -101,6 +124,7 @@ export default async function ClienteDetailPage({ params }: Props) {
     invites,
     transcriptionUsage,
     ownPortalName,
+    creditPurchases,
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -134,6 +158,7 @@ export default async function ClienteDetailPage({ params }: Props) {
     invitesPromise,
     transcriptionUsagePromise,
     ownNamePromise,
+    purchasesPromise,
   ]);
 
   if (!cliente) notFound();
@@ -168,6 +193,28 @@ export default async function ClienteDetailPage({ params }: Props) {
           initialMembers={members}
           initialInvites={invites}
           initialOwnName={ownPortalName}
+        />
+        {/* Cobro con Stripe (Fase E). Va después del panel del portal porque
+            decide si ese portal se puede usar. */}
+        <BillingSection
+          clientId={id}
+          state={{
+            reason: billing.reason,
+            ok: billing.ok,
+            exempt: billing.subscription?.exempt ?? false,
+            status: billing.subscription?.status ?? null,
+            cycleStart: billing.cycleStart,
+            cycleEnd: billing.cycleEnd,
+            graceUntil: billing.graceUntil,
+            cancelAtPeriodEnd: billing.subscription?.cancelAtPeriodEnd ?? false,
+            creditBalance: billing.subscription?.creditBalance ?? 0,
+            stripeCustomerId: billing.subscription?.stripeCustomerId ?? null,
+            billingContactUserId: billing.subscription?.billingContactUserId ?? null,
+          }}
+          members={members}
+          purchases={creditPurchases}
+          stripeConfigured={isStripeConfigured()}
+          testMode={isTestMode()}
         />
         {/* Solo el estado enmascarado: `apify_token_cipher` NUNCA cruza al cliente. */}
         <ApifySection clientId={id} initial={apify} />
