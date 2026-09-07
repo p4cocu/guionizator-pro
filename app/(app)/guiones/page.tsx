@@ -98,6 +98,13 @@ function ScriptCard({ script, hideClient }: { script: ScriptRow; hideClient: boo
           <RecordingTypeBadge type={script.recording_type} />
         </div>
       )}
+      {/* Se grabó fuera de la app y la ficha existe para el copy y la portada
+          (migración 0014). */}
+      {script.is_external && (
+        <div>
+          <span className={styles.externalBadge}>⏺ Grabado fuera</span>
+        </div>
+      )}
       {/* Lo pidió el cliente desde su portal (add-on de IA, Fase D etapa 6). */}
       {script.generated_by && (
         <div>

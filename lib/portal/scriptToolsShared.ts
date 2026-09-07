@@ -22,7 +22,17 @@ export type PortalCoverIdea = {
   rationale_es: string;
 };
 
-export type PortalScriptCopy = { platform: string; copy: string; hashtags: string };
+/**
+ * `copy` es la versión desarrollada y `copyShort` la corta (migración `0014`).
+ * `copyShort` puede venir vacío: los copys guardados antes de esa migración
+ * solo tienen una versión y no se inventa la otra.
+ */
+export type PortalScriptCopy = {
+  platform: string;
+  copy: string;
+  copyShort: string;
+  hashtags: string;
+};
 
 /** Plataformas que el portal ofrece. YouTube sigue fuera, como en el estudio. */
 export const PORTAL_COPY_PLATFORMS = [

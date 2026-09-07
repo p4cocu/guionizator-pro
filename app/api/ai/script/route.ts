@@ -2,25 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { MODEL_DEFAULT, MODEL_FAST } from "@/lib/ai/anthropic";
 import { AiJsonError, generateJson } from "@/lib/ai/json";
+// Compartido con /api/ai/copy — una sola definición del perfil de marca.
+import { buildClientContext } from "@/lib/ai/clientContext";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
-
-function buildClientContext(c: Record<string, string | null>): string {
-  return [
-    `## Perfil del cliente: ${c.nombre}`,
-    c.marca && `**Marca:** ${c.marca}`,
-    c.que_vende && `**Qué vende:** ${c.que_vende}`,
-    c.cliente_ideal && `**Cliente ideal:** ${c.cliente_ideal}`,
-    c.nicho && `**Nicho:** ${c.nicho}`,
-    c.dolor && `**Dolor principal:** ${c.dolor}`,
-    c.deseo && `**Deseo principal:** ${c.deseo}`,
-    c.tono && `**Tono de voz:** ${c.tono}`,
-    c.notas && `**Notas adicionales:** ${c.notas}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
 
 // Reels: only voice_off on first generation — production blocks are generated
 // separately via /api/ai/production-blocks once the script is polished.

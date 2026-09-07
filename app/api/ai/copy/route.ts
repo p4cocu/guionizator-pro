@@ -1,63 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
+import { buildClientContext } from "@/lib/ai/clientContext";
+import {
+  buildCopyPrompt,
+  COPY_SYSTEM,
+  isCopyPlatform,
+  normalizeCopyResult,
+  summarizeScriptContent,
+  type CopyReference,
+} from "@/lib/ai/copyPrompt";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const COPY_SYSTEM = `Eres un experto en copywriting para redes sociales en español latinoamericano.
-Tu tarea es transformar guiones de video/carrusel en copies optimizados para publicaciones en redes sociales.
-Escribes en español latinoamericano, tuteo, sin tecnicismos innecesarios.
-Siempre devuelves un JSON válido con la estructura indicada.`;
-
-function buildPrompt(
-  platform: string,
-  scriptContent: Record<string, unknown>,
-  scriptType: string,
-) {
-  const contentStr = JSON.stringify(scriptContent, null, 2);
-
-  if (platform === "instagram") {
-    return `Crea el copy para Instagram de este ${scriptType === "reel" ? "Reel" : "Carrusel"}.
-
-GUION:
-${contentStr}
-
-El copy de Instagram debe:
-- Tener un gancho en la primera línea (máximo 2 oraciones antes del "más")
-- Cuerpo de 120-280 palabras que desarrolla el tema con valor real
-- CTA claro al final
-- Emojis estratégicos (no exagerados, 3-6 por copy)
-- De 15 a 20 hashtags relevantes (mezcla nicho específico + amplio + marca)
-- Tono conversacional y auténtico
-
-Devuelve ÚNICAMENTE este JSON (sin markdown, sin explicaciones):
-{"copy": "texto completo del copy con emojis y saltos de línea", "hashtags": "#hashtag1 #hashtag2 ... (todos los hashtags en una línea)"}`;
-  }
-
-  if (platform === "linkedin") {
-    return `Crea el copy para LinkedIn de este ${scriptType === "reel" ? "video" : "carrusel"}.
-
-GUION:
-${contentStr}
-
-El copy de LinkedIn debe:
-- Gancho en la primera línea (frase directa, no clickbait)
-- Storytelling profesional de 200-380 palabras
-- Estructura con párrafos cortos (1-3 oraciones máximo por párrafo)
-- Sin emojis excesivos (máximo 2-3 si aportan)
-- CTA orientado a conversación o conexión profesional
-- De 3 a 5 hashtags al final
-
-Devuelve ÚNICAMENTE este JSON (sin markdown, sin explicaciones):
-{"copy": "texto completo del copy con saltos de línea", "hashtags": "#hashtag1 #hashtag2 #hashtag3"}`;
-  }
-
-  return `Crea el copy para ${platform} del siguiente guion:
-${contentStr}
-Devuelve JSON: {"copy": "...", "hashtags": "..."}`;
-}
-
+/**
+ * Copy de una publicación, en DOS versiones (corta y desarrollada).
+ *
+ * El prompt vive en `lib/ai/copyPrompt.ts` y lo comparte con el portal — ver la
+ * nota de ese archivo sobre por qué se dejó de duplicar.
+ *
+ * Tres entradas al prompt, y las tres importan:
+ *   1. el contenido de la pieza (voz en off o slides),
+ *   2. el perfil de la MARCA, para que el copy hable de su proyecto y no salga
+ *      genérico,
+ *   3. si el guion tiene `source_post_id`, el post de competencia que lo
+ *      inspiró — SOLO como referencia de ángulo y ritmo (la regla dura contra
+ *      copiar sus datos va dentro del prompt, pegada al texto ajeno).
+ *
+ * Como en `/api/ai/cover` (etapa 8), el contenido se lee de la base filtrando
+ * `owner_id`: el body solo trae el id y la plataforma.
+ */
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
@@ -74,13 +47,16 @@ export async function POST(req: NextRequest) {
     if (!script_id || !platform) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
+    if (!isCopyPlatform(platform)) {
+      return NextResponse.json(
+        { error: `Todavía no hay copy para ${platform}.` },
+        { status: 400 },
+      );
+    }
 
-    // Igual que en `/api/ai/cover` (etapa 8): el contenido sale de la base
-    // filtrando `owner_id`, no del body. Una ruta que solo pide sesión y
-    // acepta el texto que le manden es una canilla de tokens abierta.
     const { data: script } = await supabase
       .from("scripts")
-      .select("type, content")
+      .select("type, title, brief, content, client_id, source_post_id, is_external")
       .eq("id", script_id)
       .eq("owner_id", user.id)
       .maybeSingle();
@@ -89,21 +65,70 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Ese guion no existe o no es tuyo." }, { status: 404 });
     }
 
-    const userPrompt = buildPrompt(
-      platform,
-      (script.content as Record<string, unknown> | null) ?? {},
-      (script.type as string | null) ?? "reel",
-    );
+    const scriptType = (script.type as string | null) ?? "reel";
 
-    let result: { copy: string; hashtags: string };
+    // Perfil de la marca. Si falla la lectura, se genera igual (sin contexto) en
+    // vez de romper: un copy genérico es peor que uno afinado, pero mucho mejor
+    // que un error en la cara.
+    const { data: client } = await supabase
+      .from("clients")
+      .select("nombre, marca, que_vende, cliente_ideal, nicho, dolor, deseo, tono, notas")
+      .eq("id", script.client_id as string)
+      .eq("owner_id", user.id)
+      .maybeSingle();
+
+    // La referencia de competencia, cuando el guion nació de un post ajeno
+    // (`source_post_id`, migración 0002) o cuando Paco lo eligió a mano al
+    // registrar una publicación externa.
+    let reference: CopyReference | null = null;
+    if (script.source_post_id) {
+      const { data: post } = await supabase
+        .from("competitor_posts")
+        .select("username, caption, transcription")
+        .eq("id", script.source_post_id as string)
+        .eq("owner_id", user.id)
+        .maybeSingle();
+      if (post) {
+        reference = {
+          username: (post.username as string | null) ?? null,
+          caption: (post.caption as string | null) ?? null,
+          transcript: (post.transcription as string | null) ?? null,
+        };
+      }
+    }
+
+    const userPrompt = buildCopyPrompt({
+      platform,
+      scriptType,
+      contentSummary: summarizeScriptContent(
+        scriptType,
+        (script.content as Record<string, unknown> | null) ?? {},
+      ),
+      brief: script.brief as string | null,
+      title: script.title as string | null,
+      brandContext: client ? buildClientContext(client) : null,
+      reference,
+      isExternal: script.is_external === true,
+    });
+
+    let result;
     try {
-      result = await generateJsonPlain<{ copy: string; hashtags: string }>({
+      const raw = await generateJsonPlain<{
+        copy_short?: string;
+        copy_long?: string;
+        copy?: string;
+        hashtags?: string;
+      }>({
         label: "copy",
         model: "claude-haiku-4-5-20251001",
-        maxTokens: 1024,
+        // Dos versiones en la misma respuesta: 1024 tokens se quedaban cortos y
+        // el corte por `max_tokens` dispara el reintento de `lib/ai/json.ts`,
+        // que es justo lo que hay que evitar cerca del límite de Netlify.
+        maxTokens: 2048,
         system: COPY_SYSTEM,
         userMessage: userPrompt,
       });
+      result = normalizeCopyResult(raw);
     } catch (e) {
       if (e instanceof AiJsonError) {
         return NextResponse.json({ error: "IA no devolvió JSON válido" }, { status: 500 });
@@ -111,7 +136,13 @@ export async function POST(req: NextRequest) {
       throw e;
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      // `copy` se mantiene por compatibilidad con cualquier cliente viejo que
+      // todavía lea el formato de una sola versión.
+      copy: result.copy_long,
+      used_reference: reference !== null,
+    });
   } catch (err) {
     console.error("[copy API]", err);
     return NextResponse.json(

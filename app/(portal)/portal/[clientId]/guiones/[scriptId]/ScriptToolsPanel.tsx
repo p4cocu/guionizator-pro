@@ -208,6 +208,31 @@ export default function ScriptToolsPanel({
           </p>
         ) : (
           <div className={s.copyBox}>
+            {/* Dos versiones desde la migración 0014. Los copys guardados antes
+                solo tienen la larga: ahí no se dibuja la corta. */}
+            {currentCopy.copyShort && (
+              <>
+                <p className={s.copyVersionLabel}>Versión corta</p>
+                <p className={s.copyText}>{currentCopy.copyShort}</p>
+                <button
+                  type="button"
+                  className={s.copyLink}
+                  onClick={() =>
+                    copiar(
+                      currentCopy.hashtags
+                        ? `${currentCopy.copyShort}\n\n${currentCopy.hashtags}`
+                        : currentCopy.copyShort,
+                      "copyShort",
+                    )
+                  }
+                >
+                  {copied === "copyShort" ? "¡Copiado!" : "Copiar versión corta"}
+                </button>
+                <p className={s.copyVersionLabel} style={{ marginTop: 18 }}>
+                  Versión detallada
+                </p>
+              </>
+            )}
             <p className={s.copyText}>{currentCopy.copy}</p>
             {currentCopy.hashtags && <p className={s.copyTags}>{currentCopy.hashtags}</p>}
             <button

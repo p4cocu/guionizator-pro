@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { looksLikePublicId, normalizePublicId } from "@/lib/competencia/publicId";
 
 export type ScriptType = "reel" | "carousel";
 
@@ -40,6 +41,12 @@ export type ScriptRow = {
    * "Generado por el cliente": el guion se trabaja igual que cualquier otro.
    */
   generated_by: string | null;
+  /**
+   * `true` = publicación externa (migración `0014`): el video se grabó FUERA de
+   * la app y esta fila existe para colgarle el copy y la portada. Su `content`
+   * es la descripción que escribió Paco en `voice_off`, no un guion generado.
+   */
+  is_external: boolean;
   clients: { nombre: string; marca: string | null } | null;
   has_resource?: boolean;
 };
@@ -194,6 +201,101 @@ export async function saveScriptWithNewIdea(data: {
   revalidatePath("/guiones");
   revalidatePath("/calendario");
   return script.id;
+}
+
+/**
+ * Registra una PUBLICACIÓN EXTERNA: un video o carrusel que ya se grabó fuera
+ * de la app (migración `0014`).
+ *
+ * No genera nada todavía. Crea la ficha mínima —marca, tipo, título y la
+ * descripción de qué trata— para que el copy y las portadas, que cuelgan de un
+ * `script_id`, tengan de dónde agarrarse. El formulario redirige después a
+ * `/guiones/<id>?autogen=1`, donde los dos paneles se disparan solos.
+ *
+ * Entra en estado `listo`: el video existe, lo que falta es publicarlo. No se
+ * crea entrada en `content_calendar` (a diferencia de `saveScriptWithNewIdea`):
+ * una pieza ya grabada normalmente se publica en días, y si hay que agendarla se
+ * vincula desde el modal del calendario, que ya sabe hacerlo.
+ *
+ * El ID de competencia es OPCIONAL y se resuelve entre TODAS las marcas del
+ * dueño, no solo la elegida: el reel que inspiró el video puede estar guardado
+ * en el tablero de otra marca. Se guarda en `source_post_id` —la misma columna
+ * que usa "Adaptar a mi marca"— y desde ahí lo lee `/api/ai/copy` como
+ * referencia de estilo. Si el ID no existe, NO se falla: se crea la publicación
+ * igual y el formulario avisa que la referencia no se encontró. Perder el
+ * contexto es molesto; perder el registro del video, peor.
+ */
+export async function createExternalPublication(input: {
+  client_id: string;
+  type: ScriptType;
+  title: string;
+  context: string;
+  source_public_id?: string | null;
+}): Promise<{ id: string; referenceFound: boolean; referenceUsername: string | null }> {
+  const { supabase, user } = await getAuthUser();
+
+  const context = input.context.trim();
+  if (!input.client_id) throw new Error("Elige la marca de la publicación.");
+  if (!context) throw new Error("Contá de qué trata el video para poder escribir el copy.");
+
+  // El `client_id` viene del browser: sin este chequeo se podría colgar una
+  // publicación de la marca de otro dueño (la FK no mira `owner_id`).
+  const { data: client } = await supabase
+    .from("clients")
+    .select("id")
+    .eq("id", input.client_id)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+  if (!client) throw new Error("Esa marca no existe o no es tuya.");
+
+  let sourcePostId: string | null = null;
+  let referenceUsername: string | null = null;
+  const rawPublicId = (input.source_public_id ?? "").trim();
+  if (rawPublicId) {
+    const publicId = normalizePublicId(rawPublicId);
+    if (looksLikePublicId(publicId)) {
+      const { data: post } = await supabase
+        .from("competitor_posts")
+        .select("id, username")
+        .eq("owner_id", user.id)
+        .eq("public_id", publicId)
+        .maybeSingle();
+      if (post) {
+        sourcePostId = post.id as string;
+        referenceUsername = (post.username as string | null) ?? null;
+      }
+    }
+  }
+
+  const { data: script, error } = await supabase
+    .from("scripts")
+    .insert({
+      owner_id: user.id,
+      client_id: input.client_id,
+      type: input.type,
+      brief: context,
+      structure_name: "Publicación externa",
+      title: input.title.trim() || null,
+      // `voice_off` sea reel o carrusel: es el campo que leen el prompt del
+      // copy y el de portadas, y el detalle dibuja las externas con el
+      // renderer de reel justamente por esto.
+      content: { voice_off: context },
+      brain_version_id: null,
+      status: "listo",
+      is_external: true,
+      source_post_id: sourcePostId,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/guiones");
+  return {
+    id: script.id as string,
+    referenceFound: sourcePostId !== null,
+    referenceUsername,
+  };
 }
 
 export async function updateScriptTitle(
@@ -452,7 +554,10 @@ export async function saveScriptVersion(
 export type ScriptCopy = {
   id: string;
   platform: string;
+  /** La versión desarrollada. */
   copy_text: string;
+  /** La versión corta (migración `0014`). `null` en las filas anteriores. */
+  copy_short: string | null;
   hashtags: string | null;
   created_at: string;
 };
@@ -461,7 +566,7 @@ export async function getScriptCopies(scriptId: string): Promise<ScriptCopy[]> {
   const { supabase, user } = await getAuthUser();
   const { data } = await supabase
     .from("script_copies")
-    .select("id, platform, copy_text, hashtags, created_at")
+    .select("id, platform, copy_text, copy_short, hashtags, created_at")
     .eq("script_id", scriptId)
     .eq("owner_id", user.id)
     .order("created_at", { ascending: false });
@@ -472,6 +577,7 @@ export async function saveScriptCopy(
   scriptId: string,
   platform: string,
   copyText: string,
+  copyShort: string,
   hashtags: string,
 ): Promise<void> {
   const { supabase, user } = await getAuthUser();
@@ -489,6 +595,7 @@ export async function saveScriptCopy(
     script_id: scriptId,
     platform,
     copy_text: copyText,
+    copy_short: copyShort || null,
     hashtags: hashtags || null,
   });
 

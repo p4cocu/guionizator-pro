@@ -630,3 +630,13 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* Etiqueta de cada versión del copy (migración 0014). */
+.copyVersionLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 6px;
+}

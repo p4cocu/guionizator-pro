@@ -90,15 +90,17 @@ type ReelViewerProps = {
   content: ReelContent;
   onRegenerate?: () => void;
   isRegenerating?: boolean;
+  /** Una publicación externa (0014) no tiene voz en off: tiene una descripción. */
+  voiceOffLabel?: string;
 };
 
-function ReelViewer({ content, onRegenerate, isRegenerating }: ReelViewerProps) {
+function ReelViewer({ content, onRegenerate, isRegenerating, voiceOffLabel }: ReelViewerProps) {
   const hasBlocks = (content.blocks?.length ?? 0) > 0;
 
   return (
     <div className={styles.scriptContainer}>
       <div className={styles.voiceOff}>
-        <p className={styles.voiceOffLabel}>Voz en off (teleprompter)</p>
+        <p className={styles.voiceOffLabel}>{voiceOffLabel ?? "Voz en off (teleprompter)"}</p>
         <p className={styles.voiceOffText}>{renderMarkdown(content.voice_off)}</p>
       </div>
 
@@ -479,6 +481,14 @@ type Props = {
   initialHooks: ScriptHook[];
   vaultHooks: Pick<Hook, "id" | "hook_template" | "category">[];
   initialCovers: ScriptCoverIdea[] | null;
+  /**
+   * Llega con `?autogen=1` desde el formulario de publicación externa: abre
+   * Copy Expert y Portadas y las dispara solas, para que registrar el video y
+   * tener copy + portada sea un solo viaje.
+   */
+  autoGenerate?: boolean;
+  /** Plataforma preseleccionada para el Copy Expert (`?platform=`). */
+  initialCopyPlatform?: string;
 };
 
 function formatDate(iso: string) {
@@ -491,7 +501,7 @@ function formatDate(iso: string) {
 
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
-export default function ScriptDetailClient({ script, versions, initialCopies, customStyles, ownResources, initialHooks, vaultHooks, initialCovers }: Props) {
+export default function ScriptDetailClient({ script, versions, initialCopies, customStyles, ownResources, initialHooks, vaultHooks, initialCovers, autoGenerate = false, initialCopyPlatform }: Props) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("view");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -508,9 +518,9 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
   const [recordingTypeError, setRecordingTypeError] = useState<string | null>(null);
-  const [showCopyPanel, setShowCopyPanel] = useState(false);
+  const [showCopyPanel, setShowCopyPanel] = useState(autoGenerate);
   const [showImagePanel, setShowImagePanel] = useState(false);
-  const [showCoverPanel, setShowCoverPanel] = useState(false);
+  const [showCoverPanel, setShowCoverPanel] = useState(autoGenerate);
   const [showCalModal, setShowCalModal] = useState(false);
 
   // Title editing
@@ -532,6 +542,12 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
   const downloadRef = useRef<HTMLDivElement>(null);
 
   const isReel = script.type === "reel";
+  // Publicación externa (migración 0014): el video se grabó fuera de la app y
+  // esta ficha existe para colgarle el copy y la portada. Su `content` es una
+  // descripción en `voice_off`, tenga el `type` que tenga — por eso el
+  // contenido se dibuja siempre con el renderer de reel.
+  const isExternal = script.is_external === true;
+  const useVoiceOffLayout = isReel || isExternal;
   const content = script.content as ReelContent | CarouselContent;
   const showVersions = versions.length > 1;
   // Restaurar una versión (etapa 9). "Vigente" es la fila con `is_latest`;
@@ -812,6 +828,11 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
             </span>
             <span style={{ marginRight: 8 }}>{script.structure_name}</span>
             {formatDate(script.created_at)}
+            {isExternal && (
+              <span className={styles.externalBadge} style={{ marginRight: 8 }}>
+                ⏺ Grabado fuera
+              </span>
+            )}
             {/* Lo generó el cliente desde su portal (add-on de IA, etapa 6). */}
             {script.generated_by && (
               <span className={styles.clientGenerated} style={{ marginLeft: 8 }}>
@@ -1067,16 +1088,18 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
 
       {/* ── Contenido ── */}
       {mode === "edit-manual" ? (
-        isReel ? (
+        useVoiceOffLayout ? (
           <ReelEditor content={editContent as ReelContent} onChange={setEditContent} />
         ) : (
           <CarouselEditor content={editContent as CarouselContent} onChange={setEditContent} />
         )
-      ) : isReel ? (
+      ) : useVoiceOffLayout ? (
         <ReelViewer
           content={content as ReelContent}
-          onRegenerate={handleGenerateBlocks}
+          // El guion de producción no aplica a un video que ya está grabado.
+          onRegenerate={isExternal ? undefined : handleGenerateBlocks}
           isRegenerating={isRegeneratingBlocks}
+          voiceOffLabel={isExternal ? "De qué trata el video" : undefined}
         />
       ) : (
         <CarouselViewer content={content as CarouselContent} />
@@ -1110,12 +1133,21 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
 
       {/* ── Copy Expert Panel ── */}
       {showCopyPanel && (
-        <CopyExpertPanel scriptId={script.id} initialCopies={initialCopies} />
+        <CopyExpertPanel
+          scriptId={script.id}
+          initialCopies={initialCopies}
+          autoGenerate={autoGenerate}
+          initialPlatform={initialCopyPlatform}
+        />
       )}
 
       {/* ── Cover Creator Panel ── */}
       {showCoverPanel && (
-        <CoverCreatorPanel scriptId={script.id} initialCovers={initialCovers} />
+        <CoverCreatorPanel
+          scriptId={script.id}
+          initialCovers={initialCovers}
+          autoGenerate={autoGenerate}
+        />
       )}
 
       {/* ── Modal: Agregar al calendario ── */}

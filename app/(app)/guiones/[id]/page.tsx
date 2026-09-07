@@ -9,10 +9,15 @@ import ClientFeedbackPanel from "./ClientFeedbackPanel";
 
 export default async function ScriptDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  // `?autogen=1&platform=…` lo pone el formulario de publicación externa
+  // (migración `0014`): abre Copy Expert y Portadas y los dispara solos.
+  searchParams: Promise<{ autogen?: string; platform?: string }>;
 }) {
   const { id } = await params;
+  const { autogen, platform } = await searchParams;
   const [result, copies, customStyles, ownResources, initialHooks, vaultHooks, savedCovers, feedback] =
     await Promise.all([
       getScriptWithVersions(id),
@@ -46,6 +51,8 @@ export default async function ScriptDetailPage({
         initialHooks={initialHooks}
         vaultHooks={vaultHooks}
         initialCovers={savedCovers?.covers ?? null}
+        autoGenerate={autogen === "1"}
+        initialCopyPlatform={platform}
       />
       {showFeedback && (
         <ClientFeedbackPanel

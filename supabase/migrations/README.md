@@ -40,6 +40,7 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0011 | `0011_papelera_guiones.sql` | ✅ 2026-08-17 (antes del deploy) |
 | 0012 | `0012_portal_display_names.sql` | ✅ 2026-08-18 (antes del deploy) |
 | 0013 | `0013_stripe_billing.sql` | ✅ 2026-08-24 (antes del deploy) |
+| 0014 | `0014_publicacion_externa.sql` | ✅ 2026-09-07 (antes del deploy) |
 
 ### 0013 va ANTES del deploy, y el backfill es lo que hace seguro el rollout
 
@@ -68,6 +69,16 @@ PostgREST expone las funciones del esquema `public`: sin ese revoke, un miembro
 del portal con su JWT podría llamar a `apply_credit_purchase` y regalarse
 créditos. El revoke es la parte que sostiene la seguridad, no un detalle de
 prolijidad.
+
+### 0014 también va ANTES del deploy
+
+Agrega `scripts.is_external` y `script_copies.copy_short`. Es aditiva y las dos
+columnas son nuevas, así que la app publicada hoy no las toca y sigue andando
+entre la migración y el deploy. Al revés no: el código nuevo **inserta**
+`is_external` al registrar una publicación externa y **selecciona**
+`copy_short` al leer los copys guardados; sin la migración, PostgREST devuelve
+error de columna inexistente y el Copy Expert deja de cargar (en el estudio y en
+el portal).
 
 ### La etapa 9 no llevó migración
 

@@ -56,6 +56,7 @@ estos, dilo explícitamente y entrega la migración a Paco.
 | Tabla / columna | Valores permitidos (deben coincidir con el `CHECK`) |
 |---|---|
 | `scripts.status` | `idea`, `preproduccion`, `produccion`, `listo`, `publicado`, `baul` |
+| `scripts.type` | `reel`, `carousel` |
 | `scripts.recording_type` | `voz_off`, `actuacion`, `actuacion_compu`, `actuacion_cel`, `compu`, `cel` |
 | `content_calendar.status` | `idea`, `etapa0`, `produccion`, `publicado` |
 | `resources.kind` | `capturado`, `universal` |
@@ -92,10 +93,37 @@ Columnas booleanas nuevas (sin `CHECK`, pero también requieren `ALTER TABLE` a 
 `scripts.featured` (`default false`) — guiones destacados para desarrollar pronto; se
 ordenan primero en `getScripts` y llevan borde amarillo. Toggle vía `toggleScriptFeatured`
 + `StarButton` (client, `stopPropagation` porque la tarjeta es un `<Link>`).
+`scripts.is_external` (`default false`, migración `0014`) — publicación grabada fuera de
+la app; ver "Publicación externa" más abajo.
 
 Además: los handlers de estos cambios (en `ScriptDetailClient.tsx`) capturan el error,
 revierten la UI optimista y muestran el mensaje en línea — **nunca** dejar un server
 action de mutación sin `try/catch` en el cliente (evita la pantalla "This page couldn't load").
+
+## ⚠️ `proxy.ts` es la ÚNICA edge function del sitio
+
+En Netlify todo el SSR corre en una Function (`___netlify-server-handler`) y lo
+único que corre en el edge es el middleware
+(`___netlify-edge-handler-node-middleware`), o sea `proxy.ts` → `updateSession`.
+Consecuencia práctica: **cualquier excepción que salga de ahí no se ve como un
+error de la app**, sino como la pantalla de Netlify *"This edge function has
+crashed / edge function invocation failed"* — sin CSS, sin sesión y sin nada que
+el usuario pueda hacer. Y los logs del edge no se retienen: al día siguiente no
+queda rastro para diagnosticar.
+
+`updateSession` llama a `supabase.auth.getUser()`, que es **una request de red**:
+un corte transitorio o un 5xx de Supabase alcanzaban para tumbar la pantalla
+entera. Por eso `proxy.ts` la envuelve en `try/catch` y, si falla, **deja pasar
+la request**. Eso no abre ningún agujero: el middleware nunca fue el candado
+real (lo son la RLS, `requirePortalClient` y el `getUser()` de cada server
+component), así que un request sin sesión que llegue hasta la página termina
+redirigido a `/login` igual. **No sacar ese `try/catch`.**
+
+⚠️ La otra causa de esa misma pantalla es que la Function detrás del edge
+**exceda el límite de Netlify** (~26-30s). Por eso las rutas de IA síncronas usan
+`MODEL_FAST` (ver el comentario de `/api/ai/cover`: con Sonnet daba 504) y por
+eso importa el aviso de `lib/ai/json.ts` sobre el reintento, que duplica la
+latencia del peor caso.
 
 ## ⚠️ Middleware (`proxy.ts`) y rutas server-to-server
 
@@ -577,8 +605,10 @@ muestra del lado del cliente.
   llamada) y exigen `generar_ia` prendido, igual que "Adaptar a mi marca".
   Se guardan en `script_covers` / `script_copies`, que son **owner-only**
   (`0006` no les dio policies de miembro): se leen y escriben con service role,
-  con `owner_id` del dueño. Prompts duplicados de `/api/ai/{cover,copy}`, misma
-  disciplina que el resto de este archivo.
+  con `owner_id` del dueño. El de portadas sigue siendo un **prompt duplicado**
+  de `/api/ai/cover`, misma disciplina que el resto de este archivo; el de copy
+  **ya no**: desde la migración `0014` los dos importan `lib/ai/copyPrompt.ts`
+  (ver "Publicación externa y copy en dos versiones").
 - **`ImagePromptsPanel` no se porta**: queda como herramienta interna.
 
 **Endurecimiento de `/api/ai/cover` y `/api/ai/copy`.** Las dos recibían el
@@ -868,6 +898,73 @@ si no un cliente suspendido no tendría desde dónde actualizar su tarjeta.
 
 **Facturación no lleva slug en `features.ts`** a propósito: agregarlo obligaría
 al `ALTER TABLE` del CHECK y no es algo que se prenda o apague por marca.
+
+## Publicación externa y copy en dos versiones (migración `0014`)
+
+El caso que faltaba: un video **grabado y editado fuera de la app** (por ejemplo
+tomando la idea de un reel de la competencia) que al momento de publicar
+necesita copy y portada. `Copy Expert` y `Creador de portadas` cuelgan de un
+`script_id`, así que sin guion no había puerta de entrada.
+
+**No se creó una herramienta paralela**: se registra la publicación como una
+fila de `scripts` con `is_external = true` y todo lo que ya cuelga de un guion
+(copy, portadas, calendario, versiones, feedback del portal) funciona igual.
+
+- **Entrada**: pestaña "Ya grabé el video" en `/guiones/nuevo?modo=externa`
+  (`NuevaPublicacionForm.tsx`). Las pestañas son links y no estado de cliente a
+  propósito: `NuevoGuionForm` son 1000+ líneas y no tiene sentido montarlo para
+  registrar una publicación externa.
+- `createExternalPublication` (`guiones/actions.ts`) crea la fila en estado
+  **`listo`** (el video existe, falta publicarlo), `structure_name =
+  "Publicación externa"`, `brief` = el contexto escrito, y **`content.voice_off`
+  = ese mismo contexto sea reel o carrusel** — es el campo que leen el prompt del
+  copy y el de portadas. Por eso el detalle dibuja las externas siempre con el
+  renderer de reel (`useVoiceOffLayout`), con la etiqueta "De qué trata el video"
+  en vez de "Voz en off" y sin el botón de guion de producción.
+- **No** crea entrada en `content_calendar` (a diferencia de
+  `saveScriptWithNewIdea`): una pieza ya grabada se publica en días, y si hay que
+  agendarla el modal del calendario ya sabe vincularla.
+- **El ID de competencia es opcional** y se resuelve entre **todas** las marcas
+  del dueño (el reel que inspiró el video puede estar en otro tablero). Se
+  guarda en `source_post_id` — la misma columna que usa "Adaptar a mi marca" — y
+  desde ahí lo lee `/api/ai/copy`. Si el ID no existe, la publicación se crea
+  igual: perder el contexto es molesto, perder el registro del video es peor.
+- El formulario redirige a `/guiones/<id>?autogen=1&platform=…`, y ahí
+  `ScriptDetailClient` abre y **dispara solos** Copy Expert y Portadas. Los dos
+  paneles traen un `useRef` de una sola línea que evita que el StrictMode de dev
+  mande dos llamadas a Claude.
+
+### El prompt del copy dejó de estar duplicado
+
+`lib/ai/copyPrompt.ts` es ahora la **única** definición del prompt de copy, y lo
+importan tanto `/api/ai/copy` (estudio) como `lib/portal/scriptTools.ts`
+(portal). Es la excepción a la disciplina de "prompts duplicados a propósito"
+que rige al resto de este archivo, y la razón es concreta: el copy pasó a tener
+**dos versiones** (`copy_short` directa + `copy_long` desarrollada) en la misma
+respuesta, y dos formatos de salida se desincronizan a la primera corrección.
+Lo que sigue separado es la **ejecución**, que es lo que justificaba la copia:
+el portal lee con service role, cobra cupo y cierra con `settleGeneration`.
+El prompt de **portadas sigue duplicado** (`/api/ai/cover` vs `scriptTools.ts`).
+
+- Las dos versiones se piden en **una sola llamada**: dos llamadas costarían el
+  doble de cupo en el portal y darían textos que no se hablan entre sí.
+- `script_copies.copy_short` es **nullable**: los copys guardados antes de `0014`
+  tienen solo la larga y la UI no inventa la corta.
+- `normalizeCopyResult` acepta también el formato viejo (`{copy, hashtags}`), así
+  que un reintento del modelo que caiga en él no se pierde.
+- **`maxTokens` subió a 2048** en las dos rutas: con 1024 la respuesta se cortaba
+  por `max_tokens` y eso dispara el reintento de `lib/ai/json.ts`, que es justo
+  lo que hay que evitar cerca del límite de Netlify.
+- El prompt recibe además el **perfil de la marca** (`lib/ai/clientContext.ts`,
+  compartido con `/api/ai/script`). En el portal entra **sin `notas`**
+  (apuntes internos): `includeNotes: false` está para eso.
+- La referencia de competencia entra con una **regla dura pegada al texto ajeno**
+  ("prohibido reutilizar sus datos, cifras, nombres, ofertas o afirmaciones"):
+  se usa el ángulo y el ritmo, no el proyecto. Va junto al dato y no en el system
+  prompt porque ahí es donde el modelo la respeta.
+- **Plataformas**: `COPY_PLATFORMS` es la fuente de verdad. Instagram y LinkedIn
+  generan; TikTok y YouTube se dibujan con `soon: true` y no generan. YouTube no
+  es solo otro tono: pide título + descripción, o sea otra forma de salida.
 
 ## Respuestas JSON de la IA (`lib/ai/json.ts`)
 

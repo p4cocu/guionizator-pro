@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { saveScriptCovers, type ScriptCoverIdea } from "../actions";
 import styles from "../guiones.module.css";
 
@@ -12,9 +12,11 @@ import styles from "../guiones.module.css";
 type Props = {
   scriptId: string;
   initialCovers: ScriptCoverIdea[] | null;
+  /** Llega en `?autogen=1` desde el registro de una publicación externa. */
+  autoGenerate?: boolean;
 };
 
-export default function CoverCreatorPanel({ scriptId, initialCovers }: Props) {
+export default function CoverCreatorPanel({ scriptId, initialCovers, autoGenerate = false }: Props) {
   const [covers, setCovers] = useState<ScriptCoverIdea[] | null>(initialCovers);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +73,16 @@ export default function CoverCreatorPanel({ scriptId, initialCovers }: Props) {
     setCopied(idx);
     setTimeout(() => setCopied(null), 2000);
   }
+
+  // Autogeneración al llegar desde el formulario de publicación externa. El ref
+  // evita que el StrictMode de dev dispare DOS llamadas a Claude.
+  const autoFired = useRef(false);
+  useEffect(() => {
+    if (!autoGenerate || autoFired.current || covers) return;
+    autoFired.current = true;
+    void generate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoGenerate]);
 
   return (
     <div className={styles.copyPanel}>

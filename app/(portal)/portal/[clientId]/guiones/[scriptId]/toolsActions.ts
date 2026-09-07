@@ -112,7 +112,7 @@ export async function generarCopy(
     const { user, ctx, state } = await gate(clientId);
 
     const script = await loadClientScript(clientId, scriptId);
-    const copy = await generateCopy(script, platform);
+    const copy = await generateCopy(script, platform, clientId);
 
     await settleGeneration({
       state,

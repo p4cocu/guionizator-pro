@@ -2474,3 +2474,58 @@
   opacity: 1;
   color: var(--text-muted);
 }
+
+/* ── Pestañas de /guiones/nuevo: generar guion vs. registrar publicación
+   externa (migración 0014) ────────────────────────────────────────────── */
+.modeTabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.modeTab {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.modeTab:hover {
+  color: var(--text);
+  border-color: var(--border-strong, var(--border));
+}
+
+.modeTabActive {
+  color: var(--text);
+  border-color: var(--signal);
+  background: color-mix(in srgb, var(--signal) 12%, transparent);
+}
+
+/* Publicación grabada fuera de la app. */
+.externalBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--signal);
+  border: 1px solid color-mix(in srgb, var(--signal) 40%, transparent);
+  background: color-mix(in srgb, var(--signal) 10%, transparent);
+}
+
+/* Aclaración chica al lado del label de cada versión del copy. */
+.copyVersionHint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}

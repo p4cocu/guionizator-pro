@@ -37,7 +37,14 @@ import path from "path";
 import { createServiceClient } from "../supabase/service";
 import { MODEL_FAST } from "../ai/anthropic";
 import { generateJsonPlain } from "../ai/json";
-import { PortalGenerationError } from "./generate";
+import {
+  buildCopyPrompt,
+  COPY_SYSTEM,
+  isCopyPlatform,
+  normalizeCopyResult,
+  summarizeScriptContent,
+} from "../ai/copyPrompt";
+import { loadGenerationContext, PortalGenerationError } from "./generate";
 import {
   isPortalCopyPlatform,
   type PortalCoverIdea,
@@ -206,80 +213,82 @@ export async function saveCovers(
 
 // ─── Copy ────────────────────────────────────────────────────────────────────
 
-const COPY_SYSTEM = `Eres un experto en copywriting para redes sociales en español latinoamericano.
-Tu tarea es transformar guiones de video/carrusel en copies optimizados para publicaciones en redes sociales.
-Escribes en español latinoamericano, tuteo, sin tecnicismos innecesarios.
-Siempre devuelves un JSON válido con la estructura indicada.`;
-
-function buildCopyPrompt(
-  platform: string,
-  content: Record<string, unknown> | null,
-  type: string | null,
-): string {
-  const contentStr = JSON.stringify(content ?? {}, null, 2);
-
-  if (platform === "linkedin") {
-    return `Crea el copy para LinkedIn de este ${type === "carousel" ? "carrusel" : "video"}.
-
-GUION:
-${contentStr}
-
-El copy de LinkedIn debe:
-- Gancho en la primera línea (frase directa, no clickbait)
-- Storytelling profesional de 200-380 palabras
-- Estructura con párrafos cortos (1-3 oraciones máximo por párrafo)
-- Sin emojis excesivos (máximo 2-3 si aportan)
-- CTA orientado a conversación o conexión profesional
-- De 3 a 5 hashtags al final
-
-Devuelve ÚNICAMENTE este JSON (sin markdown, sin explicaciones):
-{"copy": "texto completo del copy con saltos de línea", "hashtags": "#hashtag1 #hashtag2 #hashtag3"}`;
-  }
-
-  return `Crea el copy para Instagram de este ${type === "carousel" ? "Carrusel" : "Reel"}.
-
-GUION:
-${contentStr}
-
-El copy de Instagram debe:
-- Tener un gancho en la primera línea (máximo 2 oraciones antes del "más")
-- Cuerpo de 120-280 palabras que desarrolla el tema con valor real
-- CTA claro al final
-- Emojis estratégicos (no exagerados, 3-6 por copy)
-- De 15 a 20 hashtags relevantes (mezcla nicho específico + amplio + marca)
-- Tono conversacional y auténtico
-
-Devuelve ÚNICAMENTE este JSON (sin markdown, sin explicaciones):
-{"copy": "texto completo del copy con emojis y saltos de línea", "hashtags": "#hashtag1 #hashtag2 ... (todos los hashtags en una línea)"}`;
-}
-
+/**
+ * El copy del portal usa **el mismo prompt que el estudio**
+ * (`lib/ai/copyPrompt.ts`) desde la migración `0014`.
+ *
+ * Antes estaba duplicado acá, con la excusa de que `/api/ai/copy` es un handler
+ * y no un módulo importable. Con el copy en dos versiones esa copia se volvía
+ * cara: dos formatos de salida que se desincronizan a la primera corrección.
+ * Lo que sigue siendo distinto es la EJECUCIÓN, que es lo que justificaba la
+ * separación: acá se lee con service role, se cobra cupo y se cierra con
+ * `settleGeneration`.
+ *
+ * El contexto de la marca entra **sin `notas`** (`loadGenerationContext`): son
+ * apuntes internos y todo lo que entra al prompt puede salir parafraseado.
+ */
 export async function generateCopy(
   script: ToolScript,
   platform: string,
+  clientId?: string,
 ): Promise<PortalScriptCopy> {
-  if (!isPortalCopyPlatform(platform)) {
+  if (!isPortalCopyPlatform(platform) || !isCopyPlatform(platform)) {
     throw new PortalGenerationError("Esa plataforma no está disponible.", 400);
   }
 
-  const result = await generateJsonPlain<{ copy?: string; hashtags?: string }>({
+  // Si el contexto de la marca falla, se genera igual: un copy más genérico es
+  // mejor que un error después de haber chequeado el cupo.
+  let brandContext: string | null = null;
+  if (clientId) {
+    try {
+      brandContext = (await loadGenerationContext(clientId)).clientContext;
+    } catch {
+      brandContext = null;
+    }
+  }
+
+  const result = await generateJsonPlain<{
+    copy_short?: string;
+    copy_long?: string;
+    copy?: string;
+    hashtags?: string;
+  }>({
     label: "portal:copy",
     model: MODEL_FAST,
-    maxTokens: 1024,
+    // Dos versiones en una sola respuesta necesitan más techo que las 1024 de
+    // antes; quedarse corto dispara el reintento de `lib/ai/json.ts`.
+    maxTokens: 2048,
     system: COPY_SYSTEM,
-    userMessage: buildCopyPrompt(platform, script.content, script.type),
+    userMessage: buildCopyPrompt({
+      platform,
+      scriptType: script.type ?? "reel",
+      contentSummary: summarizeScriptContent(script.type ?? "reel", script.content),
+      brief: script.brief,
+      title: script.title,
+      brandContext,
+    }),
   });
 
-  const copy = (result.copy ?? "").trim();
-  if (!copy) throw new PortalGenerationError("La IA no devolvió el copy. Intenta de nuevo.", 502);
+  let normalized;
+  try {
+    normalized = normalizeCopyResult(result);
+  } catch {
+    throw new PortalGenerationError("La IA no devolvió el copy. Intenta de nuevo.", 502);
+  }
 
-  return { platform, copy, hashtags: (result.hashtags ?? "").trim() };
+  return {
+    platform,
+    copy: normalized.copy_long,
+    copyShort: normalized.copy_short,
+    hashtags: normalized.hashtags,
+  };
 }
 
 /** Copies guardados de un guion, uno por plataforma. */
 export async function loadCopies(scriptId: string): Promise<PortalScriptCopy[]> {
   const { data } = await createServiceClient()
     .from("script_copies")
-    .select("platform, copy_text, hashtags")
+    .select("platform, copy_text, copy_short, hashtags")
     .eq("script_id", scriptId)
     .order("created_at", { ascending: false });
 
@@ -292,6 +301,7 @@ export async function loadCopies(scriptId: string): Promise<PortalScriptCopy[]> 
     out.push({
       platform,
       copy: (row.copy_text as string) ?? "",
+      copyShort: (row.copy_short as string | null) ?? "",
       hashtags: (row.hashtags as string | null) ?? "",
     });
   }
@@ -318,6 +328,7 @@ export async function saveCopy(
     script_id: scriptId,
     platform: copy.platform,
     copy_text: copy.copy,
+    copy_short: copy.copyShort || null,
     hashtags: copy.hashtags || null,
   });
 
