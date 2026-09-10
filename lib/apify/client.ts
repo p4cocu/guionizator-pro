@@ -192,26 +192,28 @@ export async function scrapeCompetitorPosts(opts: {
   const items = (await res.json()) as RawApifyPost[];
   if (!Array.isArray(items)) return [];
 
-  return items
-    .filter((it) => !it.error && (it.shortCode || it.url))
-    .map((it): ScrapedPost => {
-      const followers = it.ownerFollowersCount ?? it.followersCount;
-      return {
-        username: toUsername(it.ownerUsername ?? ""),
-        ownerFullName: it.ownerFullName,
-        shortcode: it.shortCode,
-        permalink:
-          it.url ?? (it.shortCode ? `https://www.instagram.com/p/${it.shortCode}/` : undefined),
-        type: normalizeType(it.type),
-        caption: it.caption,
-        likes: it.likesCount ?? 0,
-        comments: it.commentsCount ?? 0,
-        videoViews: it.videoViewCount ?? it.videoPlayCount,
-        videoUrl: it.videoUrl,
-        followers: typeof followers === "number" ? followers : undefined,
-        postedAt: it.timestamp,
-      };
-    });
+  return items.filter((it) => !it.error && (it.shortCode || it.url)).map(normalizePost);
+}
+
+/** Una fila cruda de Apify → nuestra forma. Compartida por el scrape de perfiles
+ *  y el pedido de un post suelto, para que las dos vías guarden lo mismo. */
+function normalizePost(it: RawApifyPost): ScrapedPost {
+  const followers = it.ownerFollowersCount ?? it.followersCount;
+  return {
+    username: toUsername(it.ownerUsername ?? ""),
+    ownerFullName: it.ownerFullName,
+    shortcode: it.shortCode,
+    permalink:
+      it.url ?? (it.shortCode ? `https://www.instagram.com/p/${it.shortCode}/` : undefined),
+    type: normalizeType(it.type),
+    caption: it.caption,
+    likes: it.likesCount ?? 0,
+    comments: it.commentsCount ?? 0,
+    videoViews: it.videoViewCount ?? it.videoPlayCount,
+    videoUrl: it.videoUrl,
+    followers: typeof followers === "number" ? followers : undefined,
+    postedAt: it.timestamp,
+  };
 }
 
 /**
@@ -227,6 +229,33 @@ export async function fetchFreshVideoUrl(
   token: string,
   permalink: string,
 ): Promise<string | null> {
+  const post = await fetchSinglePost(token, permalink);
+  return post?.videoUrl ?? null;
+}
+
+/**
+ * Le pide a Apify UN post puntual por su URL directa y devuelve todo lo que
+ * trae: likes, comentarios, vistas, el @cuenta real, el texto y la fecha de
+ * publicación. `directUrls` acepta tanto perfiles como posts/reels sueltos.
+ *
+ * Lo usan dos caminos:
+ *   - `fetchFreshVideoUrl`, cuando el `video_url` guardado ya expiró y hay que
+ *     transcribir sin recorrer el perfil entero;
+ *   - `enrichSavedPost` (`lib/competencia/enrich.ts`), para completar las
+ *     métricas de un link que alguien guardó a mano.
+ *
+ * ⚠️ **Timeout propio de 20s.** Esto corre dentro de una server action, o sea
+ * dentro de la Netlify Function, que se muere a los ~26-30s — y cuando se muere
+ * el usuario ve la pantalla de "edge function crashed", no un error de la app
+ * (ver CLAUDE.md). Cortar antes por las nuestras deja que el llamador falle
+ * limpio y muestre un mensaje.
+ *
+ * Devuelve `null` si el post ya no existe o Apify no devolvió nada usable.
+ */
+export async function fetchSinglePost(
+  token: string,
+  permalink: string,
+): Promise<ScrapedPost | null> {
   const url = `${APIFY_BASE}/acts/${ACTOR_ID}/run-sync-get-dataset-items?token=${encodeURIComponent(
     token,
   )}`;
@@ -241,6 +270,7 @@ export async function fetchFreshVideoUrl(
       addParentData: false,
     }),
     cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
   });
 
   if (!res.ok) {
@@ -255,6 +285,7 @@ export async function fetchFreshVideoUrl(
   }
 
   const items = (await res.json()) as RawApifyPost[];
-  const item = items.find((it) => !it.error);
-  return item?.videoUrl ?? null;
+  if (!Array.isArray(items)) return null;
+  const item = items.find((it) => !it.error && (it.shortCode || it.url));
+  return item ? normalizePost(item) : null;
 }

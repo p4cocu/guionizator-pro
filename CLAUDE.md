@@ -161,11 +161,18 @@ porque no lanzó excepción).
   propio umbral; hoy es una sola función y por eso las dos reglas rigen en los dos
   lados:
 
-  | Fila | Vive |
-  |---|---|
-  | Scrapeada, sin estrella | **40 días** desde `posted_at` |
-  | Guardada a mano (`is_manual`) | **120 días** (3 × 40) |
-  | Scrapeada y con estrella | para siempre |
+  | Fila | Vive | Se mide contra |
+  |---|---|---|
+  | Scrapeada, sin estrella | **40 días** | `posted_at` |
+  | Guardada a mano (`is_manual`) | **120 días** (3 × 40) | `scraped_at` |
+  | Scrapeada y con estrella | para siempre | — |
+
+  ⚠️ **Los manuales se miden contra `scraped_at`, no contra `posted_at`.** Apenas
+  se guarda un link, `enrichSavedPost` le pone la **fecha real de publicación**,
+  que puede ser de hace meses: midiendo contra `posted_at`, ese link nacería
+  vencido y el cron lo borraría la misma noche en que el cliente lo guardó.
+  `scraped_at` (`default now()`) es el momento en que entró a la base, que es el
+  reloj que se quiere.
 
   Los 120 días de los manuales son de 2026-09-10: desde el portal el cliente pega
   links y **nacen con la estrella**, así que bajo la regla vieja ("los favoritos
@@ -782,6 +789,35 @@ Fuente de verdad del parseo: `lib/competencia/savedLink.ts` (módulo puro, lo
 comparten servidor y cliente). Se aceptan links que no sean de Instagram: la
 tarjeta pierde el embed y las herramientas de video, pero sirve como referencia
 con notas.
+
+**Las métricas se completan solas, en un segundo viaje** (`lib/competencia/
+enrich.ts` → `enrichSavedPost`, vía `fetchSinglePost` de `lib/apify/client.ts`).
+Un link pegado a mano entra con likes, comentarios y vistas en cero: los números
+que se ven en la portada **los dibuja el embed de Instagram** dentro de un iframe
+de otro dominio y la página no puede leerlos. La única fuente es Apify, que
+devuelve además el @cuenta real, el texto y la fecha de publicación — o sea que
+el enriquecido también hace desaparecer el "Cuenta sin identificar".
+
+- **No va adentro del guardado, a propósito.** Una corrida de Apify tarda entre
+  5 y 20 segundos: meterla en el camino del guardado convertiría un "pegar y
+  listo" en una espera bloqueada, y perdería el link si Apify falla. La pantalla
+  guarda, pinta la tarjeta y recién ahí llama a `enrichPortalPost`.
+- **`fetchSinglePost` corta a los 20s por las suyas** (`AbortSignal.timeout`).
+  Corre dentro de una server action, o sea dentro de la Netlify Function, que se
+  muere a los ~26-30s — y cuando se muere, el usuario ve la pantalla de "edge
+  function crashed", no un error de la app.
+- **Fallar es un caso normal, no un error**, y por eso no se le muestra al
+  cliente: la marca puede no tener token de Apify (el global es exclusivo del
+  super admin), el post puede ser privado, Apify puede tardar de más. El link ya
+  quedó guardado y sirve igual con ceros.
+- Cuesta **una corrida de Apify del token de esa marca**. No cuesta cupo de IA
+  ni créditos: no interviene ningún modelo.
+
+⚠️ **La nota inicial vuelve dentro de la respuesta de `savePortalLink`.** La
+pantalla mete el post nuevo en su `useState` y `revalidatePath` no toca un estado
+inicializado desde props: sin devolverla, la nota quedaba guardada en la base
+pero invisible hasta recargar. (Bug encontrado el 2026-09-10 probando en
+producción; el mismo cuidado vale para cualquier cosa que estas actions creen.)
 
 **Notas** (`competitor_post_comments`, migración `0015`) — un hilo por post, en
 **cualquier** post: guardado a mano o scrapeado. Es un calco de `script_comments`

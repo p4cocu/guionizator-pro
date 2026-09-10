@@ -11,11 +11,11 @@
  *
  * ## Las reglas
  *
- * | Fila                                   | Vive        |
- * |----------------------------------------|-------------|
- * | Scrapeada, sin estrella                | 40 días     |
- * | Guardada a mano (`is_manual`)          | 120 días    |
- * | Scrapeada y con estrella               | para siempre|
+ * | Fila                            | Vive         | Se mide contra |
+ * |---------------------------------|--------------|----------------|
+ * | Scrapeada, sin estrella         | 40 días      | `posted_at`    |
+ * | Guardada a mano (`is_manual`)   | 120 días     | `scraped_at`   |
+ * | Scrapeada y con estrella        | para siempre | —              |
  *
  * Los 120 días son 3 × 40, decisión de Paco (2026-09-10). El caso que los pide:
  * desde el portal el cliente pega links y **nacen con la estrella puesta**, así
@@ -29,15 +29,22 @@
  * (un cliente que marca todo), el arreglo es darle también 120 días acá, en un
  * solo lugar.
  *
- * El corte se mide contra `posted_at`, no contra `scraped_at`: es la fecha del
- * contenido y no la de nuestra base. Para un guardado a mano `posted_at` es el
- * momento en que se guardó… salvo que un scrape posterior de esa misma cuenta
- * lo pise con la fecha real de publicación (el upsert va por `shortcode`, y el
- * link guardado trae shortcode). En ese caso el post pasa a envejecer por su
- * fecha verdadera, que es lo correcto.
+ * ## Por qué los manuales se miden contra `scraped_at`
  *
- * Las filas sin `posted_at` no se borran nunca: sin fecha no hay antigüedad que
- * medir, y borrar por las dudas es peor que dejarlas.
+ * Para lo scrapeado, `posted_at` es lo correcto: la antigüedad del contenido es
+ * la del contenido, no la de nuestra base. Para un guardado a mano, no: apenas
+ * se guarda, `enrichSavedPost` le pone la **fecha real de publicación**, que
+ * puede ser de hace ocho meses. Midiendo contra `posted_at`, ese link nacería
+ * vencido y el cron lo borraría la misma noche en que el cliente lo guardó.
+ *
+ * `scraped_at` (`default now()`) es el momento en que entró a nuestra base, que
+ * es exactamente el reloj que se quiere: 120 días desde que alguien lo guardó.
+ * Si más adelante un scrape del perfil lo vuelve a tocar, el reloj se reinicia
+ * — correcto, porque esa cuenta sigue siendo competencia activa de la marca.
+ *
+ * Las filas sin `posted_at` no se borran por la primera regla: sin fecha no hay
+ * antigüedad que medir, y borrar por las dudas es peor que dejarlas. La segunda
+ * no necesita esa salvaguarda: `scraped_at` es `not null`.
  *
  * Los comentarios de cada post (`competitor_post_comments`) se van con él por
  * el `on delete cascade` de la migración `0015` — acá no hay que borrarlos.
@@ -61,7 +68,7 @@ export type PurgeScope = {
 export type PurgeResult = {
   /** Scrapeados sin estrella, más viejos que RETENTION_DAYS. */
   scraped: number;
-  /** Guardados a mano, más viejos que MANUAL_RETENTION_DAYS. */
+  /** Guardados a mano, con más de MANUAL_RETENTION_DAYS en nuestra base. */
   manual: number;
 };
 
@@ -105,8 +112,9 @@ export async function purgeExpiredPosts(
     .from("competitor_posts")
     .delete({ count: "exact" })
     .eq("is_manual", true)
-    .lt("posted_at", cutoffISO(MANUAL_RETENTION_DAYS))
-    .not("posted_at", "is", null);
+    // ⚠️ `scraped_at`, NO `posted_at`: el enriquecido le pone la fecha real de
+    // publicación, que puede ser vieja. Ver el comentario de arriba.
+    .lt("scraped_at", cutoffISO(MANUAL_RETENTION_DAYS));
   if (scope.ownerId) manualQuery = manualQuery.eq("owner_id", scope.ownerId);
   if (scope.clientId) manualQuery = manualQuery.eq("client_id", scope.clientId);
 

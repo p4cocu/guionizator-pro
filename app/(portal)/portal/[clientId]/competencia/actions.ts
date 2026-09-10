@@ -32,6 +32,7 @@ import { getBillingState } from "@/lib/billing/access";
 import { effectiveLimit, PLAN_TRANSCRIPTIONS } from "@/lib/billing/plan";
 import { addPostComment, type PostComment } from "@/lib/competencia/postComments";
 import { saveLinkForClient, deletePostForClient } from "@/lib/portal/competencia";
+import { enrichSavedPost } from "@/lib/competencia/enrich";
 import type { SavedLinkType } from "@/lib/competencia/savedLink";
 import {
   adaptCompetitorPost,
@@ -232,7 +233,19 @@ export async function toggleClientFavorite(
 // ─── Guardar links, notas y borrado ──────────────────────────────────────────
 
 export type SaveLinkActionResult =
-  | { ok: true; post: Record<string, unknown>; alreadyExisted: boolean }
+  | {
+      ok: true;
+      post: Record<string, unknown>;
+      alreadyExisted: boolean;
+      /**
+       * La nota inicial, ya creada. **Tiene que volver acá**: la pantalla mete
+       * el post nuevo en su estado local y `revalidatePath` no toca un `useState`
+       * que se inicializó desde props, así que sin esto la nota quedaba guardada
+       * en la base pero invisible hasta recargar la página. (Bug encontrado el
+       * 2026-09-10 probando en producción.)
+       */
+      comment: PostComment | null;
+    }
   | { ok: false; error: string };
 
 /**
@@ -249,6 +262,9 @@ export type SaveLinkActionResult =
  * `competitor_post_comments_member_insert` ya la cubre) mientras que el post va
  * con service role — a propósito: el autor de la nota tiene que ser la persona,
  * y el trigger `set_owner_from_client` necesita ver `auth.uid()`.
+ *
+ * Devuelve la nota junto con el post: la pantalla la necesita para pintarla sin
+ * recargar (ver el comentario de `SaveLinkActionResult`).
  */
 export async function savePortalLink(
   clientId: string,
@@ -279,8 +295,9 @@ export async function savePortalLink(
 
     // Si la nota falla, el link igual quedó guardado: perder la nota es
     // molesto, perder el link (y hacérselo pegar de nuevo) es peor.
+    let comment: PostComment | null = null;
     if (input.note.trim()) {
-      await addPostComment(supabase, {
+      comment = await addPostComment(supabase, {
         postId: post.id as string,
         clientId,
         authorId: user.id,
@@ -288,11 +305,12 @@ export async function savePortalLink(
         isOwner: user.id === ownerId,
       }).catch((e) => {
         console.error("[portal/competencia] no se pudo guardar la nota inicial:", e);
+        return null;
       });
     }
 
     revalidatePath(`/portal/${clientId}/competencia`);
-    return { ok: true, post, alreadyExisted };
+    return { ok: true, post, alreadyExisted, comment };
   } catch (e) {
     rethrowIfNextControlFlow(e);
     return {
@@ -391,6 +409,61 @@ export async function deletePortalPost(
     return {
       ok: false,
       error: e instanceof Error ? e.message : "No se pudo borrar la publicación.",
+    };
+  }
+}
+
+export type EnrichActionResult =
+  | { ok: true; fields: Record<string, unknown> }
+  | { ok: false; error: string };
+
+/**
+ * Completa las métricas de un link recién guardado (likes, comentarios, vistas,
+ * el @cuenta real, el texto y la fecha de publicación).
+ *
+ * La llama la pantalla **después** de que el guardado respondió, no el guardado
+ * mismo: la tarjeta aparece al instante y los números entran unos segundos
+ * después. Una corrida de Apify tarda entre 5 y 20 segundos y meterla en el
+ * camino del guardado dejaría al cliente mirando un botón girando — y perdería
+ * el link si Apify falla.
+ *
+ * Cuesta **una corrida de Apify cargada al token de esa marca**, la misma
+ * cadena de siempre (token del cliente → global, que es exclusivo del super
+ * admin). No cuesta cupo de IA ni créditos: no interviene ningún modelo.
+ *
+ * Fallar acá es un caso normal, no un error: la marca puede no tener token, el
+ * post puede ser privado o Apify puede tardar de más. El post ya está guardado
+ * y sigue sirviendo con las métricas en cero, así que el mensaje vuelve para el
+ * log y la pantalla no lo muestra como falla.
+ */
+export async function enrichPortalPost(
+  clientId: string,
+  postId: string,
+): Promise<EnrichActionResult> {
+  try {
+    const { user } = await requirePortalSession();
+    const client = await requirePortalClient(user.id, clientId, "competencia");
+
+    if (client.role === "viewer") {
+      return { ok: false, error: "Tu acceso es de solo lectura." };
+    }
+
+    const admin = createServiceClient();
+    const ownerId = await getClientOwnerId(clientId);
+    const res = await enrichSavedPost(admin, { postId, clientId, ownerId });
+
+    if (!res.ok) {
+      console.error("[portal/competencia] no se pudieron traer las métricas:", res.reason);
+      return { ok: false, error: res.reason };
+    }
+
+    revalidatePath(`/portal/${clientId}/competencia`);
+    return { ok: true, fields: res.fields };
+  } catch (e) {
+    rethrowIfNextControlFlow(e);
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudieron traer las métricas.",
     };
   }
 }

@@ -32,6 +32,7 @@ import {
   savePortalLink,
   addPortalPostComment,
   deletePortalPost,
+  enrichPortalPost,
 } from "./actions";
 import AdaptModal from "./AdaptModal";
 import s from "./competencia.module.css";
@@ -140,6 +141,9 @@ export default function CompetenciaPortalClient({
   // dibuja el diálogo de confirmación: borrar no tiene vuelta atrás.
   const [porBorrar, setPorBorrar] = useState<PortalPost | null>(null);
   const [borrando, setBorrando] = useState(false);
+  // Los links recién guardados a los que se les están pidiendo las métricas a
+  // Apify. Es solo para dibujar "trayendo datos…" en esa tarjeta.
+  const [enriqueciendo, setEnriqueciendo] = useState<Set<string>>(new Set());
 
   const transcriptionBlocked = transcriptionRemaining !== null && transcriptionRemaining <= 0;
   // Agotar el cupo del ciclo NO bloquea si quedan créditos comprados: esos no
@@ -273,6 +277,7 @@ export default function CompetenciaPortalClient({
     try {
       const res = await savePortalLink(clientId, input);
       if (!res.ok) return res.error;
+      const { alreadyExisted } = res;
 
       // Un guardado a mano nunca es outlier: no tiene métricas con las que
       // compararse contra la mediana de su cuenta.
@@ -292,12 +297,53 @@ export default function CompetenciaPortalClient({
         copia[idx] = { ...prev[idx], ...(res.post as unknown as PortalPostBase) };
         return copia;
       });
+      // La nota inicial se pinta acá y no en el hilo: `revalidatePath` no toca
+      // este `useState`, así que sin esto quedaba guardada pero invisible.
+      if (res.comment) {
+        const nota = res.comment;
+        setComentarios((prev) => ({
+          ...prev,
+          [nota.postId]: [...(prev[nota.postId] ?? []), nota],
+        }));
+      }
       setPorBorrar(null);
       // El embed necesita el DOM ya actualizado; React puede diferir el render.
       setTimeout(() => window.instgrm?.Embeds.process(), 800);
+      // Las métricas van en un segundo viaje, ya con la tarjeta en pantalla:
+      // la corrida de Apify tarda entre 5 y 20 segundos y no vale la pena
+      // hacer esperar a nadie para ver un número. Si falla, la tarjeta se
+      // queda con ceros y no se muestra ningún error: el link ya se guardó.
+      if (!alreadyExisted) void enriquecer(nuevo.id);
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : "No se pudo guardar el link.";
+    }
+  }
+
+  /**
+   * Pide las métricas reales a Apify y las mete en la tarjeta. No devuelve
+   * error a la UI a propósito: que la marca no tenga token de Apify, o que el
+   * post sea privado, es un caso normal y el link ya quedó guardado.
+   */
+  async function enriquecer(postId: string) {
+    setEnriqueciendo((prev) => new Set(prev).add(postId));
+    try {
+      const res = await enrichPortalPost(clientId, postId);
+      if (res.ok) {
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId ? ({ ...p, ...(res.fields as Partial<PortalPost>) } as PortalPost) : p,
+          ),
+        );
+      }
+    } catch {
+      // Silencio deliberado: ver el comentario de arriba.
+    } finally {
+      setEnriqueciendo((prev) => {
+        const copia = new Set(prev);
+        copia.delete(postId);
+        return copia;
+      });
     }
   }
 
@@ -458,6 +504,7 @@ export default function CompetenciaPortalClient({
                 onFavorite={() => handleFavorite(p)}
                 canDelete={canDelete}
                 onDelete={() => setPorBorrar(p)}
+                enriqueciendo={enriqueciendo.has(p.id)}
                 comments={comentarios[p.id] ?? []}
                 onComment={(body) => handleComment(p.id, body)}
                 error={errorFor?.id === p.id ? errorFor.message : null}
@@ -554,7 +601,8 @@ function GuardarLinkPanel({
           <p className={s.savePanelTitle}>Guardar un link</p>
           <p className={s.savePanelHint}>
             ¿Viste algo que te gustaría para tu marca? Pega el link acá y queda
-            guardado con la estrella, junto al resto.
+            guardado con la estrella, junto al resto. Los números de la
+            publicación entran solos unos segundos después.
           </p>
         </div>
         <button
@@ -811,6 +859,7 @@ function PostCard({
   onFavorite,
   canDelete,
   onDelete,
+  enriqueciendo,
   comments,
   onComment,
   error,
@@ -831,6 +880,8 @@ function PostCard({
   onFavorite: () => void;
   canDelete: boolean;
   onDelete: () => void;
+  /** Se le están pidiendo las métricas a Apify (link recién guardado). */
+  enriqueciendo: boolean;
   comments: PostComment[];
   onComment: (body: string) => Promise<string | null>;
   error: string | null;
@@ -945,6 +996,11 @@ function PostCard({
       )}
 
       <div className={s.metrics}>
+        {enriqueciendo && (
+          <span className={s.metricsLoading} title="Buscando los números reales de esta publicación">
+            Trayendo datos…
+          </span>
+        )}
         <span title="Vistas">▶ {formatNumber(post.video_views)}</span>
         <span title="Me gusta">♥ {formatNumber(post.likes)}</span>
         <span title="Comentarios">💬 {formatNumber(post.comments)}</span>

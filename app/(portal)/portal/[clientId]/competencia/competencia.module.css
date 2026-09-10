@@ -855,3 +855,10 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Mientras Apify devuelve los números reales de un link recién guardado. */
+.metricsLoading {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-dim);
+}
