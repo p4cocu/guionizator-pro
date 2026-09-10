@@ -1054,3 +1054,112 @@
     justify-content: space-between;
   }
 }
+
+/* ── Notas del post (`competitor_post_comments`, 0015) ──
+ *
+ * Mismo hilo que ve el cliente en su portal. Se dibuja al pie de la tarjeta,
+ * después de las acciones, porque es lectura y no una herramienta.
+ */
+
+.notes {
+  border-top: 1px solid var(--glass-border);
+  padding: 10px 12px 12px;
+}
+
+.notesToggle {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.notesToggle:hover {
+  color: var(--emerald);
+}
+
+.notesBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.note {
+  border-left: 2px solid var(--glass-border);
+  padding-left: 9px;
+}
+
+.noteMeta {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+
+.noteAuthor {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--emerald);
+}
+
+/* Marca de quién escribió: en el estudio importa distinguir la voz del cliente
+   de la propia, que en el portal se da por descontada. */
+.noteTag {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--signal);
+  border: 1px solid color-mix(in srgb, var(--signal) 35%, transparent);
+  border-radius: var(--r-pill);
+  padding: 1px 6px;
+}
+
+.noteDate {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.noteBody {
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notes :global(.textarea) {
+  font-size: 12.5px;
+  padding: 8px 10px;
+}
+
+.notesError {
+  font-size: 12px;
+  color: var(--flare);
+}
+
+.notesSend {
+  align-self: flex-start;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--emerald);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  background: transparent;
+  padding: 6px 13px;
+  cursor: pointer;
+}
+
+.notesSend:hover:not(:disabled) {
+  border-color: var(--emerald);
+}
+
+.notesSend:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

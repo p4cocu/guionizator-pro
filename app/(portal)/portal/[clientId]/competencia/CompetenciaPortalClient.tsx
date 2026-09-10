@@ -12,14 +12,27 @@
  * hay columna de thumbnail en la base, Apify no la trae.
  *
  * Transcribir y adaptar gastan crédito (`app/(portal)/portal/[clientId]/
- * competencia/actions.ts`); el resto de los filtros son en memoria y gratis.
+ * competencia/actions.ts`); el resto —filtros, guardar un link, notas y
+ * borrar— es en memoria o consultas chicas, y gratis.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { OutlierFlags } from "@/lib/competencia/outliers";
 import { labelFor, colorFor } from "@/lib/competencia/taxonomy";
 import { normalizePublicId } from "@/lib/competencia/publicId";
-import { transcribePortalPost, toggleClientFavorite } from "./actions";
+import { accountLabel, type SavedLinkType } from "@/lib/competencia/savedLink";
+import {
+  MAX_POST_COMMENT_LENGTH,
+  type PostComment,
+  type PostCommentsByPost,
+} from "@/lib/competencia/postCommentShape";
+import {
+  transcribePortalPost,
+  toggleClientFavorite,
+  savePortalLink,
+  addPortalPostComment,
+  deletePortalPost,
+} from "./actions";
 import AdaptModal from "./AdaptModal";
 import s from "./competencia.module.css";
 
@@ -44,7 +57,7 @@ export type PortalPostBase = {
 
 export type PortalPost = PortalPostBase & OutlierFlags;
 
-type Orden = "recientes" | "comentarios" | "vistas";
+type Orden = "recientes" | "comentarios" | "vistas" | "likes";
 
 const nf = new Intl.NumberFormat("es-MX");
 
@@ -74,6 +87,9 @@ export default function CompetenciaPortalClient({
   clientLabel,
   canAdapt,
   canFavorite,
+  canSaveLink,
+  canDelete,
+  commentsByPost,
   transcriptionRemaining: initialTranscriptionRemaining,
   adaptRemaining: initialAdaptRemaining,
   adaptCreditBalance,
@@ -84,6 +100,16 @@ export default function CompetenciaPortalClient({
   canAdapt: boolean;
   /** `collaborator` (o el dueño en preview). Un `viewer` no ve la estrella. */
   canFavorite: boolean;
+  /** Mismo candado que la estrella: escribe sobre el tablero compartido. */
+  canSaveLink: boolean;
+  /** Mismo candado. Borrar es definitivo y también le saca el post a Paco. */
+  canDelete: boolean;
+  /**
+   * Las notas de todos los posts, agrupadas por post. Vienen del servidor en
+   * una sola consulta; comentar SÍ lo puede hacer un `viewer`, así que no hay
+   * prop de permiso para esto.
+   */
+  commentsByPost: PostCommentsByPost;
   transcriptionRemaining: number | null;
   adaptRemaining: number | null;
   /** Saldo de recargas compradas (Fase E). No vence. */
@@ -109,6 +135,11 @@ export default function CompetenciaPortalClient({
   );
   const [adaptRemaining, setAdaptRemaining] = useState(initialAdaptRemaining);
   const [errorFor, setErrorFor] = useState<{ id: string; message: string } | null>(null);
+  const [comentarios, setComentarios] = useState<PostCommentsByPost>(commentsByPost);
+  // El post que el bote de basura puso en la mira. Mientras no sea `null` se
+  // dibuja el diálogo de confirmación: borrar no tiene vuelta atrás.
+  const [porBorrar, setPorBorrar] = useState<PortalPost | null>(null);
+  const [borrando, setBorrando] = useState(false);
 
   const transcriptionBlocked = transcriptionRemaining !== null && transcriptionRemaining <= 0;
   // Agotar el cupo del ciclo NO bloquea si quedan créditos comprados: esos no
@@ -158,6 +189,7 @@ export default function CompetenciaPortalClient({
 
     const ordenados = [...filtrados];
     if (orden === "comentarios") ordenados.sort((a, b) => b.comments - a.comments);
+    else if (orden === "likes") ordenados.sort((a, b) => b.likes - a.likes);
     else if (orden === "vistas")
       ordenados.sort((a, b) => (b.video_views ?? 0) - (a.video_views ?? 0));
     return ordenados;
@@ -223,6 +255,95 @@ export default function CompetenciaPortalClient({
     }
   }
 
+  /**
+   * Guarda un link suelto. El post vuelve del servidor con las mismas columnas
+   * que trae el server render, así que se puede meter tal cual en la lista.
+   *
+   * Si el link ya estaba en el tablero, el servidor no duplica: devuelve la
+   * fila existente con la estrella puesta y `alreadyExisted`. Acá se reemplaza
+   * en su lugar en vez de agregarla arriba, o el cliente vería el mismo video
+   * dos veces.
+   */
+  async function handleSaveLink(input: {
+    url: string;
+    account: string;
+    type: SavedLinkType;
+    note: string;
+  }): Promise<string | null> {
+    try {
+      const res = await savePortalLink(clientId, input);
+      if (!res.ok) return res.error;
+
+      // Un guardado a mano nunca es outlier: no tiene métricas con las que
+      // compararse contra la mediana de su cuenta.
+      const nuevo = {
+        ...(res.post as unknown as PortalPostBase),
+        is_outlier: false,
+        outlier_multiple: null,
+        account_median_comments: null,
+      } as PortalPost;
+
+      setPosts((prev) => {
+        const idx = prev.findIndex((p) => p.id === nuevo.id);
+        if (idx === -1) return [nuevo, ...prev];
+        const copia = [...prev];
+        // Se conservan los flags de outlier que ya tenía: la fila existente sí
+        // pudo haberlos ganado con métricas reales.
+        copia[idx] = { ...prev[idx], ...(res.post as unknown as PortalPostBase) };
+        return copia;
+      });
+      setPorBorrar(null);
+      // El embed necesita el DOM ya actualizado; React puede diferir el render.
+      setTimeout(() => window.instgrm?.Embeds.process(), 800);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "No se pudo guardar el link.";
+    }
+  }
+
+  /** Devuelve el mensaje de error, o `null` si salió bien. */
+  async function handleComment(postId: string, body: string): Promise<string | null> {
+    try {
+      const res = await addPortalPostComment(clientId, postId, body);
+      if (!res.ok) return res.error;
+      setComentarios((prev) => ({ ...prev, [postId]: [...(prev[postId] ?? []), res.comment] }));
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "No se pudo guardar la nota.";
+    }
+  }
+
+  /**
+   * Borra de verdad y para los dos lados. No hay UI optimista a propósito: si
+   * el servidor rechaza, hacer reaparecer una tarjeta que ya se había ido se
+   * lee como un fantasma. Se espera la respuesta y recién ahí se saca.
+   */
+  async function handleDelete(post: PortalPost) {
+    setBorrando(true);
+    setErrorFor(null);
+    try {
+      const res = await deletePortalPost(clientId, post.id);
+      if (!res.ok) {
+        setErrorFor({ id: post.id, message: res.error });
+      } else {
+        setPosts((prev) => prev.filter((p) => p.id !== post.id));
+        setComentarios((prev) => {
+          const copia = { ...prev };
+          delete copia[post.id];
+          return copia;
+        });
+      }
+    } catch (e) {
+      setErrorFor({
+        id: post.id,
+        message: e instanceof Error ? e.message : "No se pudo borrar la publicación.",
+      });
+    } finally {
+      setBorrando(false);
+      setPorBorrar(null);
+    }
+  }
+
   return (
     <div>
       <div className={s.header}>
@@ -235,9 +356,12 @@ export default function CompetenciaPortalClient({
           alguno de los dos marcó porque da para algo tuyo
           {canFavorite ? " — la estrella de cada tarjeta es tuya para usar" : ""}.
           Cada pieza tiene un código de 6 caracteres: si quieres pedir algo sobre
-          una en particular, mándanos ese código.
+          una en particular, mándanos ese código. En cualquier publicación puedes
+          dejar una nota con lo que te llamó la atención — la leemos nosotros.
         </p>
       </div>
+
+      {canSaveLink && <GuardarLinkPanel onSave={handleSaveLink} />}
 
       {posts.length === 0 ? (
         <div className={s.empty}>
@@ -267,7 +391,7 @@ export default function CompetenciaPortalClient({
               <option value="">Todas las cuentas</option>
               {cuentas.map((c) => (
                 <option key={c} value={c}>
-                  @{c}
+                  {accountLabel(c)}
                 </option>
               ))}
             </select>
@@ -279,6 +403,7 @@ export default function CompetenciaPortalClient({
             >
               <option value="recientes">Más recientes</option>
               <option value="comentarios">Más comentados</option>
+              <option value="likes">Más likes</option>
               <option value="vistas">Más vistos</option>
             </select>
             <label className={s.check}>
@@ -331,6 +456,10 @@ export default function CompetenciaPortalClient({
                 onAdapt={() => setAdaptingPost(p)}
                 canFavorite={canFavorite}
                 onFavorite={() => handleFavorite(p)}
+                canDelete={canDelete}
+                onDelete={() => setPorBorrar(p)}
+                comments={comentarios[p.id] ?? []}
+                onComment={(body) => handleComment(p.id, body)}
                 error={errorFor?.id === p.id ? errorFor.message : null}
               />
             ))}
@@ -345,6 +474,15 @@ export default function CompetenciaPortalClient({
         </>
       )}
 
+      {porBorrar && (
+        <ConfirmarBorrado
+          post={porBorrar}
+          borrando={borrando}
+          onCancel={() => setPorBorrar(null)}
+          onConfirm={() => handleDelete(porBorrar)}
+        />
+      )}
+
       {adaptingPost && (
         <AdaptModal
           clientId={clientId}
@@ -353,6 +491,305 @@ export default function CompetenciaPortalClient({
           onAdapted={() => setAdaptRemaining((r) => (r === null ? null : Math.max(0, r - 1)))}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Panel para pegar un link y que quede en el tablero.
+ *
+ * Se dibuja también cuando el tablero está vacío: si estuviera adentro del
+ * `else` del empty-state, una marca sin scrapes todavía no tendría por dónde
+ * empezar a guardar nada.
+ *
+ * La cuenta es opcional a propósito — Instagram no la revela en la URL de un
+ * reel y averiguarla cuesta un scrape (ver `lib/competencia/savedLink.ts`).
+ * Cuando el link sí la trae, el servidor la saca solo y este campo sobra.
+ */
+function GuardarLinkPanel({
+  onSave,
+}: {
+  onSave: (input: {
+    url: string;
+    account: string;
+    type: SavedLinkType;
+    note: string;
+  }) => Promise<string | null>;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [url, setUrl] = useState("");
+  const [account, setAccount] = useState("");
+  const [type, setType] = useState<SavedLinkType>("video");
+  const [note, setNote] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [listo, setListo] = useState(false);
+
+  async function submit() {
+    if (!url.trim()) {
+      setError("Pega el link del contenido.");
+      return;
+    }
+    setGuardando(true);
+    setError(null);
+    const err = await onSave({ url, account, type, note });
+    setGuardando(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setUrl("");
+    setAccount("");
+    setNote("");
+    setType("video");
+    setAbierto(false);
+    setListo(true);
+    setTimeout(() => setListo(false), 3000);
+  }
+
+  return (
+    <div className={s.savePanel}>
+      <div className={s.savePanelHead}>
+        <div>
+          <p className={s.savePanelTitle}>Guardar un link</p>
+          <p className={s.savePanelHint}>
+            ¿Viste algo que te gustaría para tu marca? Pega el link acá y queda
+            guardado con la estrella, junto al resto.
+          </p>
+        </div>
+        <button
+          type="button"
+          className={s.savePanelToggle}
+          onClick={() => {
+            setAbierto((v) => !v);
+            setError(null);
+          }}
+        >
+          {abierto ? "Cancelar" : "+ Guardar link"}
+        </button>
+      </div>
+
+      {listo && <p className={s.saveOk}>Guardado. Ya aparece en tu tablero.</p>}
+
+      {abierto && (
+        <div className={s.saveForm}>
+          <label className={s.saveField}>
+            <span className={s.saveLabel}>Link del contenido</span>
+            <input
+              className="input"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://www.instagram.com/reel/..."
+              autoFocus
+            />
+          </label>
+
+          <label className={s.saveField}>
+            <span className={s.saveLabel}>
+              Cuenta <span className={s.saveOptional}>(opcional)</span>
+            </span>
+            <input
+              className="input"
+              value={account}
+              onChange={(e) => setAccount(e.target.value)}
+              placeholder="@cuenta"
+            />
+          </label>
+
+          <label className={s.saveField}>
+            <span className={s.saveLabel}>Tipo</span>
+            <select
+              className="input"
+              value={type}
+              onChange={(e) => setType(e.target.value as SavedLinkType)}
+            >
+              <option value="video">Reel / video</option>
+              <option value="carousel">Carrusel</option>
+              <option value="image">Imagen</option>
+            </select>
+          </label>
+
+          <label className={`${s.saveField} ${s.saveFieldWide}`}>
+            <span className={s.saveLabel}>
+              Nota <span className={s.saveOptional}>(opcional)</span>
+            </span>
+            <textarea
+              className="textarea"
+              rows={2}
+              value={note}
+              maxLength={MAX_POST_COMMENT_LENGTH}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="¿Qué te gustó de este contenido?"
+            />
+          </label>
+
+          {error && <p className={s.saveError}>{error}</p>}
+
+          <div className={s.saveActions}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={submit}
+              disabled={guardando}
+            >
+              {guardando ? "Guardando…" : "Guardar"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Hilo de notas de una tarjeta. Colapsado por defecto: la mayoría de los posts
+ * no tiene ninguna y una caja de texto por tarjeta llenaría la grilla de ruido.
+ *
+ * Comentar lo puede hacer cualquier miembro, incluido el `viewer` — es la misma
+ * regla que en los comentarios de un guion.
+ */
+function NotasPost({
+  comments,
+  onComment,
+}: {
+  comments: PostComment[];
+  onComment: (body: string) => Promise<string | null>;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [body, setBody] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!body.trim()) return;
+    setGuardando(true);
+    setError(null);
+    const err = await onComment(body);
+    setGuardando(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setBody("");
+  }
+
+  return (
+    <div className={s.notes}>
+      <button
+        type="button"
+        className={s.notesToggle}
+        onClick={() => setAbierto((v) => !v)}
+        aria-expanded={abierto}
+      >
+        📝 Notas{comments.length > 0 ? ` (${comments.length})` : ""}
+      </button>
+
+      {abierto && (
+        <div className={s.notesBody}>
+          {comments.length === 0 ? (
+            <p className={s.notesEmpty}>
+              Todavía no hay notas. Escribí por qué te sirve este contenido.
+            </p>
+          ) : (
+            <ul className={s.notesList}>
+              {comments.map((c) => (
+                <li key={c.id} className={s.note}>
+                  <p className={s.noteMeta}>
+                    <span className={s.noteAuthor}>{c.isMine ? "Tú" : c.authorLabel}</span>
+                    <span className={s.noteDate}>{formatDate(c.createdAt)}</span>
+                  </p>
+                  <p className={s.noteBody}>{c.body}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <textarea
+            className="textarea"
+            rows={2}
+            value={body}
+            maxLength={MAX_POST_COMMENT_LENGTH}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Escribe una nota…"
+          />
+          {error && <p className={s.creditError}>{error}</p>}
+          <button
+            type="button"
+            className={s.notesSend}
+            onClick={submit}
+            disabled={guardando || !body.trim()}
+          >
+            {guardando ? "Guardando…" : "Agregar nota"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * La doble verificación del bote de basura. Es un diálogo propio y no un
+ * `window.confirm` por dos razones: el nativo no dice QUÉ se pierde (las notas,
+ * la transcripción) y no se puede señalar que es definitivo.
+ *
+ * El foco arranca en "Cancelar" y Escape cierra: si alguien llegó acá sin
+ * querer, la salida es lo primero que encuentra.
+ */
+function ConfirmarBorrado({
+  post,
+  borrando,
+  onCancel,
+  onConfirm,
+}: {
+  post: PortalPost;
+  borrando: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    cancelRef.current?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onCancel();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <div className={s.confirmOverlay} role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <div className={s.confirmBox}>
+        <p className={s.confirmTitle} id="confirm-title">
+          ¿Borrar esta publicación?
+        </p>
+        <p className={s.confirmText}>
+          Se va de tu tablero y del nuestro, con sus notas y su transcripción.
+          <strong> No se puede deshacer.</strong>
+        </p>
+        <p className={s.confirmTarget}>
+          {accountLabel(post.username)} · {post.public_id}
+        </p>
+        <div className={s.confirmActions}>
+          <button
+            ref={cancelRef}
+            type="button"
+            className="btn btn-secondary"
+            onClick={onCancel}
+            disabled={borrando}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className={s.confirmDanger}
+            onClick={onConfirm}
+            disabled={borrando}
+          >
+            {borrando ? "Borrando…" : "Sí, borrar"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -372,6 +809,10 @@ function PostCard({
   onAdapt,
   canFavorite,
   onFavorite,
+  canDelete,
+  onDelete,
+  comments,
+  onComment,
   error,
 }: {
   post: PortalPost;
@@ -388,6 +829,10 @@ function PostCard({
   onAdapt: () => void;
   canFavorite: boolean;
   onFavorite: () => void;
+  canDelete: boolean;
+  onDelete: () => void;
+  comments: PostComment[];
+  onComment: (body: string) => Promise<string | null>;
   error: string | null;
 }) {
   const [copiado, setCopiado] = useState(false);
@@ -415,7 +860,7 @@ function PostCard({
       }`}
     >
       <div className={s.cardTop}>
-        <span className={s.account}>@{post.username}</span>
+        <span className={s.account}>{accountLabel(post.username)}</span>
         <div className={s.cardTopRight}>
           {/*
             Un post puede ser las dos cosas; en ese caso manda el dato duro
@@ -433,6 +878,18 @@ function PostCard({
               ⭐ Guardado
             </span>
           ) : null}
+
+          {canDelete && (
+            <button
+              type="button"
+              className={s.trashBtn}
+              onClick={onDelete}
+              title="Borrar esta publicación de tu tablero"
+              aria-label="Borrar esta publicación"
+            >
+              🗑
+            </button>
+          )}
 
           {canFavorite && (
             <button
@@ -564,6 +1021,8 @@ function PostCard({
       )}
 
       {error && <p className={s.creditError}>{error}</p>}
+
+      <NotasPost comments={comments} onComment={onComment} />
 
       <div className={s.cardActions}>
         {(post.transcription || (post.caption?.length ?? 0) > 180) && (

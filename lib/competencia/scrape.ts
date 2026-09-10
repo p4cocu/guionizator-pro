@@ -11,13 +11,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { scrapeCompetitorPosts } from "../apify/client";
 import { resolveApifyToken } from "./apifyToken";
-
-/** Extrae el shortcode de un permalink de Instagram (/p/, /reel/, /tv/). */
-function extractShortcode(permalink: string | null | undefined): string | null {
-  if (!permalink) return null;
-  const m = permalink.match(/\/(?:p|reel|reels|tv)\/([^/?#]+)/i);
-  return m ? m[1] : null;
-}
+import { purgeExpiredPosts } from "./retention";
+// El mismo parseo que usa el guardado de links del portal: una sola definición.
+import { extractShortcode } from "./savedLink";
 
 export async function runScrapeJob(
   supabase: SupabaseClient,
@@ -118,22 +114,17 @@ export async function runScrapeJob(
     if (insErr) return fail(insErr.message);
   }
 
-  // 6b. Limpiar posts con más de 40 días de publicados (mismo umbral que la
-  // Netlify Scheduled Function `cleanup-competencia-scheduled`, que corre a
-  // diario e independiente de si se dispara una búsqueda). Este paso aquí
-  // solo cubre el caso de "purgar ya" al cliente que se acaba de scrapear.
-  // Posts sin posted_at o marcados favoritos se ignoran.
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 40);
-  await supabase
-    .from("competitor_posts")
-    .delete()
-    .eq("owner_id", scrape.owner_id)
-    .eq("client_id", scrape.client_id)
-    .eq("is_favorite", false)
-    .lt("posted_at", cutoff.toISOString())
-    .not("posted_at", "is", null);
-  // Error ignorado (best-effort): no fallamos el scrape por esto
+  // 6b. Limpiar posts vencidos de esta marca ("purgar ya" al que se acaba de
+  // scrapear). Las reglas viven en `lib/competencia/retention.ts` y las aplica
+  // igual el cron diario `cleanup-competencia-scheduled`, que cubre a las
+  // marcas que nadie vuelve a buscar. Best-effort: un fallo acá no tumba un
+  // scrape que ya salió bien.
+  await purgeExpiredPosts(supabase, {
+    ownerId: scrape.owner_id as string,
+    clientId: scrape.client_id as string,
+  }).catch((e) => {
+    console.error("[scrape] no se pudieron purgar los posts vencidos:", e);
+  });
 
   // 7. Actualizar followers de cada cuenta (best-effort, último valor conocido)
   const followersByUser = new Map<string, number>();

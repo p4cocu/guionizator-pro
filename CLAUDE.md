@@ -152,12 +152,26 @@ porque no lanzó excepción).
 ## Jobs programados (Netlify Scheduled Functions)
 
 - **`cleanup-competencia-scheduled`** (`netlify/functions/cleanup-competencia-scheduled.ts`,
-  cron `@daily` en `netlify.toml`) — borra posts de `competitor_posts` con más de
-  **40 días** desde `posted_at`, para todos los owners/clientes (independiente de que
-  se dispare una búsqueda). Excluye posts marcados `is_favorite`. Usa service role.
-  El mismo umbral de 40 días también corre "al vuelo" en `runScrapeJob`
-  (`lib/competencia/scrape.ts`) al terminar cada búsqueda, solo para el cliente
-  recién scrapeado — el cron cubre a los que no se vuelven a buscar.
+  cron `@daily` en `netlify.toml`) — borra posts de `competitor_posts` vencidos,
+  para todos los owners/clientes (independiente de que se dispare una búsqueda).
+  Usa service role. Las reglas viven en **`lib/competencia/retention.ts`** y las
+  aplica también `runScrapeJob` (`lib/competencia/scrape.ts`) "al vuelo" al
+  terminar cada búsqueda, solo para el cliente recién scrapeado — el cron cubre a
+  los que no se vuelven a buscar. Antes cada uno traía su propia consulta con su
+  propio umbral; hoy es una sola función y por eso las dos reglas rigen en los dos
+  lados:
+
+  | Fila | Vive |
+  |---|---|
+  | Scrapeada, sin estrella | **40 días** desde `posted_at` |
+  | Guardada a mano (`is_manual`) | **120 días** (3 × 40) |
+  | Scrapeada y con estrella | para siempre |
+
+  Los 120 días de los manuales son de 2026-09-10: desde el portal el cliente pega
+  links y **nacen con la estrella**, así que bajo la regla vieja ("los favoritos
+  no se borran nunca") no se habrían borrado jamás. ⚠️ El post **scrapeado** al
+  que alguien le pone la estrella sigue siendo inmortal; si esa vía infla la
+  tabla, el arreglo es darle 120 días también, en ese único archivo.
   Netlify bloquea (404) cualquier invocación externa a una función con `schedule`
   configurado, así que no necesita secreto propio como `scrape-competencia-background`.
 - **`refresh-instagram-tokens-scheduled`**
@@ -676,9 +690,10 @@ decisión de Paco (2026-08-19) contra la alternativa de una columna
 - El badge dejó de significar "lo elegimos nosotros"; el copy del portal se
   reescribió a "⭐ Guardado" y el filtro a "⭐ Guardados".
 - **En `/competencia` no se distingue quién marcó qué**: no hay columna de autor.
-- La limpieza a 40 días (`cleanup-competencia-scheduled` y `runScrapeJob`) ya
-  excluye `is_favorite`, así que lo que marque el cliente **se conserva solo** —
-  y un cliente que marque todo llena la tabla del dueño.
+- La limpieza excluye `is_favorite`, así que lo que marque el cliente sobre un
+  post **scrapeado** se conserva solo — y un cliente que marque todo llena la
+  tabla del dueño. Lo que él **guarda como link** no: eso es `is_manual` y vive
+  120 días (ver "Jobs programados").
 - Entra al snapshot de los reportes como favorito, igual que los de Paco.
 - Va con **service role** filtrando `client_id` a mano (el miembro solo tiene
   `select` sobre la tabla, y no se le va a dar `update`: con su JWT podría
@@ -735,6 +750,78 @@ dentro de los mismos `VISIBLE_SCRIPT_STATUSES` que lista `/portal/…/guiones` �
   `is_latest` sin `trashed_at`, acotada a la marca de la entrada si la tiene, y
   marca "· ya agendado" a los que ya cuelgan de otra entrada (se permiten igual:
   a veces es mover de fecha).
+
+## Guardar links, notas y borrado en Competencia (migración `0015`)
+
+Tres cosas que el cliente pedía y que hasta 2026-09-10 solo existían del lado de
+Paco (o no existían).
+
+**Guardar un link** (`/portal/[id]/competencia`, panel arriba de los filtros).
+El equivalente del "Agregar contenido manualmente" del estudio, con tres
+diferencias que importan:
+
+- **Nace con la estrella puesta** (`is_favorite: true`, además de `is_manual`).
+  El cliente lo guardó a propósito; aparece de una en el filtro "⭐ Guardados".
+  La estrella se le puede quitar después como a cualquier otro post.
+- **La cuenta es opcional.** Instagram **no revela el @cuenta en la URL de un
+  reel**, y averiguarlo cuesta un scrape de Apify (~30s: riesgo de 504 contra el
+  límite de Netlify). Cuando el link sí la trae
+  (`instagram.com/<cuenta>/reel/ABC`) se saca sola; cuando no, la fila se guarda
+  con `UNKNOWN_ACCOUNT` (`"sin-cuenta"` — lleva guion, que Instagram no permite
+  en un handle, así que nunca choca con una cuenta real) y las dos pantallas la
+  dibujan como "Cuenta sin identificar" vía `accountLabel()`.
+- **Guarda el `shortcode`** (el alta manual del estudio no). Eso hace dos cosas:
+  si el link ya estaba en el tablero **no se duplica** (se marca esa fila y se
+  devuelve), y el upsert de `runScrapeJob` —que va por
+  `(owner_id, client_id, shortcode)`— le completa métricas y fecha real en la
+  próxima búsqueda de esa cuenta. Un post que estaba `is_disliked` se
+  **des-descarta** al guardarlo: si no, la respuesta sería "ya lo tenías" sobre
+  una tarjeta que el portal esconde.
+
+Fuente de verdad del parseo: `lib/competencia/savedLink.ts` (módulo puro, lo
+comparten servidor y cliente). Se aceptan links que no sean de Instagram: la
+tarjeta pierde el embed y las herramientas de video, pero sirve como referencia
+con notas.
+
+**Notas** (`competitor_post_comments`, migración `0015`) — un hilo por post, en
+**cualquier** post: guardado a mano o scrapeado. Es un calco de `script_comments`
+(mismo trigger `set_owner_from_client`, mismas tres policies, sin `update` ni
+`delete` para el miembro) y por lo tanto arrastra la misma regla dura: **el
+`insert` no manda `owner_id`**, lo pone el trigger, o la fila desaparecería de la
+vista de Paco. Los dos lados escriben en el mismo hilo:
+`lib/competencia/postComments.ts` lo lee y lo escribe para el estudio y para el
+portal. ⚠️ A diferencia de `lib/portal/comments.ts`, **nunca viaja un email**: el
+gate de `portal_profiles` garantiza que todos tienen nombre.
+
+**Comentar lo puede hacer también un `viewer`** — es conversación, no
+modificación, igual que en los guiones. **Guardar un link y borrar, no**: mismo
+candado que la estrella (`collaborator` o el dueño).
+
+**El bote de basura borra de verdad, para los dos lados y sin papelera**
+(decisión de Paco, 2026-09-10, para que la tabla no crezca sin techo). Se va la
+fila con sus notas (`on delete cascade`), su transcripción y su clasificación. NO
+se tocan los reportes ya generados (snapshot congelado) ni los guiones adaptados
+(`scripts.source_post_id` es `on delete set null`). La UI confirma en un diálogo
+propio —no `window.confirm`, que no puede decir qué se pierde— con el foco puesto
+en "Cancelar" y Escape para salir.
+
+⚠️ Las tres van con **service role** salvo las notas, que van con la **sesión del
+miembro**: la policy de insert exige `author_id = auth.uid()`, que es justo lo que
+impide firmar como otro. El resto no puede: la `0006` le dio al miembro solo
+`select` sobre `competitor_posts` y darle `insert`/`delete` propios sería permiso
+para tocar cualquier columna de su marca desde PostgREST. Como el service role
+saltea la RLS, **cada consulta filtra `client_id` a mano** (`lib/portal/competencia.ts`).
+
+`PORTAL_POST_COLUMNS` vive en `lib/portal/competencia.ts` y no en el `actions.ts`
+del portal porque en un módulo `"use server"` todo export tiene que ser async
+(misma razón que `PASSWORD_MIN` en `lib/portal/profiles.ts`). Tiene que seguir
+coincidiendo con `PortalPostBase`, o la tarjeta recién guardada llega con campos
+en `undefined` mientras las del server render sí los traen.
+
+**Selector de orden del portal**: se sumó **"Más likes"**. "⭐ Guardados" sigue
+siendo un checkbox al lado de "🔥 Destacados" y no entró al selector a propósito
+(decisión de Paco): tener el mismo filtro en dos controles que se pisan confunde
+más de lo que ayuda.
 
 ## Fase E — Cobro con Stripe (`lib/billing/*`, migración `0013`)
 

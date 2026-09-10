@@ -23,6 +23,12 @@
  * **Los posts marcados como descartados (`is_disliked`) no se muestran.** Es la
  * señal de "esto no sirve" que Paco deja al revisar; pasársela al cliente sería
  * ruido con el que no puede hacer nada.
+ *
+ * Desde 2026-09-10 el cliente además **guarda links sueltos** (nacen con la
+ * estrella y con `is_manual`, viven 120 días), **deja notas** en cualquier post
+ * —guardado o scrapeado— y **borra** lo que no tiene que ver con su marca. Las
+ * tres van con service role salvo las notas, que van con su sesión porque la
+ * policy exige `author_id = auth.uid()`.
  */
 
 import { requirePortalClient, requirePortalSession, portalClientLabel } from "@/lib/portal/access";
@@ -33,11 +39,9 @@ import { getTranscriptionUsageState } from "@/lib/competencia/transcriptionUsage
 import { getBillingState } from "@/lib/billing/access";
 import { effectiveLimit, PLAN_TRANSCRIPTIONS } from "@/lib/billing/plan";
 import { createServiceClient } from "@/lib/supabase/service";
+import { listPostCommentsByClient } from "@/lib/competencia/postComments";
+import { PORTAL_POST_COLUMNS } from "@/lib/portal/competencia";
 import CompetenciaPortalClient, { type PortalPostBase } from "./CompetenciaPortalClient";
-
-/** Solo lo que la pantalla dibuja. Menos columnas que `POST_COLUMNS` de `(app)`. */
-const POST_COLUMNS =
-  "id, public_id, username, permalink, type, caption, likes, comments, video_views, posted_at, transcription, is_favorite, is_manual, hook_type, script_structure, value_pillar";
 
 export default async function PortalCompetenciaPage({
   params,
@@ -54,10 +58,15 @@ export default async function PortalCompetenciaPage({
   // Un `viewer` no modifica nada, igual que no aprueba guiones. El dueño en
   // modo preview sí, que es como se prueba la pantalla.
   const canFavorite = client.role !== "viewer";
+  // Guardar un link y borrar un post escriben sobre el tablero compartido:
+  // mismo candado que la estrella. Comentar, en cambio, lo puede hacer también
+  // un `viewer` — es conversación, no modificación (igual que en los guiones).
+  const canSaveLink = client.role !== "viewer";
+  const canDelete = client.role !== "viewer";
 
   const { data } = await supabase
     .from("competitor_posts")
-    .select(POST_COLUMNS)
+    .select(PORTAL_POST_COLUMNS)
     .eq("client_id", client.id)
     .eq("is_disliked", false)
     .order("posted_at", { ascending: false, nullsFirst: false });
@@ -73,37 +82,35 @@ export default async function PortalCompetenciaPage({
   // servidor en las server actions.
   const admin = createServiceClient();
 
+  // Se resuelve una sola vez: lo piden el cupo de transcripción, el de
+  // adaptación y las notas (para saber cuáles escribió el dueño).
+  const ownerId = await getClientOwnerId(client.id);
+
   // El periodo que se cuenta sale del ciclo de facturación (Fase E); sin
   // suscripción cae al mes calendario UTC de siempre.
   const billing = await getBillingState(client.id);
 
-  const [transcriptionUsage, adaptUsage] = await Promise.all([
-    getClientOwnerId(client.id)
-      .then((ownerId) =>
-        getTranscriptionUsageState(
-          admin,
-          client.id,
-          ownerId,
-          effectiveLimit(
-            client.transcriptionLimit,
-            billing.reason === "exempt",
-            PLAN_TRANSCRIPTIONS,
-          ),
-          { cycleStart: billing.cycleStart, cycleEnd: billing.cycleEnd },
-        ),
-      )
-      .catch((e) => {
-        console.error("[portal/competencia] no se pudo leer el cupo de transcripción:", e);
-        return null;
-      }),
+  const [transcriptionUsage, adaptUsage, commentsByPost] = await Promise.all([
+    getTranscriptionUsageState(
+      admin,
+      client.id,
+      ownerId,
+      effectiveLimit(client.transcriptionLimit, billing.reason === "exempt", PLAN_TRANSCRIPTIONS),
+      { cycleStart: billing.cycleStart, cycleEnd: billing.cycleEnd },
+    ).catch((e) => {
+      console.error("[portal/competencia] no se pudo leer el cupo de transcripción:", e);
+      return null;
+    }),
     canAdapt
-      ? getClientOwnerId(client.id)
-          .then((ownerId) => getGenerationState(client.id, ownerId, client.aiGenerationLimit))
-          .catch((e) => {
-            console.error("[portal/competencia] no se pudo leer el cupo de adaptación:", e);
-            return null;
-          })
+      ? getGenerationState(client.id, ownerId, client.aiGenerationLimit).catch((e) => {
+          console.error("[portal/competencia] no se pudo leer el cupo de adaptación:", e);
+          return null;
+        })
       : Promise.resolve(null),
+    // Las notas de TODOS los posts en una sola consulta: una por tarjeta sería
+    // una tormenta de requests para mostrar, casi siempre, cero notas.
+    // Va con la sesión del miembro (la policy `..._member_select` ya la cubre).
+    listPostCommentsByClient(supabase, client.id, user.id, ownerId),
   ]);
 
   return (
@@ -113,6 +120,9 @@ export default async function PortalCompetenciaPage({
       clientLabel={portalClientLabel(client)}
       canAdapt={canAdapt}
       canFavorite={canFavorite}
+      canSaveLink={canSaveLink}
+      canDelete={canDelete}
+      commentsByPost={commentsByPost}
       transcriptionRemaining={transcriptionUsage?.remaining ?? null}
       adaptRemaining={adaptUsage?.remaining ?? null}
       adaptCreditBalance={adaptUsage?.creditBalance ?? 0}

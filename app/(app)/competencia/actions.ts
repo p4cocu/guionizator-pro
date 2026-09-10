@@ -9,6 +9,12 @@ import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
 import { looksLikePublicId, normalizePublicId } from "@/lib/competencia/publicId";
 import { withOutliers } from "@/lib/competencia/outliers";
 import {
+  addPostComment,
+  listPostCommentsByClient,
+  type PostComment,
+  type PostCommentsByPost,
+} from "@/lib/competencia/postComments";
+import {
   buildTaxonomyPrompt,
   HOOK_TYPE_SLUGS,
   SCRIPT_STRUCTURE_SLUGS,
@@ -240,6 +246,12 @@ export type LatestResults = {
   scrapeId: string | null;
   scrapedAt: string | null;
   posts: CompetitorPost[];
+  /**
+   * Las notas de cada post (`competitor_post_comments`, `0015`), agrupadas.
+   * Viajan con los posts y no en una consulta aparte porque es la misma
+   * pantalla y el mismo cambio de marca: dos round-trips para dibujar una vez.
+   */
+  commentsByPost: PostCommentsByPost;
 };
 
 /**
@@ -267,6 +279,10 @@ export async function getLatestResults(clientId: string): Promise<LatestResults>
     .eq("owner_id", user.id)
     .eq("client_id", clientId);
 
+  // El dueño es el que mira: `ownerId` = `user.id`, así que sus propias notas
+  // salen marcadas `isOwner` y el resto son del cliente.
+  const commentsByPost = await listPostCommentsByClient(supabase, clientId, user.id, user.id);
+
   return {
     scrapeId: (scrape?.id as string) ?? null,
     scrapedAt: (scrape?.updated_at as string) ?? null,
@@ -276,7 +292,52 @@ export async function getLatestResults(clientId: string): Promise<LatestResults>
         "is_outlier" | "outlier_multiple" | "account_median_comments"
       >[],
     ),
+    commentsByPost,
   };
+}
+
+export type AddCommentResult = { ok: true; comment: PostComment } | { ok: false; error: string };
+
+/**
+ * Deja una nota en un post desde el estudio. Es el otro extremo del hilo que el
+ * cliente ve en `/portal/[id]/competencia`: lo que Paco escriba acá le aparece
+ * al cliente, y al revés.
+ *
+ * Va con la sesión (la policy `competitor_post_comments_owner_all` alcanza) y
+ * filtra `owner_id` en la verificación previa: sin eso, el `client_id` que
+ * manda el browser podría colgar una nota de un post ajeno.
+ */
+export async function addCompetitorPostComment(
+  clientId: string,
+  postId: string,
+  body: string,
+): Promise<AddCommentResult> {
+  try {
+    const { supabase, user } = await getAuthUser();
+
+    const { data: post } = await supabase
+      .from("competitor_posts")
+      .select("id")
+      .eq("id", postId)
+      .eq("client_id", clientId)
+      .eq("owner_id", user.id)
+      .maybeSingle();
+    if (!post) return { ok: false, error: "Ese post no existe o no es de esta marca." };
+
+    const comment = await addPostComment(supabase, {
+      postId,
+      clientId,
+      authorId: user.id,
+      body,
+      isOwner: true,
+    });
+    return { ok: true, comment };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo guardar la nota.",
+    };
+  }
 }
 
 export type FoundByPublicId = {

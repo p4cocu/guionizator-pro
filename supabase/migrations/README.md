@@ -41,6 +41,21 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0012 | `0012_portal_display_names.sql` | ✅ 2026-08-18 (antes del deploy) |
 | 0013 | `0013_stripe_billing.sql` | ✅ 2026-08-24 (antes del deploy) |
 | 0014 | `0014_publicacion_externa.sql` | ✅ 2026-09-07 (antes del deploy) |
+| 0015 | `0015_competencia_notas_y_retencion.sql` | ✅ 2026-09-10 (antes del deploy) |
+
+### 0015 va ANTES del deploy (mismo caso que 0008–0014)
+
+Es aditiva: crea `competitor_post_comments` y no toca ninguna columna
+existente. El código publicado hoy no conoce la tabla, así que sigue andando
+entre la migración y el deploy. Al revés no: las dos pantallas de competencia
+(estudio y portal) leen el hilo de notas al cargar.
+
+La otra mitad de esa entrega **no lleva esquema**: los posts guardados a mano
+(`is_manual`) pasan a vivir 120 días en vez de ser inmortales por llevar
+estrella. Vive en `lib/competencia/retention.ts` y lo aplican el cron
+`cleanup-competencia-scheduled` y `runScrapeJob`. Al deployar, la primera
+corrida del cron puede borrar de golpe los manuales viejos que se habían
+acumulado — es lo esperado, pero conviene mirar el resultado de esa corrida.
 
 ### 0013 va ANTES del deploy, y el backfill es lo que hace seguro el rollout
 

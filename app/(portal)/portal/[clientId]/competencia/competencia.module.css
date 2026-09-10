@@ -557,3 +557,301 @@
   color: var(--text-muted);
   margin-top: 4px;
 }
+
+/* ── Guardar un link (2026-09-10) ──
+ *
+ * Va arriba de los filtros y se dibuja también con el tablero vacío: si
+ * estuviera dentro de la grilla, una marca sin scrapes no tendría por dónde
+ * empezar. Colapsado por defecto — es una acción ocasional, no el centro de la
+ * pantalla.
+ */
+
+.savePanel {
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  background: rgba(0, 159, 125, 0.05);
+}
+
+.savePanelHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.savePanelTitle {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+
+.savePanelHint {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 56ch;
+}
+
+.savePanelToggle {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--emerald);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  background: transparent;
+  padding: 7px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.savePanelToggle:hover {
+  border-color: var(--emerald);
+  background: rgba(0, 159, 125, 0.1);
+}
+
+.saveOk {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--emerald);
+  margin-top: 10px;
+}
+
+.saveForm {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.saveField {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* La nota ocupa el ancho completo: es el campo donde de verdad se escribe. */
+.saveFieldWide {
+  grid-column: 1 / -1;
+}
+
+.saveLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.saveOptional {
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.saveError {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: var(--flare);
+}
+
+.saveActions {
+  grid-column: 1 / -1;
+}
+
+/* ── Bote de basura de la tarjeta ── */
+
+.trashBtn {
+  font-size: 14px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.12s ease;
+}
+
+.trashBtn:hover {
+  color: var(--flare);
+  transform: scale(1.12);
+}
+
+/* ── Notas del post ── */
+
+.notes {
+  border-top: 1px solid var(--glass-border);
+  padding-top: 8px;
+}
+
+.notesToggle {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.notesToggle:hover {
+  color: var(--emerald);
+}
+
+.notesBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.notesEmpty {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.notesList {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.note {
+  border-left: 2px solid var(--glass-border);
+  padding-left: 10px;
+}
+
+.noteMeta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+
+.noteAuthor {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--emerald);
+}
+
+.noteDate {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.noteBody {
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notesBody :global(.textarea) {
+  font-size: 13px;
+  padding: 9px 11px;
+}
+
+.notesSend {
+  align-self: flex-start;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--emerald);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  background: transparent;
+  padding: 6px 13px;
+  cursor: pointer;
+}
+
+.notesSend:hover:not(:disabled) {
+  border-color: var(--emerald);
+  background: rgba(0, 159, 125, 0.1);
+}
+
+.notesSend:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Confirmación de borrado ──
+ *
+ * Diálogo propio y no `window.confirm`: el nativo no puede decir QUÉ se pierde
+ * ni marcar que es definitivo, y es justo lo que hay que dejar claro.
+ */
+
+.confirmOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 20, 19, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.confirmBox {
+  width: min(420px, 100%);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-border);
+  background-color: var(--ink-card);
+  background-image: var(--glass-overlay);
+  box-shadow: var(--glass-shadow);
+  padding: 22px 24px;
+}
+
+.confirmTitle {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.confirmText {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.confirmTarget {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.confirmDanger {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--paper);
+  background: var(--flare);
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 10px 18px;
+  cursor: pointer;
+}
+
+.confirmDanger:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.confirmDanger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

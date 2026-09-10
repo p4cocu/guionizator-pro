@@ -8,6 +8,7 @@ import {
   classifyPost,
   deleteCompetitorPost,
   findPostByPublicId,
+  addCompetitorPostComment,
   getLatestResults,
   getScrapeStatus,
   listCompetitors,
@@ -21,6 +22,12 @@ import {
 } from "./actions";
 import { DIMENSIONS, labelFor, colorFor } from "@/lib/competencia/taxonomy";
 import { looksLikePublicId, normalizePublicId } from "@/lib/competencia/publicId";
+import { accountLabel, UNKNOWN_ACCOUNT } from "@/lib/competencia/savedLink";
+import {
+  MAX_POST_COMMENT_LENGTH,
+  type PostComment,
+  type PostCommentsByPost,
+} from "@/lib/competencia/postCommentShape";
 import AdaptarModal from "./AdaptarModal";
 import GanchoModal from "./GanchoModal";
 import ReporteModal from "./ReporteModal";
@@ -109,6 +116,11 @@ export default function CompetenciaClient({ clients }: Props) {
 
   const [view, setView] = useState<"posts" | "outliers">("posts");
   const [sortBy, setSortBy] = useState<SortKey>("views");
+  /**
+   * Las notas de cada post. Es el otro extremo del hilo que el cliente ve en su
+   * portal: acá aparece lo que él escribió y desde acá se le responde.
+   */
+  const [comentarios, setComentarios] = useState<PostCommentsByPost>({});
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [accountFilter, setAccountFilter] = useState<string>("all");
 
@@ -167,6 +179,7 @@ export default function CompetenciaClient({ clients }: Props) {
       if (cancelled) return;
       setCompetitors(comps);
       setPosts(results.posts);
+      setComentarios(results.commentsByPost);
       setScrapedAt(results.scrapedAt);
       setAccountFilter("all");
       setTypeFilter("all");
@@ -455,6 +468,13 @@ export default function CompetenciaClient({ clients }: Props) {
   async function handleDeletePost(post: CompetitorPost) {
     if (!window.confirm("¿Eliminar este post de competencia? Esta acción no se puede deshacer.")) return;
     setPosts((prev) => prev.filter((p) => p.id !== post.id));
+    // Las notas se van con el post en la base (`on delete cascade`); acá se
+    // sacan a mano para que el estado del cliente no quede con basura.
+    setComentarios((prev) => {
+      const copia = { ...prev };
+      delete copia[post.id];
+      return copia;
+    });
     await deleteCompetitorPost(post.id);
   }
 
@@ -506,6 +526,18 @@ export default function CompetenciaClient({ clients }: Props) {
     });
   }
 
+  /** Devuelve el mensaje de error, o `null` si salió bien. */
+  async function handleComment(postId: string, body: string): Promise<string | null> {
+    try {
+      const res = await addCompetitorPostComment(clientId, postId, body);
+      if (!res.ok) return res.error;
+      setComentarios((prev) => ({ ...prev, [postId]: [...(prev[postId] ?? []), res.comment] }));
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "No se pudo guardar la nota.";
+    }
+  }
+
   async function handleCopyId(post: CompetitorPost) {
     try {
       await navigator.clipboard.writeText(post.public_id);
@@ -540,14 +572,19 @@ export default function CompetenciaClient({ clients }: Props) {
             aria-label={`Incluir el post de @${p.username} en el reporte`}
           />
           <span className={s.rank}>#{i + 1}</span>
-          <a
-            className={s.user}
-            href={`https://www.instagram.com/${p.username}/`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            @{p.username}
-          </a>
+          {/* Un guardado sin cuenta identificada no tiene perfil al que ir. */}
+          {p.username === UNKNOWN_ACCOUNT ? (
+            <span className={s.user}>{accountLabel(p.username)}</span>
+          ) : (
+            <a
+              className={s.user}
+              href={`https://www.instagram.com/${p.username}/`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              @{p.username}
+            </a>
+          )}
           {p.is_manual && (
             <span className={s.manualBadge}>Manual</span>
           )}
@@ -734,6 +771,11 @@ export default function CompetenciaClient({ clients }: Props) {
             ↓ Descargar
           </button>
         )}
+
+        <NotasPost
+          comments={comentarios[p.id] ?? []}
+          onComment={(body) => handleComment(p.id, body)}
+        />
       </div>
     );
   }
@@ -1263,6 +1305,89 @@ function Stat({ value, label }: { value: string; label: string }) {
     <div className={s.statCard}>
       <span className={s.statValue}>{value}</span>
       <span className={s.statLabel}>{label}</span>
+    </div>
+  );
+}
+
+
+/**
+ * Hilo de notas de un post, del lado del estudio. Es el mismo hilo
+ * (`competitor_post_comments`) que ve el cliente en su portal: lo que él
+ * escriba aparece acá con su nombre, y lo que Paco escriba le llega a él.
+ *
+ * Colapsado por defecto, con el contador a la vista: la señal de "hay algo que
+ * leer" tiene que verse barriendo la grilla, sin abrir tarjeta por tarjeta.
+ */
+function NotasPost({
+  comments,
+  onComment,
+}: {
+  comments: PostComment[];
+  onComment: (body: string) => Promise<string | null>;
+}) {
+  const [abierto, setAbierto] = useState(comments.length > 0);
+  const [body, setBody] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!body.trim()) return;
+    setGuardando(true);
+    setError(null);
+    const err = await onComment(body);
+    setGuardando(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setBody("");
+  }
+
+  return (
+    <div className={s.notes}>
+      <button
+        type="button"
+        className={s.notesToggle}
+        onClick={() => setAbierto((v) => !v)}
+        aria-expanded={abierto}
+      >
+        📝 Notas{comments.length > 0 ? ` (${comments.length})` : ""}
+      </button>
+
+      {abierto && (
+        <div className={s.notesBody}>
+          {comments.map((c) => (
+            <div key={c.id} className={s.note}>
+              <p className={s.noteMeta}>
+                <span className={s.noteAuthor}>{c.isMine ? "Tú" : c.authorLabel}</span>
+                {!c.isOwner && <span className={s.noteTag}>cliente</span>}
+                <span className={s.noteDate}>
+                  {new Date(c.createdAt).toLocaleDateString("es-MX")}
+                </span>
+              </p>
+              <p className={s.noteBody}>{c.body}</p>
+            </div>
+          ))}
+
+          <textarea
+            className="textarea"
+            rows={2}
+            value={body}
+            maxLength={MAX_POST_COMMENT_LENGTH}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Nota sobre este contenido…"
+          />
+          {error && <p className={s.notesError}>{error}</p>}
+          <button
+            type="button"
+            className={s.notesSend}
+            onClick={submit}
+            disabled={guardando || !body.trim()}
+          >
+            {guardando ? "Guardando…" : "Agregar nota"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
