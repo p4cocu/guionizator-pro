@@ -20,7 +20,7 @@ import {
   addScriptToCalendar,
   restoreScriptVersion,
 } from "../actions";
-import { RECORDING_TYPE_LABELS } from "../page";
+import { RECORDING_TYPE_LABELS } from "../labels";
 import { ReelEditor, CarouselEditor } from "./ScriptEditors";
 import CopyExpertPanel from "./CopyExpertPanel";
 import ImagePromptsPanel from "./ImagePromptsPanel";
@@ -843,6 +843,33 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
         </div>
 
         <div className={styles.detailActions}>
+          {/* Atajo de un clic al final del recorrido: el video ya se grabó y
+              se subió. No es un estado nuevo — escribe el `publicado` que ya
+              existía en el CHECK de `scripts.status` — y lo que hace es mandar
+              la ficha a `/guiones/hechos`, fuera de la lista de lo que está en
+              proceso. Está siempre disponible, no solo sobre guiones aprobados
+              por el cliente: las publicaciones externas (migración 0014) nacen
+              en `listo` y nadie las aprueba. */}
+          {currentStatus === "publicado" ? (
+            <div className={styles.uploadedRow}>
+              <span className={styles.uploadedTag}>✓ Subido</span>
+              <button
+                className={styles.uploadedUndo}
+                onClick={() => handleStatusChange("listo")}
+                disabled={isUpdatingStatus}
+              >
+                Deshacer
+              </button>
+            </div>
+          ) : (
+            <button
+              className={styles.uploadBtn}
+              onClick={() => handleStatusChange("publicado")}
+              disabled={isUpdatingStatus}
+            >
+              ✓ Ya lo subí
+            </button>
+          )}
           <div className={styles.statusSelector}>
             {STATUS_OPTIONS.map((opt) => (
               <button

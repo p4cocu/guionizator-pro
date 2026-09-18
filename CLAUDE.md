@@ -68,8 +68,28 @@ estos, dilo explícitamente y entrega la migración a Paco.
 | `ai_usage_log.paid_with` | `plan`, `credit` (fuente de verdad en TS: `lib/billing/plan.ts`) |
 
 `baul` = ideas buenas pero congeladas (falta pulir herramientas para producirlas).
-**Se oculta por defecto** en la lista de Guiones (`getScripts` filtra `neq baul` si no hay
-filtro de estado); solo aparece al elegir "Baúl" en el filtro. No estorba en la vista principal.
+
+**`/guiones` muestra solo lo que está EN PROCESO.** Sin filtro de estado explícito,
+`getScripts` esconde `DEFAULT_HIDDEN_STATUSES` = `baul` **y `publicado`**. El baúl
+reaparece al elegir "Baúl" en el filtro; lo publicado vive en la pestaña **"Hechos"**
+(`/guiones/hechos`), que es `getScripts(cliente, tipo, ["publicado"])` con la misma
+tarjeta (`ScriptCard.tsx`, extraída de `page.tsx` justo para compartirla). El botón
+**"✓ Ya lo subí"** de `/guiones/[id]` es el atajo que manda la ficha ahí: escribe el
+`publicado` que ya existía en el `CHECK` — **no hubo migración ni columna nueva** — así
+que todo lo que ya estaba en ese estado apareció en "Hechos" de entrada. Está siempre
+disponible, no solo sobre guiones con `client_approved_at`: las publicaciones externas
+(migración `0014`) nacen en `listo` y nadie las aprueba. "Deshacer" lo devuelve a `listo`.
+
+⚠️ Se reusó `publicado` en vez de crear un estado `subido` a propósito: agregarlo
+obligaba al `ALTER TABLE` del CHECK y dejaba dos estados que significan lo mismo. La
+contra asumida es que **no queda registro de cuándo se subió** (el orden de "Hechos" es
+por `created_at`); si hace falta, el paso siguiente es `scripts.published_at`, aditivo.
+Del lado del portal no cambió nada: el cliente sigue viendo esas piezas rotuladas
+"Publicado" en su lista de guiones.
+
+Las etiquetas y colores de estado viven en `app/(app)/guiones/labels.ts` (antes estaban
+exportados desde `page.tsx`, que es una página server y los importaba un componente
+cliente).
 
 `resources.kind` separa los tres tabs de `/recursos` que comparten tabla `resources`:
 `capturado` (ideas para reels/carruseles, con cliente/guión) vs `universal` (uso personal,
@@ -1056,6 +1076,29 @@ fila de `scripts` con `is_external = true` y todo lo que ya cuelga de un guion
   `ScriptDetailClient` abre y **dispara solos** Copy Expert y Portadas. Los dos
   paneles traen un `useRef` de una sola línea que evita que el StrictMode de dev
   mande dos llamadas a Claude.
+
+### Las 1-2 preguntas de afinado (`lib/ai/copyQuestions.ts`)
+
+Antes de crear la publicación externa, la IA lee el contexto que escribiste y
+devuelve **1 o 2 preguntas opcionales** cuya respuesta hace el copy más
+concreto. Existe porque el contexto escrito de apuro describe el video pero casi
+nunca trae el dato duro, la objeción real o el CTA — y pedírselo al prompt del
+copy no sirve: el modelo se lo inventa.
+
+- **No toca ningún prompt existente ni agrega columnas.** Las respuestas se
+  anexan al contexto (`appendAnswersToContext`) y ese texto es el que ya iba a
+  `scripts.brief` y a `content.voice_off`, o sea lo que leen `/api/ai/copy` y
+  `/api/ai/cover`. Sin respuestas, el flujo es idéntico al de antes.
+- Server action `suggestCopyQuestions` (`guiones/nuevo/questionActions.ts`), con
+  `MODEL_FAST` y 600 tokens: corre síncrona dentro de la Function y el usuario
+  espera con el cursor en el formulario (~1.5s medido). **Nunca lanza por culpa
+  del modelo** — si falla devuelve `[]` y el panel no aparece.
+- Se dispara sola al salir del textarea (mínimo 60 caracteres de contexto) y hay
+  botón para pedirlas a mano o volver a pedirlas si cambiaste el texto.
+- ⚠️ El prompt trae cuatro reglas que salieron de probar contra la API real: sin
+  ellas el modelo encadenaba dos preguntas con "o", ofrecía opciones dentro de la
+  pregunta, se pasaba de largo y **se iba al voseo** ("¿qué querés que hagan?")
+  pese al `tuteo` del system prompt. Al tocar el prompt, reprobar esas cuatro.
 
 ### El prompt del copy dejó de estar duplicado
 

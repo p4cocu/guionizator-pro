@@ -23,7 +23,20 @@ function buildLabel(estados: string[]) {
   return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
 }
 
-export default function ClientFilter({ clients }: { clients: ClientOption[] }) {
+/**
+ * `basePath` existe porque este filtro lo usan dos rutas: `/guiones` y
+ * `/guiones/hechos`. `showEstados` lo apaga en "Hechos", donde el estado está
+ * fijo en `publicado` y un dropdown de estados solo confundiría.
+ */
+export default function ClientFilter({
+  clients,
+  basePath = "/guiones",
+  showEstados = true,
+}: {
+  clients: ClientOption[];
+  basePath?: string;
+  showEstados?: boolean;
+}) {
   const router = useRouter();
   const params = useSearchParams();
   const currentCliente = params.get("cliente") ?? "";
@@ -36,7 +49,7 @@ export default function ClientFilter({ clients }: { clients: ClientOption[] }) {
 
   // On first load with no URL estado, restore from localStorage
   useEffect(() => {
-    if (currentEstados.length === 0) {
+    if (showEstados && currentEstados.length === 0) {
       try {
         const saved = localStorage.getItem(LS_KEY);
         if (saved) {
@@ -72,9 +85,9 @@ export default function ClientFilter({ clients }: { clients: ClientOption[] }) {
       if (tipo) p.set("tipo", tipo);
       estados.forEach((e) => p.append("estado", e));
       const qs = p.toString();
-      router.push(qs ? `/guiones?${qs}` : "/guiones");
+      router.push(qs ? `${basePath}?${qs}` : basePath);
     },
-    [router]
+    [router, basePath]
   );
 
   function handleSave() {
@@ -109,6 +122,7 @@ export default function ClientFilter({ clients }: { clients: ClientOption[] }) {
       </select>
 
       {/* Estado multi-select dropdown */}
+      {showEstados && (
       <div ref={dropdownRef} style={{ position: "relative" }}>
         <button
           className={`input ${styles.clientSelect} ${styles.estadoFilterBtn}`}
@@ -158,6 +172,7 @@ export default function ClientFilter({ clients }: { clients: ClientOption[] }) {
           </div>
         )}
       </div>
+      )}
     </>
   );
 }

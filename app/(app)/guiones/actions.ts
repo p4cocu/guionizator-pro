@@ -343,6 +343,13 @@ export async function deleteScript(id: string) {
   redirect("/guiones");
 }
 
+/**
+ * Estados que la lista principal esconde cuando no hay filtro explícito.
+ * `baul` = idea buena pero congelada; `publicado` = ya subido, vive en la
+ * pestaña "Hechos" (`/guiones/hechos`).
+ */
+const DEFAULT_HIDDEN_STATUSES: ScriptStatus[] = ["baul", "publicado"];
+
 export async function getScripts(
   clientId?: string,
   type?: ScriptType,
@@ -366,10 +373,11 @@ export async function getScripts(
   if (estados && estados.length > 0) {
     query = query.in("status", estados);
   } else {
-    // Por defecto (sin filtro de estado) ocultamos el Baúl: son ideas congeladas
-    // que no deben estorbar en la vista principal. Solo aparecen si se filtran
-    // explícitamente por "baul".
-    query = query.neq("status", "baul");
+    // Por defecto (sin filtro de estado) ocultamos el Baúl y lo ya subido: son
+    // ideas congeladas y trabajo terminado, ninguno de los dos estorba en la
+    // vista de lo que está en proceso. El baúl aparece si se filtra
+    // explícitamente por "baul"; lo subido vive en `/guiones/hechos`.
+    query = query.not("status", "in", `(${DEFAULT_HIDDEN_STATUSES.join(",")})`);
   }
 
   const { data, error } = await query;
@@ -390,6 +398,31 @@ export async function getScripts(
   ]);
 
   return scripts.map((s) => ({ ...s, has_resource: withResource.has(s.id) }));
+}
+
+/**
+ * Cuántos guiones ya subidos hay, para el contador de la pestaña "Hechos".
+ * Es un `count` sin traer filas: la pestaña solo necesita el número.
+ */
+export async function countDoneScripts(
+  clientId?: string,
+  type?: ScriptType,
+): Promise<number> {
+  const { supabase, user } = await getAuthUser();
+
+  let query = supabase
+    .from("scripts")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", user.id)
+    .eq("is_latest", true)
+    .is("trashed_at", null)
+    .eq("status", "publicado");
+
+  if (clientId) query = query.eq("client_id", clientId);
+  if (type) query = query.eq("type", type);
+
+  const { count } = await query;
+  return count ?? 0;
 }
 
 export type OwnResourceForScript = {
