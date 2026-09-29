@@ -833,6 +833,12 @@ export default function ScriptDetailClient({ script, versions, initialCopies, cu
                 ⏺ Grabado fuera
               </span>
             )}
+            {/* Servicio que promueve (migración 0016). Copy y portadas leen su ficha. */}
+            {script.client_products?.nombre && (
+              <span className={styles.productBadge} style={{ marginLeft: 8 }}>
+                ◆ {script.client_products.nombre}
+              </span>
+            )}
             {/* Lo generó el cliente desde su portal (add-on de IA, etapa 6). */}
             {script.generated_by && (
               <span className={styles.clientGenerated} style={{ marginLeft: 8 }}>

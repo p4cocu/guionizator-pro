@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
+import { loadProduct } from "@/lib/products/load";
 import fs from "fs";
 import path from "path";
 
@@ -49,6 +50,7 @@ function buildUserMessage(
   structureName: string,
   contentSummary: string,
   knowledge: string,
+  productLine: string | null = null,
 ) {
   return `GUÍA DE REFERENCIA — QUÉ HACE UNA PORTADA DE ALTO CTR:
 ${knowledge}
@@ -59,7 +61,7 @@ GUION A CUBRIR:
 Tipo: ${scriptType === "reel" ? "Reel (formato 9:16 vertical)" : "Carrusel (primera diapositiva, formato 4:5)"}
 Estructura narrativa: ${structureName}
 Brief: ${brief}
-
+${productLine ? `${productLine}\n` : ""}
 Contenido del guion:
 ${contentSummary}
 
@@ -119,7 +121,7 @@ export async function POST(req: NextRequest) {
     // tokens sin pasar por ningún medidor.
     const { data: script } = await supabase
       .from("scripts")
-      .select("type, brief, structure_name, content")
+      .select("type, brief, structure_name, content, client_id, product_id")
       .eq("id", body.script_id)
       .eq("owner_id", user.id)
       .maybeSingle();
@@ -127,6 +129,17 @@ export async function POST(req: NextRequest) {
     if (!script) {
       return NextResponse.json({ error: "Ese guion no existe o no es tuyo." }, { status: 404 });
     }
+
+    // Servicio del guion (0016). Solo una línea: la portada vende el gancho,
+    // no la ficha entera, y esta ruta va justa contra el límite de Netlify.
+    const product = await loadProduct(supabase, {
+      productId: script.product_id as string | null,
+      ownerId: user.id,
+      clientId: script.client_id as string,
+    });
+    const productLine = product
+      ? `Servicio que promueve: ${product.nombre}${product.para_quien ? ` (para: ${product.para_quien})` : ""}${product.problema ? ` — resuelve: ${product.problema}` : ""}`.slice(0, 400)
+      : null;
 
     const scriptType = (script.type as string | null) ?? "reel";
     const knowledge = readKnowledge("knowledge/portadas-reels-carruseles-alto-ctr.md");
@@ -140,6 +153,7 @@ export async function POST(req: NextRequest) {
       (script.structure_name as string | null) ?? "",
       contentSummary,
       knowledge,
+      productLine,
     );
 
     let covers: CoverIdea[];

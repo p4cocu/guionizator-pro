@@ -4,6 +4,8 @@ import { MODEL_DEFAULT, MODEL_FAST } from "@/lib/ai/anthropic";
 import { AiJsonError, generateJson } from "@/lib/ai/json";
 // Compartido con /api/ai/copy — una sola definición del perfil de marca.
 import { buildClientContext } from "@/lib/ai/clientContext";
+import { PRODUCT_SCRIPT_GUIDANCE, withProductContext } from "@/lib/ai/productContext";
+import { loadProductContext } from "@/lib/products/load";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { client_id, brief, type, structure_name, structure, big_idea, micro_story } = (await req.json()) as {
+    const { client_id, brief, type, structure_name, structure, big_idea, micro_story, product_id } = (await req.json()) as {
       client_id: string;
       brief: string;
       type: "reel" | "carousel";
@@ -51,6 +53,8 @@ export async function POST(req: NextRequest) {
       structure?: { hook: string; arc: string; close: string };
       big_idea?: string;
       micro_story?: string;
+      /** Servicio que promueve el guion (ficha de oferta, migración 0016). */
+      product_id?: string | null;
     };
 
     if (!client_id || !brief?.trim() || !type || !structure_name) {
@@ -72,6 +76,12 @@ export async function POST(req: NextRequest) {
       .eq("owner_id", user.id)
       .eq("is_active", true)
       .single();
+
+    const productContext = await loadProductContext(supabase, {
+      productId: product_id,
+      ownerId: user.id,
+      clientId: client_id,
+    });
 
     const isAlborna = isAlbornaStructure(structure_name);
 
@@ -108,7 +118,7 @@ export async function POST(req: NextRequest) {
 
 Brief:
 ${brief.trim()}
-${bigIdeaLine}${microStoryLine}
+${productContext ? `\n${PRODUCT_SCRIPT_GUIDANCE}\n` : ""}${bigIdeaLine}${microStoryLine}
 Estructura elegida: ${structure_name}${structurePlan}
 ${albornaRules}
 Genera el guion completo desarrollando exactamente el planteamiento indicado arriba. Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
@@ -123,7 +133,7 @@ ${format}`;
         label: "script",
         userMessage,
         brainContent: activeBrain?.content ?? undefined,
-        clientContext: buildClientContext(client),
+        clientContext: withProductContext(buildClientContext(client), productContext),
         model,
         maxTokens,
       }));

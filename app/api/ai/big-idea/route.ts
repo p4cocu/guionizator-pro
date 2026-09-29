@@ -2,24 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { MODEL_FAST } from "@/lib/ai/anthropic";
 import { AiJsonError, generateJson } from "@/lib/ai/json";
+import { buildClientContext } from "@/lib/ai/clientContext";
+import { PRODUCT_SCRIPT_GUIDANCE, withProductContext } from "@/lib/ai/productContext";
+import { loadProductContext } from "@/lib/products/load";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
-
-function buildClientContext(c: Record<string, string | null>): string {
-  return [
-    `## Perfil del cliente: ${c.nombre}`,
-    c.marca && `**Marca:** ${c.marca}`,
-    c.que_vende && `**Qué vende:** ${c.que_vende}`,
-    c.cliente_ideal && `**Cliente ideal:** ${c.cliente_ideal}`,
-    c.nicho && `**Nicho:** ${c.nicho}`,
-    c.dolor && `**Dolor principal:** ${c.dolor}`,
-    c.deseo && `**Deseo principal:** ${c.deseo}`,
-    c.tono && `**Tono de voz:** ${c.tono}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,10 +17,12 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { client_id, brief, type } = (await req.json()) as {
+    const { client_id, brief, type, product_id } = (await req.json()) as {
       client_id: string;
       brief: string;
       type: "reel" | "carousel";
+      /** Servicio que promueve el guion (ficha de oferta, migración 0016). */
+      product_id?: string | null;
     };
 
     if (!client_id || !brief?.trim() || !type) {
@@ -48,11 +38,17 @@ export async function POST(req: NextRequest) {
 
     if (!client) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
 
+    const productContext = await loadProductContext(supabase, {
+      productId: product_id,
+      ownerId: user.id,
+      clientId: client_id,
+    });
+
     const userMessage = `Tipo de contenido: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (8–10 slides)"}
 
 Brief:
 ${brief.trim()}
-
+${productContext ? `\n${PRODUCT_SCRIPT_GUIDANCE}\n` : ""}
 Tu tarea: define LA BIG IDEA de este guion — el mensaje central más poderoso que queremos transmitir.
 
 La Big Idea debe:
@@ -69,7 +65,11 @@ Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional):
       ({ data: parsed } = await generateJson({
         label: "big-idea",
         userMessage,
-        clientContext: buildClientContext(client),
+        // Esta ruta nunca mandó `notas`; se conserva.
+        clientContext: withProductContext(
+          buildClientContext(client, { includeNotes: false }),
+          productContext,
+        ),
         model: MODEL_FAST,
         maxTokens: 300,
       }));

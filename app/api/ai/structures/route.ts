@@ -2,25 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { MODEL_DEFAULT } from "@/lib/ai/anthropic";
 import { AiJsonError, generateJson } from "@/lib/ai/json";
+import { buildClientContext } from "@/lib/ai/clientContext";
+import { PRODUCT_SCRIPT_GUIDANCE, withProductContext } from "@/lib/ai/productContext";
+import { loadProductContext } from "@/lib/products/load";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-function buildClientContext(c: Record<string, string | null>): string {
-  return [
-    `## Perfil del cliente: ${c.nombre}`,
-    c.marca && `**Marca:** ${c.marca}`,
-    c.que_vende && `**Qué vende:** ${c.que_vende}`,
-    c.cliente_ideal && `**Cliente ideal:** ${c.cliente_ideal}`,
-    c.nicho && `**Nicho:** ${c.nicho}`,
-    c.dolor && `**Dolor principal:** ${c.dolor}`,
-    c.deseo && `**Deseo principal:** ${c.deseo}`,
-    c.tono && `**Tono de voz:** ${c.tono}`,
-    c.notas && `**Notas adicionales:** ${c.notas}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,11 +17,13 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { client_id, brief, type, big_idea } = (await req.json()) as {
+    const { client_id, brief, type, big_idea, product_id } = (await req.json()) as {
       client_id: string;
       brief: string;
       type: "reel" | "carousel";
       big_idea?: string;
+      /** Servicio que promueve el guion (ficha de oferta, migración 0016). */
+      product_id?: string | null;
     };
 
     if (!client_id || !brief?.trim() || !type) {
@@ -57,11 +46,17 @@ export async function POST(req: NextRequest) {
       .eq("is_active", true)
       .single();
 
+    const productContext = await loadProductContext(supabase, {
+      productId: product_id,
+      ownerId: user.id,
+      clientId: client_id,
+    });
+
     const userMessage = `Tipo de contenido: ${type === "reel" ? "Reel (30–60s)" : "Carrusel (8–10 slides)"}
 
 Brief:
 ${brief.trim()}
-${big_idea?.trim() ? `\nBig Idea (mensaje central confirmado por el usuario — todas las estructuras deben servir a este mensaje):\n"${big_idea.trim()}"\n` : ""}
+${productContext ? `\n${PRODUCT_SCRIPT_GUIDANCE}\n` : ""}${big_idea?.trim() ? `\nBig Idea (mensaje central confirmado por el usuario — todas las estructuras deben servir a este mensaje):\n"${big_idea.trim()}"\n` : ""}
 Aplica el Paso 0 de tu flujo. Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
 {
   "discarded": {"name": "nombre exacto de la estructura descartada", "reason": "razón en ≤15 palabras"},
@@ -93,7 +88,7 @@ Aplica el Paso 0 de tu flujo. Responde ÚNICAMENTE con JSON válido (sin markdow
         label: "structures",
         userMessage,
         brainContent: activeBrain?.content ?? undefined,
-        clientContext: buildClientContext(client),
+        clientContext: withProductContext(buildClientContext(client), productContext),
         model: MODEL_DEFAULT,
         maxTokens: 1500,
       }));

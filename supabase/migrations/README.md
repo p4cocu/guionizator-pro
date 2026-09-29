@@ -42,6 +42,19 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0013 | `0013_stripe_billing.sql` | ✅ 2026-08-24 (antes del deploy) |
 | 0014 | `0014_publicacion_externa.sql` | ✅ 2026-09-07 (antes del deploy) |
 | 0015 | `0015_competencia_notas_y_retencion.sql` | ✅ 2026-09-10 (antes del deploy) |
+| 0016 | `0016_ficha_servicio.sql` | ✅ 2026-09-29 (antes del deploy) |
+
+### 0016 va ANTES del deploy
+
+Aditiva: diez columnas de texto + `updated_at` en `client_products` (la ficha
+de oferta), `scripts.product_id` (FK `on delete set null`) y una línea más en
+`scripts_guard_member_update` para congelar `product_id` cuando edita alguien
+que no es el dueño. La app publicada hoy no conoce nada de eso y sigue andando.
+Al revés no: el perfil del cliente, "Nuevo guion" y el detalle del guion
+seleccionan las columnas nuevas al cargar y se caen sin ellas.
+
+`client_products.tipo` ya tenía un CHECK (`producto`, `servicio`) desde antes
+de esta carpeta; esta migración no lo toca.
 
 ### 0015 va ANTES del deploy (mismo caso que 0008–0014)
 

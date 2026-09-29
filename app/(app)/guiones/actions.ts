@@ -47,7 +47,15 @@ export type ScriptRow = {
    * es la descripción que escribió Paco en `voice_off`, no un guion generado.
    */
   is_external: boolean;
+  /**
+   * Servicio para el que se escribió (migración `0016`). `null` = sin servicio,
+   * o el servicio se borró (`on delete set null`). Copy Expert y Portadas leen
+   * su ficha.
+   */
+  product_id: string | null;
   clients: { nombre: string; marca: string | null } | null;
+  /** Solo lo trae `getScriptWithVersions` (badge del detalle). */
+  client_products?: { nombre: string; tipo: string } | null;
   has_resource?: boolean;
 };
 
@@ -92,6 +100,28 @@ export async function saveScript(data: {
   redirect(`/guiones/${script.id}`);
 }
 
+/**
+ * El `product_id` llega del browser y la FK acepta cualquier producto que
+ * exista, de cualquier marca. Se guarda solo si es de este dueño Y de esta
+ * marca; si no, el guion se guarda igual, sin servicio.
+ */
+async function resolveProductId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ownerId: string,
+  clientId: string,
+  productId: string | null | undefined,
+): Promise<string | null> {
+  if (!productId) return null;
+  const { data } = await supabase
+    .from("client_products")
+    .select("id")
+    .eq("id", productId)
+    .eq("owner_id", ownerId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  return (data?.id as string | undefined) ?? null;
+}
+
 export async function saveScriptSilent(data: {
   client_id: string;
   type: ScriptType;
@@ -102,8 +132,10 @@ export async function saveScriptSilent(data: {
   brain_version_id: string | null;
   source_post_permalink?: string | null;
   source_post_id?: string | null;
+  product_id?: string | null;
 }): Promise<string> {
   const { supabase, user } = await getAuthUser();
+  const productId = await resolveProductId(supabase, user.id, data.client_id, data.product_id);
 
   const { data: script, error } = await supabase
     .from("scripts")
@@ -118,6 +150,7 @@ export async function saveScriptSilent(data: {
       brain_version_id: data.brain_version_id,
       source_post_permalink: data.source_post_permalink ?? null,
       source_post_id: data.source_post_id ?? null,
+      product_id: productId,
     })
     .select("id")
     .single();
@@ -143,8 +176,10 @@ export async function saveScriptWithNewIdea(data: {
   brain_version_id: string | null;
   source_post_permalink?: string | null;
   source_post_id?: string | null;
+  product_id?: string | null;
 }): Promise<string> {
   const { supabase, user } = await getAuthUser();
+  const productId = await resolveProductId(supabase, user.id, data.client_id, data.product_id);
 
   const { data: script, error } = await supabase
     .from("scripts")
@@ -159,6 +194,7 @@ export async function saveScriptWithNewIdea(data: {
       brain_version_id: data.brain_version_id,
       source_post_permalink: data.source_post_permalink ?? null,
       source_post_id: data.source_post_id ?? null,
+      product_id: productId,
     })
     .select("id")
     .single();
@@ -481,7 +517,7 @@ export async function getScriptWithVersions(id: string): Promise<{
 
   const { data: script } = await supabase
     .from("scripts")
-    .select("*, clients(nombre, marca)")
+    .select("*, clients(nombre, marca), client_products(nombre, tipo)")
     .eq("id", id)
     .eq("owner_id", user.id)
     .single();
@@ -572,6 +608,10 @@ export async function saveScriptVersion(
       // La liga al post original se arrastra entre versiones: si no, editar un
       // guion adaptado lo desconectaría del post en el reporte.
       source_post_id: (current as ScriptRow).source_post_id ?? null,
+      // Lo mismo con el servicio (0016) y con la marca de publicación externa
+      // (0014): sin arrastrarlos, guardar una versión los borraba en silencio.
+      product_id: (current as ScriptRow).product_id ?? null,
+      is_external: (current as ScriptRow).is_external === true,
     })
     .select("id")
     .single();

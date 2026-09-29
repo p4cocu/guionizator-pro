@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveScriptWithNewIdea } from "../guiones/actions";
+import { getProductOptions } from "../clientes/productActions";
 import type { CompetitorPost } from "./actions";
 import s from "./competencia.module.css";
 
@@ -85,6 +86,25 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
   const [adaptType, setAdaptType] = useState<AdaptType>("completa");
   const [adaptContext, setAdaptContext] = useState("");
 
+  // Servicio al que se adapta, además de la marca (ficha de oferta, 0016).
+  // Se cargan al abrir: la marca destino puede ser otra que la del tablero.
+  const [products, setProducts] = useState<{ id: string; nombre: string; tipo: string }[]>([]);
+  const [productId, setProductId] = useState("");
+  useEffect(() => {
+    let alive = true;
+    getProductOptions(clientId)
+      .then((list) => {
+        if (alive) setProducts(list);
+      })
+      .catch(() => {
+        // Sin lista, se adapta solo a la marca, como antes.
+        if (alive) setProducts([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [clientId]);
+
   // Paso 2: resultado
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AdaptResponse | null>(null);
@@ -105,6 +125,7 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
             post,
             adapt_type: type,
             context: context.trim() || undefined,
+            product_id: productId || undefined,
           }),
         });
         const json = await res.json();
@@ -118,7 +139,7 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
         setPhase("result");
       }
     },
-    [clientId, post]
+    [clientId, post, productId]
   );
 
   function handleContinuar() {
@@ -131,6 +152,7 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
         brief,
         source_post_id: post.id,
         ...(post.permalink ? { source_post_permalink: post.permalink } : {}),
+        ...(productId ? { product_id: productId } : {}),
       });
       router.push(`/guiones/nuevo?${params.toString()}`);
       onClose();
@@ -181,6 +203,7 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
           brain_version_id: data.brain_version_id,
           source_post_permalink: post.permalink ?? null,
           source_post_id: post.id,
+          product_id: productId || null,
         });
         setSavedId(id);
       } catch (e) {
@@ -253,6 +276,31 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
                   </div>
                 </button>
               </div>
+
+              {products.length > 0 && (
+                <div className={s.adaptContextField}>
+                  <label className="field-label">Adaptar también a un servicio (opcional)</label>
+                  <select
+                    className="input"
+                    value={productId}
+                    onChange={(e) => setProductId(e.target.value)}
+                  >
+                    <option value="">— Solo a la marca —</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.tipo === "producto" ? "Producto" : "Servicio"}: {p.nombre}
+                      </option>
+                    ))}
+                  </select>
+                  {productId && (
+                    <p className={s.adaptPickerLabel} style={{ marginTop: 6, fontSize: 12 }}>
+                      {adaptType === "completa"
+                        ? "El ángulo ganador se aterriza en el problema, el proceso y el CTA de su ficha."
+                        : "El post se conserva; solo el cierre conecta con el servicio y su CTA."}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {adaptType === "ligera" && (
                 <div className={s.adaptContextField}>

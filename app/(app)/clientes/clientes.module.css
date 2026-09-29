@@ -438,12 +438,151 @@
 
 .productItem {
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
+  flex-direction: column;
+  gap: 10px;
   padding: 14px 16px;
   border-radius: var(--r-md);
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--glass-border);
+}
+
+.productItemOpen {
+  border-color: rgba(0, 159, 125, 0.35);
+}
+
+.productRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.productActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.productDeleteConfirm {
+  color: #ff6f61 !important;
+  border-color: rgba(255, 111, 97, 0.4) !important;
+}
+
+.productMeter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.productMeterBar {
+  width: 120px;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.productMeterFill {
+  height: 100%;
+  background: var(--emerald);
+  transition: width 0.3s ease;
+}
+
+.productMeterLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.productEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.productLanding {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  border: 1px dashed rgba(255, 214, 0, 0.3);
+  background: rgba(255, 214, 0, 0.03);
+}
+
+.productLandingActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.productHint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.productGroup {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.productGroupTitle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--emerald);
+  margin-bottom: 10px;
+  padding: 0;
+}
+
+.productGroupHint {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+.productGroupFields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.productField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.productFieldFilled {
+  border-color: rgba(0, 159, 125, 0.6) !important;
+  box-shadow: 0 0 0 2px rgba(0, 159, 125, 0.12);
+}
+
+.productEditorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .productGroupFields {
+    grid-template-columns: 1fr;
+  }
+  .productRow {
+    flex-direction: column;
+  }
 }
 
 .productContent {

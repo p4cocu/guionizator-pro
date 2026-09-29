@@ -3,6 +3,15 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveScriptSilent, linkScriptToCalendar, saveScriptWithNewIdea } from "../actions";
+import { suggestProductIdeas, suggestProductQuestions } from "./productActions";
+import { saveProductField } from "../../clientes/productActions";
+import {
+  IDEA_STAGES,
+  appendProductAnswers,
+  type ProductIdea,
+  type ProductQuestion,
+} from "@/lib/ai/productPrompts";
+import type { ProductOption } from "@/lib/products/fields";
 import styles from "../guiones.module.css";
 
 type Cliente = { id: string; nombre: string; marca: string | null };
@@ -265,6 +274,8 @@ function InlineAiChat({ state, onSubmit, onSelect, onKeepOriginal }: InlineAiCha
 
 export default function NuevoGuionForm({
   clientes,
+  products: initialProducts = [],
+  initialProductId,
   initialBrief,
   initialClientId,
   initialCalendarId,
@@ -273,6 +284,9 @@ export default function NuevoGuionForm({
   initialSourcePostId,
 }: {
   clientes: Cliente[];
+  /** Servicios de todas las marcas del dueño; se filtran por la elegida (0016). */
+  products?: ProductOption[];
+  initialProductId?: string;
   initialBrief?: string;
   initialClientId?: string;
   initialCalendarId?: string;
@@ -291,6 +305,28 @@ export default function NuevoGuionForm({
   );
   const [type, setType] = useState<"reel" | "carousel">(initialType ?? "reel");
   const [brief, setBrief] = useState(initialBrief ?? "");
+
+  // Step 1 — servicio que promueve el guion (ficha de oferta, migración 0016).
+  // Estado local: al guardar una respuesta en la ficha se actualiza `missing`
+  // para no volver a preguntarla en esta misma sesión.
+  const [products, setProducts] = useState<ProductOption[]>(initialProducts);
+  const [productId, setProductId] = useState<string>(() => {
+    const p = initialProducts.find((x) => x.id === initialProductId);
+    return p && p.client_id === clientId ? p.id : "";
+  });
+  const clientProducts = products.filter((p) => p.client_id === clientId);
+  const selectedProduct = clientProducts.find((p) => p.id === productId) ?? null;
+
+  const [ideas, setIdeas] = useState<ProductIdea[] | null>(null);
+  const [ideasLoading, setIdeasLoading] = useState(false);
+  const [ideasError, setIdeasError] = useState<string | null>(null);
+  const [pickedIdeaId, setPickedIdeaId] = useState<string | null>(null);
+
+  // Preguntas de afinado: se piden UNA vez por servicio al generar la Big Idea.
+  const [questions, setQuestions] = useState<ProductQuestion[] | null>(null);
+  const [questionsFor, setQuestionsFor] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [saveToFicha, setSaveToFicha] = useState<Record<string, boolean>>({});
 
   // Step 2 state — Big Idea
   const [bigIdea, setBigIdea] = useState("");
@@ -347,11 +383,65 @@ export default function NuevoGuionForm({
         structure: { hook: s.hook, arc: s.arc, close: s.close },
         big_idea: bigIdea || undefined,
         micro_story: microStoryText || undefined,
+        product_id: productId || undefined,
       }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Error al generar guion");
     return data;
+  }
+
+  // ── Step 1: servicio, ideas y preguntas de afinado (0016) ────────────────
+
+  function resetProductHelpers() {
+    setIdeas(null);
+    setIdeasError(null);
+    setPickedIdeaId(null);
+    setQuestions(null);
+    setQuestionsFor(null);
+    setAnswers({});
+    setSaveToFicha({});
+  }
+
+  function handleClientChange(id: string) {
+    setClientId(id);
+    setProductId("");
+    resetProductHelpers();
+  }
+
+  function handleProductChange(id: string) {
+    setProductId(id);
+    resetProductHelpers();
+  }
+
+  async function handleSuggestIdeas() {
+    if (!selectedProduct) return;
+    setIdeasLoading(true);
+    setIdeasError(null);
+    try {
+      const list = await suggestProductIdeas({
+        client_id: clientId,
+        product_id: selectedProduct.id,
+        // Mezcla de reels y carruseles: el formato se decide por idea, y
+        // elegir una idea ya cambia el tipo arriba.
+        type: null,
+        // Un brief escrito a mano sirve para proponer ángulos distintos; uno
+        // que salió de una idea elegida, no.
+        brief: pickedIdeaId ? null : brief,
+      });
+      setIdeas(list);
+      setPickedIdeaId(null);
+    } catch (e) {
+      setIdeasError(e instanceof Error ? e.message : "No se pudieron generar ideas");
+    } finally {
+      setIdeasLoading(false);
+    }
+  }
+
+  function handlePickIdea(idea: ProductIdea) {
+    setPickedIdeaId(idea.id);
+    setType(idea.format);
+    setBrief(`${idea.brief}\n\nGancho sugerido: "${idea.hook}"`);
   }
 
   // ── Step 1 → 2: Generate Big Idea ────────────────────────────────────────
@@ -361,13 +451,84 @@ export default function NuevoGuionForm({
       setError("Selecciona un cliente y escribe el brief.");
       return;
     }
+
+    // Si a la ficha le faltan campos clave, 1-2 preguntas antes (una vez por
+    // servicio). Si la IA no devuelve ninguna, se sigue directo.
+    if (selectedProduct && selectedProduct.missing.length > 0 && questionsFor !== selectedProduct.id) {
+      setLoading(true);
+      setError(null);
+      try {
+        const qs = await suggestProductQuestions({
+          client_id: clientId,
+          product_id: selectedProduct.id,
+          brief,
+        });
+        setQuestionsFor(selectedProduct.id);
+        if (qs.length > 0) {
+          setQuestions(qs);
+          setAnswers({});
+          setSaveToFicha(Object.fromEntries(qs.map((q) => [q.id, true])));
+          setLoading(false);
+          return;
+        }
+      } catch {
+        // Las preguntas son un plus: si fallan, no se frena el guion.
+        setQuestionsFor(selectedProduct.id);
+      }
+    }
+
+    await runBigIdea(brief);
+  }
+
+  async function handleContinueWithAnswers() {
+    if (!questions) return;
+    const finalBrief = appendProductAnswers(brief, questions, answers);
+
+    // Guardar en la ficha lo marcado. Best effort: si falla, el guion sigue
+    // (la respuesta ya viaja en el brief) y la pregunta volverá la próxima vez.
+    const toSave = questions.filter((q) => saveToFicha[q.id] && (answers[q.id] ?? "").trim());
+    if (selectedProduct && toSave.length > 0) {
+      setLoading(true);
+      const results = await Promise.allSettled(
+        toSave.map((q) =>
+          saveProductField({ productId: selectedProduct.id, field: q.field, value: answers[q.id] }),
+        ),
+      );
+      const savedFields = toSave.filter((_, i) => results[i].status === "fulfilled").map((q) => q.field);
+      if (savedFields.length > 0) {
+        setProducts((prev) =>
+          prev.map((p) =>
+            p.id === selectedProduct.id
+              ? { ...p, missing: p.missing.filter((k) => !savedFields.includes(k)) }
+              : p,
+          ),
+        );
+      }
+    }
+
+    setBrief(finalBrief);
+    setQuestions(null);
+    await runBigIdea(finalBrief);
+  }
+
+  async function handleSkipQuestions() {
+    setQuestions(null);
+    await runBigIdea(brief);
+  }
+
+  async function runBigIdea(briefText: string) {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/ai/big-idea", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client_id: clientId, brief, type }),
+        body: JSON.stringify({
+          client_id: clientId,
+          brief: briefText,
+          type,
+          product_id: productId || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al generar Big Idea");
@@ -394,7 +555,13 @@ export default function NuevoGuionForm({
       const res = await fetch("/api/ai/structures", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client_id: clientId, brief, type, big_idea: bigIdea }),
+        body: JSON.stringify({
+          client_id: clientId,
+          brief,
+          type,
+          big_idea: bigIdea,
+          product_id: productId || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al proponer estructuras");
@@ -585,6 +752,7 @@ export default function NuevoGuionForm({
           brain_version_id: g.brainVersionId,
           source_post_permalink: initialSourcePostPermalink ?? null,
           source_post_id: initialSourcePostId ?? null,
+          product_id: productId || null,
         };
         let id: string;
         if (initialCalendarId) {
@@ -627,7 +795,7 @@ export default function NuevoGuionForm({
             <select
               className="input"
               value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
+              onChange={(e) => handleClientChange(e.target.value)}
             >
               {clientes.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -636,6 +804,91 @@ export default function NuevoGuionForm({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Servicio que promueve (ficha de oferta, migración 0016). */}
+          <div className="field" style={{ marginTop: 16 }}>
+            <label className="field-label">¿Sobre qué producto o servicio? (opcional)</label>
+            {clientProducts.length > 0 ? (
+              <select
+                className="input"
+                value={productId}
+                onChange={(e) => handleProductChange(e.target.value)}
+              >
+                <option value="">— Ninguno: contenido de marca —</option>
+                {clientProducts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.tipo === "producto" ? "Producto" : "Servicio"}: {p.nombre}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className={styles.productPickerMeta} style={{ marginTop: 0 }}>
+                Esta marca no tiene servicios cargados.{" "}
+                <a href={`/clientes/${clientId}`}>Agregar en el perfil del cliente →</a>
+              </p>
+            )}
+
+            {selectedProduct && (
+              <div className={styles.productPickerMeta}>
+                <span>Ficha {selectedProduct.completeness}%</span>
+                <a href={`/clientes/${clientId}`} target="_blank" rel="noreferrer">
+                  Editar ficha ↗
+                </a>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ fontSize: 12, padding: "5px 12px", marginLeft: "auto" }}
+                  onClick={handleSuggestIdeas}
+                  disabled={ideasLoading}
+                >
+                  {ideasLoading ? "Pensando ideas…" : ideas ? "↻ Otras ideas" : "✦ Dame ideas para este servicio"}
+                </button>
+              </div>
+            )}
+
+            {ideasError && <p className={styles.formError}>{ideasError}</p>}
+
+            {selectedProduct && ideas && ideas.length > 0 && (
+              <div className={styles.productIdeas}>
+                <div className={styles.productIdeasHead}>
+                  <p className={styles.productIdeasTitle}>
+                    Ideas para {selectedProduct.nombre} — elige una y se llena el brief
+                  </p>
+                </div>
+                <div className={styles.productIdeasStages}>
+                  {IDEA_STAGES.map((stage) => {
+                    const list = ideas.filter((i) => i.stage === stage.id);
+                    if (list.length === 0) return null;
+                    return (
+                      <div key={stage.id} className={styles.productIdeasStage}>
+                        <span className={styles.productIdeasStageLabel}>
+                          {stage.label}
+                          <span className={styles.productIdeasStageHint}>{stage.hint}</span>
+                        </span>
+                        {list.map((idea) => (
+                          <button
+                            key={idea.id}
+                            type="button"
+                            className={`${styles.productIdea} ${pickedIdeaId === idea.id ? styles.productIdeaActive : ""}`}
+                            onClick={() => handlePickIdea(idea)}
+                            title={idea.brief}
+                          >
+                            <span className={styles.productIdeaMeta}>
+                              <span className={`${styles.typeBadge} ${styles[idea.format]}`}>
+                                {idea.format === "carousel" ? "Carrusel" : "Reel"}
+                              </span>
+                              {idea.angle}
+                            </span>
+                            <span className={styles.productIdeaHook}>&ldquo;{idea.hook}&rdquo;</span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="field" style={{ marginTop: 16 }}>
@@ -665,9 +918,45 @@ export default function NuevoGuionForm({
               rows={5}
               placeholder="Describe el tema, el objetivo y cualquier ángulo o dato relevante para este guion..."
               value={brief}
-              onChange={(e) => setBrief(e.target.value)}
+              onChange={(e) => {
+                setBrief(e.target.value);
+                setPickedIdeaId(null);
+              }}
+              disabled={!!questions}
             />
           </div>
+
+          {/* Preguntas de afinado: la ficha no tiene un dato clave (0016). */}
+          {questions && selectedProduct && (
+            <div className={styles.productQuestions}>
+              <p className={styles.productQuestionsIntro}>
+                A la ficha de <strong>{selectedProduct.nombre}</strong> le falta algo que cambia el guion.
+                Responde si quieres (es opcional):
+              </p>
+              {questions.map((q) => (
+                <div key={q.id} className={styles.productQuestion}>
+                  <label className="field-label">{q.question}</label>
+                  <textarea
+                    className="textarea"
+                    rows={2}
+                    placeholder={q.placeholder}
+                    value={answers[q.id] ?? ""}
+                    onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                    disabled={loading}
+                  />
+                  <label className={styles.productQuestionSave}>
+                    <input
+                      type="checkbox"
+                      checked={saveToFicha[q.id] ?? false}
+                      onChange={(e) => setSaveToFicha((prev) => ({ ...prev, [q.id]: e.target.checked }))}
+                      disabled={loading}
+                    />
+                    Guardar en la ficha para no volver a preguntarlo
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
 
           {error && <p className={styles.formError}>{error}</p>}
 
@@ -675,8 +964,21 @@ export default function NuevoGuionForm({
             {loading ? (
               <div className={styles.loadingState}>
                 <div className={styles.spinner} />
-                <p className={styles.loadingText}>Definiendo Big Idea…</p>
+                <p className={styles.loadingText}>
+                  {selectedProduct && questionsFor !== selectedProduct.id
+                    ? "Revisando la ficha del servicio…"
+                    : "Definiendo Big Idea…"}
+                </p>
               </div>
+            ) : questions ? (
+              <>
+                <button type="button" className="btn btn-ghost" onClick={handleSkipQuestions}>
+                  Saltar
+                </button>
+                <button type="button" className="btn btn-primary" onClick={handleContinueWithAnswers}>
+                  Continuar con Big Idea →
+                </button>
+              </>
             ) : (
               <button
                 type="button"

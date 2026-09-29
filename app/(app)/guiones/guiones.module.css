@@ -2521,6 +2521,168 @@
   background: color-mix(in srgb, var(--signal) 10%, transparent);
 }
 
+/* ── Servicio que promueve el guion (migración 0016) ── */
+.productBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--emerald);
+  border: 1px solid color-mix(in srgb, var(--emerald) 40%, transparent);
+  background: color-mix(in srgb, var(--emerald) 10%, transparent);
+}
+
+.productPickerMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.productPickerMeta a {
+  color: var(--emerald);
+  text-decoration: none;
+}
+
+.productPickerMeta a:hover {
+  text-decoration: underline;
+}
+
+.productIdeas {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in srgb, var(--emerald) 25%, transparent);
+  background: color-mix(in srgb, var(--emerald) 4%, transparent);
+}
+
+.productIdeasHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.productIdeasTitle {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.productIdeasStages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.productIdeasStage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.productIdeasStageLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--emerald);
+}
+
+.productIdeasStageHint {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+.productIdea {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.productIdea:hover {
+  border-color: color-mix(in srgb, var(--emerald) 50%, transparent);
+}
+
+.productIdeaActive {
+  border-color: var(--emerald);
+  background: color-mix(in srgb, var(--emerald) 10%, transparent);
+}
+
+.productIdeaMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.productIdeaHook {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.productQuestions {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: var(--r-md);
+  border: 1px dashed color-mix(in srgb, var(--signal) 40%, transparent);
+  background: color-mix(in srgb, var(--signal) 4%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.productQuestionsIntro {
+  font-size: 13px;
+  margin: 0;
+}
+
+.productQuestion {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.productQuestionSave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .productIdeasStages {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Aclaración chica al lado del label de cada versión del copy. */
 .copyVersionHint {
   font-size: 11px;

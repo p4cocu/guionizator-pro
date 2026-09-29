@@ -22,6 +22,7 @@ import ClienteForm from "../ClienteForm";
 import PortalSection from "./PortalSection";
 import ResearchSection from "./ResearchSection";
 import ProductsSection from "./ProductsSection";
+import { PRODUCT_COLUMNS, type Product } from "@/lib/products/fields";
 import InstagramSection from "./InstagramSection";
 import ApifySection from "./ApifySection";
 import DeleteClienteButton from "./DeleteClienteButton";
@@ -140,7 +141,7 @@ export default async function ClienteDetailPage({ params }: Props) {
       .order("created_at", { ascending: false }),
     supabase
       .from("client_products")
-      .select("id, nombre, descripcion, tipo, created_at")
+      .select(PRODUCT_COLUMNS)
       .eq("client_id", id)
       .eq("owner_id", user.id)
       .order("created_at", { ascending: true }),
@@ -180,7 +181,7 @@ export default async function ClienteDetailPage({ params }: Props) {
         }}
       />
       <div style={{ maxWidth: 760 }}>
-        <ProductsSection clientId={id} products={products ?? []} />
+        <ProductsSection clientId={id} products={(products ?? []) as unknown as Product[]} />
         {/* Configuración de qué ve el cliente en /portal (Fase D). */}
         <PortalSection
           clientId={id}

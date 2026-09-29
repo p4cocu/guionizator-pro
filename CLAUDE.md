@@ -60,6 +60,7 @@ estos, dilo explícitamente y entrega la migración a Paco.
 | `scripts.recording_type` | `voz_off`, `actuacion`, `actuacion_compu`, `actuacion_cel`, `compu`, `cel` |
 | `content_calendar.status` | `idea`, `etapa0`, `produccion`, `publicado` |
 | `resources.kind` | `capturado`, `universal` |
+| `client_products.tipo` | `producto`, `servicio` (fuente de verdad en TS: `lib/products/fields.ts`) |
 | `competitor_posts.hook_type` | `resultado`, `vacio_info`, `error`, `controversia`, `dolor_comun`, `filtrante`, `negativo` |
 | `competitor_posts.script_structure` | `how_to`, `golpe_valor`, `vacio_info`, `espejo`, `controversial`, `momento_wtf`, `problema_invisible` |
 | `competitor_posts.value_pillar` | `utilidad_practica`, `validacion_emocional`, `revelacion`, `curaduria`, `disrupcion`, `actualidad` |
@@ -878,6 +879,67 @@ en `undefined` mientras las del server render sí los traen.
 siendo un checkbox al lado de "🔥 Destacados" y no entró al selector a propósito
 (decisión de Paco): tener el mismo filtro en dos controles que se pisan confunde
 más de lo que ayuda.
+
+## Ficha de servicio y contenido que promueve un servicio (migración `0016`)
+
+Hasta acá `client_products` era nombre + descripción + tipo, y **solo lo leía el
+generador de calendario**: la IA de guiones no sabía que existía. Ahora cada
+producto/servicio tiene una **ficha de oferta** y los guiones se pueden hacer
+"para" un servicio.
+
+- **La ficha** (`/clientes/[id]` → Productos y servicios, `ProductsSection.tsx`):
+  diez campos de texto en tres bloques — Base (`para_quien`, `problema`,
+  `beneficios`, `proceso`), Persuasión (`diferenciador`, `objeciones`,
+  `prueba_social`) y Oferta (`oferta`, `garantia`, `cta`). Fuente de verdad:
+  **`lib/products/fields.ts`** (agregar un campo = columna nueva sin CHECK +
+  una entrada ahí). `sanitizeProductDetails` es el único camino de escritura.
+  Al agregar un servicio la ficha se abre sola; borrarlo pide doble clic.
+- **Borrar un servicio no borra guiones**: `scripts.product_id` es
+  `on delete set null`, solo pierden la etiqueta.
+- **"Llenar desde landing"** (`extractProductFromLanding`, `MODEL_FAST`):
+  pegas el texto de tu página y la IA **propone**; solo llena campos vacíos y
+  **no guarda** hasta que tú guardas. Un dato mal extraído que se guardara solo
+  terminaría, sin que nadie lo viera, en todos los guiones de ese servicio.
+- **Prompt**: `lib/ai/productContext.ts` → `buildProductContext` (datos +
+  regla anti-invención pegada a los datos) y `withProductContext` (lo pega
+  debajo del perfil de la marca). La lectura con filtro de dueño **y de marca**
+  es `lib/products/load.ts` — sin el filtro de marca, un guion de la marca A
+  podría promover el servicio de la marca B del mismo dueño. Nunca lanza: un
+  servicio que no aparece se trata como "sin servicio".
+- **Dónde entra la ficha**: `/api/ai/{big-idea,structures,script}` (+
+  `PRODUCT_SCRIPT_GUIDANCE` en el mensaje), `/api/ai/adapt-competitor` (con
+  instrucción distinta en la **ligera**: el servicio entra SOLO por el cierre,
+  para no romper su regla de no tocar la esencia), `/api/ai/copy` (ficha
+  completa → el CTA sale de ahí) y `/api/ai/cover` (una sola línea: esa ruta
+  va justa contra el límite de Netlify). De paso, `big-idea`, `structures` y
+  `adapt-competitor` dejaron su `buildClientContext` copiado y usan el de
+  `lib/ai/clientContext.ts` (big-idea con `includeNotes: false`, como antes).
+- **`/guiones/nuevo`**: selector "¿Sobre qué producto o servicio?" en el paso
+  1; "✦ Dame ideas para este servicio" devuelve 9 ideas (3 por etapa:
+  atraer/convencer/convertir) y elegir una llena brief y tipo — **no se
+  guardan**. Si a la ficha le faltan campos clave (`KEY_PRODUCT_FIELDS`), al
+  generar la Big Idea aparecen 1-2 preguntas (una vez por servicio); las
+  respuestas se anexan al brief y, si dejas el check, se guardan en la ficha
+  (`saveProductField`). Prompts en `lib/ai/productPrompts.ts`, server actions en
+  `guiones/nuevo/productActions.ts`, todo `MODEL_FAST`.
+- **Competencia → Adaptar**: selector "Adaptar también a un servicio". La
+  completa lo pasa por URL (`product_id`) a `/guiones/nuevo`; la ligera lo
+  manda a la ruta y lo guarda con el guion.
+- **`scripts.product_id`**: lo guardan `saveScriptSilent` /
+  `saveScriptWithNewIdea` **después de validar** que el servicio sea del dueño y
+  de esa marca (`resolveProductId` — la FK aceptaría cualquiera). Se arrastra en
+  `saveScriptVersion` (junto con `is_external`, que antes se perdía al guardar
+  una versión). El trigger `scripts_guard_update` lo congela para quien no es
+  dueño. Badge "◆ servicio" en `/guiones/[id]`.
+- ⚠️ Las ideas se probaron contra la API real: sin la regla "prohibido
+  inventar cupos, condiciones o cifras", el modelo agregaba urgencia falsa
+  ("cupos limitados esta semana") y reescribía la oferta ("pagas por lo que
+  usas" donde la ficha decía "sin plazos forzosos"). Al tocar el prompt,
+  reprobar eso.
+- **Fuera del portal, a propósito** (por ahora): `/portal/.../generar`,
+  "Adaptar a mi marca" del cliente y las herramientas del guion del portal
+  (`lib/portal/generate.ts`, `scriptTools.ts`) **no** leen la ficha. Un guion con
+  `product_id` abierto desde el portal genera copy/portada sin el servicio.
 
 ## Fase E — Cobro con Stripe (`lib/billing/*`, migración `0013`)
 

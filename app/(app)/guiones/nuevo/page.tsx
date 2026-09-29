@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import NuevoGuionForm from "./NuevoGuionForm";
 import NuevaPublicacionForm from "./NuevaPublicacionForm";
+import { PRODUCT_COLUMNS, toProductOption, type Product } from "@/lib/products/fields";
 import styles from "../guiones.module.css";
 
 /**
@@ -26,6 +27,8 @@ export default async function NuevoGuionPage({
     type?: string;
     source_post_permalink?: string;
     source_post_id?: string;
+    /** Servicio preelegido (viene de Competencia → Adaptar, migración 0016). */
+    product_id?: string;
     modo?: string;
   }>;
 }) {
@@ -36,6 +39,7 @@ export default async function NuevoGuionPage({
     type,
     source_post_permalink,
     source_post_id,
+    product_id,
     modo,
   } = await searchParams;
   const supabase = await createClient();
@@ -43,13 +47,26 @@ export default async function NuevoGuionPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: clientes } = await supabase
-    .from("clients")
-    .select("id, nombre, marca")
-    .eq("owner_id", user!.id)
-    .order("nombre");
-
   const esExterna = modo === "externa";
+
+  const [{ data: clientes }, { data: productRows }] = await Promise.all([
+    supabase
+      .from("clients")
+      .select("id, nombre, marca")
+      .eq("owner_id", user!.id)
+      .order("nombre"),
+    // Los servicios de TODAS las marcas: el formulario filtra por la elegida y
+    // así cambiar de marca no necesita otro viaje. Son pocas filas.
+    esExterna
+      ? Promise.resolve({ data: [] })
+      : supabase
+          .from("client_products")
+          .select(PRODUCT_COLUMNS)
+          .eq("owner_id", user!.id)
+          .order("created_at", { ascending: true }),
+  ]);
+
+  const products = ((productRows ?? []) as unknown as Product[]).map(toProductOption);
 
   return (
     <div className={styles.formPage}>
@@ -91,6 +108,8 @@ export default async function NuevoGuionPage({
       ) : (
         <NuevoGuionForm
           clientes={clientes}
+          products={products}
+          initialProductId={product_id}
           initialBrief={brief}
           initialClientId={client_id}
           initialCalendarId={calendar_id}

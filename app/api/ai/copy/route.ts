@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
 import { buildClientContext } from "@/lib/ai/clientContext";
+import { withProductContext } from "@/lib/ai/productContext";
+import { loadProductContext } from "@/lib/products/load";
 import {
   buildCopyPrompt,
   COPY_SYSTEM,
@@ -56,7 +58,7 @@ export async function POST(req: NextRequest) {
 
     const { data: script } = await supabase
       .from("scripts")
-      .select("type, title, brief, content, client_id, source_post_id, is_external")
+      .select("type, title, brief, content, client_id, source_post_id, is_external, product_id")
       .eq("id", script_id)
       .eq("owner_id", user.id)
       .maybeSingle();
@@ -70,12 +72,20 @@ export async function POST(req: NextRequest) {
     // Perfil de la marca. Si falla la lectura, se genera igual (sin contexto) en
     // vez de romper: un copy genérico es peor que uno afinado, pero mucho mejor
     // que un error en la cara.
-    const { data: client } = await supabase
-      .from("clients")
-      .select("nombre, marca, que_vende, cliente_ideal, nicho, dolor, deseo, tono, notas")
-      .eq("id", script.client_id as string)
-      .eq("owner_id", user.id)
-      .maybeSingle();
+    const [{ data: client }, productContext] = await Promise.all([
+      supabase
+        .from("clients")
+        .select("nombre, marca, que_vende, cliente_ideal, nicho, dolor, deseo, tono, notas")
+        .eq("id", script.client_id as string)
+        .eq("owner_id", user.id)
+        .maybeSingle(),
+      // El servicio del guion (0016): el CTA del copy sale de su ficha.
+      loadProductContext(supabase, {
+        productId: script.product_id as string | null,
+        ownerId: user.id,
+        clientId: script.client_id as string,
+      }),
+    ]);
 
     // La referencia de competencia, cuando el guion nació de un post ajeno
     // (`source_post_id`, migración 0002) o cuando Paco lo eligió a mano al
@@ -106,7 +116,9 @@ export async function POST(req: NextRequest) {
       ),
       brief: script.brief as string | null,
       title: script.title as string | null,
-      brandContext: client ? buildClientContext(client) : null,
+      brandContext: client
+        ? withProductContext(buildClientContext(client), productContext)
+        : productContext,
       reference,
       isExternal: script.is_external === true,
     });
