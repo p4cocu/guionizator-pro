@@ -77,7 +77,7 @@ export async function generarPortadas(
     const { user, ctx, state } = await gate(clientId);
 
     const script = await loadClientScript(clientId, scriptId);
-    const covers = await generateCovers(script);
+    const covers = await generateCovers(script, clientId);
 
     // Descuenta del plan o de una recarga y deja la fila con el `paid_with`
     // verdadero. Nunca lanza: el cliente ya tiene sus portadas.

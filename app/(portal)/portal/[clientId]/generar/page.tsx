@@ -22,6 +22,8 @@ import {
 } from "@/lib/portal/access";
 import { hasFeature } from "@/lib/portal/features";
 import { getClientOwnerId, getGenerationState } from "@/lib/portal/generate";
+import { listPortalProducts } from "@/lib/portal/products";
+import { toProductOption } from "@/lib/products/fields";
 import GenerarClient from "./GenerarClient";
 import s from "./generar.module.css";
 
@@ -76,6 +78,9 @@ export default async function PortalGenerarPage({
     .limit(5);
 
   const recent = (recentData ?? []) as RecentRow[];
+  // Servicios de la marca (0016), con la sesión del miembro: la policy
+  // `client_products_member_select` alcanza. Al browser va solo lo del selector.
+  const products = (await listPortalProducts(supabase, client.id)).map(toProductOption);
   const puedeVerGuiones = hasFeature(client.features, "guiones");
 
   return (
@@ -94,6 +99,7 @@ export default async function PortalGenerarPage({
         clientId={client.id}
         mode={client.aiGenerationMode}
         canSeeScripts={puedeVerGuiones}
+        products={products}
         initialUsage={{
           used: usage?.used ?? 0,
           // ⚠️ El tope EFECTIVO que ya resolvió `getGenerationState`, no el

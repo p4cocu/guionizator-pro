@@ -390,12 +390,14 @@ export async function getScripts(
   clientId?: string,
   type?: ScriptType,
   estados?: string[],
+  /** Solo los guiones hechos para este servicio (migración 0016). */
+  productId?: string,
 ): Promise<ScriptRow[]> {
   const { supabase, user } = await getAuthUser();
 
   let query = supabase
     .from("scripts")
-    .select("*, clients(nombre, marca)")
+    .select("*, clients(nombre, marca), client_products(nombre, tipo)")
     .eq("owner_id", user.id)
     .eq("is_latest", true)
     // La papelera (etapa 7) es transversal a cualquier status, incluido baúl:
@@ -406,6 +408,7 @@ export async function getScripts(
 
   if (clientId) query = query.eq("client_id", clientId);
   if (type) query = query.eq("type", type);
+  if (productId) query = query.eq("product_id", productId);
   if (estados && estados.length > 0) {
     query = query.in("status", estados);
   } else {
@@ -443,6 +446,7 @@ export async function getScripts(
 export async function countDoneScripts(
   clientId?: string,
   type?: ScriptType,
+  productId?: string,
 ): Promise<number> {
   const { supabase, user } = await getAuthUser();
 
@@ -456,6 +460,7 @@ export async function countDoneScripts(
 
   if (clientId) query = query.eq("client_id", clientId);
   if (type) query = query.eq("type", type);
+  if (productId) query = query.eq("product_id", productId);
 
   const { count } = await query;
   return count ?? 0;
@@ -489,6 +494,19 @@ export async function getClientOptions(): Promise<ClientOption[]> {
     .eq("owner_id", user.id)
     .order("nombre", { ascending: true });
   return (data ?? []) as ClientOption[];
+}
+
+export type ProductFilterOption = { id: string; nombre: string; client_id: string };
+
+/** Servicios de todas las marcas, para el filtro "Servicio" de `/guiones` (0016). */
+export async function getProductFilterOptions(): Promise<ProductFilterOption[]> {
+  const { supabase, user } = await getAuthUser();
+  const { data } = await supabase
+    .from("client_products")
+    .select("id, nombre, client_id")
+    .eq("owner_id", user.id)
+    .order("nombre", { ascending: true });
+  return (data ?? []) as ProductFilterOption[];
 }
 
 export async function getScript(id: string): Promise<ScriptRow | null> {

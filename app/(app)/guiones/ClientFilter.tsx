@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientOption } from "./actions";
+import type { ClientOption, ProductFilterOption } from "./actions";
 import styles from "./guiones.module.css";
 
 const STATUS_OPTIONS = [
@@ -27,13 +27,18 @@ function buildLabel(estados: string[]) {
  * `basePath` existe porque este filtro lo usan dos rutas: `/guiones` y
  * `/guiones/hechos`. `showEstados` lo apaga en "Hechos", donde el estado está
  * fijo en `publicado` y un dropdown de estados solo confundiría.
+ *
+ * `services` (migración 0016): el filtro "Servicio" solo se dibuja si hay
+ * alguno. Con una marca elegida, lista solo los servicios de esa marca.
  */
 export default function ClientFilter({
   clients,
+  services = [],
   basePath = "/guiones",
   showEstados = true,
 }: {
   clients: ClientOption[];
+  services?: ProductFilterOption[];
   basePath?: string;
   showEstados?: boolean;
 }) {
@@ -42,6 +47,10 @@ export default function ClientFilter({
   const currentCliente = params.get("cliente") ?? "";
   const currentTipo = params.get("tipo") ?? "";
   const currentEstados = params.getAll("estado");
+  const currentServicio = params.get("servicio") ?? "";
+  const visibleServices = currentCliente
+    ? services.filter((sv) => sv.client_id === currentCliente)
+    : services;
 
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<string[]>(currentEstados);
@@ -54,7 +63,7 @@ export default function ClientFilter({
         const saved = localStorage.getItem(LS_KEY);
         if (saved) {
           const parsed: string[] = JSON.parse(saved);
-          if (parsed.length > 0) navigate(currentCliente, currentTipo, parsed);
+          if (parsed.length > 0) navigate(currentCliente, currentTipo, parsed, currentServicio);
         }
       } catch {}
     }
@@ -79,11 +88,12 @@ export default function ClientFilter({
   }, [open]);
 
   const navigate = useCallback(
-    (cliente: string, tipo: string, estados: string[]) => {
+    (cliente: string, tipo: string, estados: string[], servicio: string) => {
       const p = new URLSearchParams();
       if (cliente) p.set("cliente", cliente);
       if (tipo) p.set("tipo", tipo);
       estados.forEach((e) => p.append("estado", e));
+      if (servicio) p.set("servicio", servicio);
       const qs = p.toString();
       router.push(qs ? `${basePath}?${qs}` : basePath);
     },
@@ -92,7 +102,7 @@ export default function ClientFilter({
 
   function handleSave() {
     try { localStorage.setItem(LS_KEY, JSON.stringify(pending)); } catch {}
-    navigate(currentCliente, currentTipo, pending);
+    navigate(currentCliente, currentTipo, pending, currentServicio);
     setOpen(false);
   }
 
@@ -103,7 +113,13 @@ export default function ClientFilter({
       <select
         className={`input ${styles.clientSelect}`}
         value={currentCliente}
-        onChange={(e) => navigate(e.target.value, currentTipo, currentEstados)}
+        onChange={(e) => {
+          // Un servicio de otra marca dejaría la lista vacía sin explicación.
+          const keep = services.some(
+            (sv) => sv.id === currentServicio && (!e.target.value || sv.client_id === e.target.value),
+          );
+          navigate(e.target.value, currentTipo, currentEstados, keep ? currentServicio : "");
+        }}
       >
         <option value="">Todos los clientes</option>
         {clients.map((c) => (
@@ -114,12 +130,28 @@ export default function ClientFilter({
       <select
         className={`input ${styles.clientSelect}`}
         value={currentTipo}
-        onChange={(e) => navigate(currentCliente, e.target.value, currentEstados)}
+        onChange={(e) => navigate(currentCliente, e.target.value, currentEstados, currentServicio)}
       >
         <option value="">Reels y carruseles</option>
         <option value="reel">Solo reels</option>
         <option value="carousel">Solo carruseles</option>
       </select>
+
+      {visibleServices.length > 0 && (
+        <select
+          className={`input ${styles.clientSelect}`}
+          value={currentServicio}
+          onChange={(e) => navigate(currentCliente, currentTipo, currentEstados, e.target.value)}
+          style={currentServicio ? { color: "var(--emerald)", borderColor: "rgba(0,159,125,0.45)" } : {}}
+        >
+          <option value="">Todos los servicios</option>
+          {visibleServices.map((sv) => (
+            <option key={sv.id} value={sv.id}>
+              {sv.nombre}
+            </option>
+          ))}
+        </select>
+      )}
 
       {/* Estado multi-select dropdown */}
       {showEstados && (

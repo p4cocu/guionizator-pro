@@ -4,27 +4,15 @@ import { MODEL_DEFAULT, MODEL_FAST } from "@/lib/ai/anthropic";
 import { AiJsonError, generateJson } from "@/lib/ai/json";
 import { loadClientKnowledge } from "@/lib/ai/clientKnowledge";
 import { buildClientContext } from "@/lib/ai/clientContext";
-import { withProductContext } from "@/lib/ai/productContext";
+import {
+  PRODUCT_ADAPT_COMPLETE,
+  PRODUCT_ADAPT_LIGHT,
+  withProductContext,
+} from "@/lib/ai/productContext";
 import { loadProductContext } from "@/lib/products/load";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
-
-/**
- * Qué hacer con el servicio elegido (ficha de oferta, migración 0016). Cambia
- * según el modo porque la ligera tiene una regla opuesta: no tocar la esencia
- * del post. Ahí el servicio entra solo por el cierre.
- */
-const PRODUCT_ADAPT_COMPLETE = `
-Servicio a promover: el de la ficha "Servicio que promueve este contenido" de arriba.
-- Aterriza el patrón ganador en ESE servicio: el problema, el público y el cierre salen de su ficha.
-- El cierre invita al CTA de la ficha (si lo tiene).
-- Usa objeciones, proceso o prueba social de la ficha solo donde sumen, sin convertirlo en anuncio.`;
-
-const PRODUCT_ADAPT_LIGHT = `
-Servicio a promover: el de la ficha "Servicio que promueve este contenido" de arriba.
-- NO cambies el ángulo ni el desarrollo del post: solo el cierre.
-- El cierre conecta la idea con ese servicio en 1-2 frases naturales e invita a su CTA (si la ficha lo tiene).`;
 
 const REEL_FORMAT = `{
   "structure_name": "nombre de la estructura del cerebro que mejor encaja con esta adaptación",

@@ -54,7 +54,7 @@ export const GRACE_DAYS = 5;
 // ─── Qué gasta un crédito ────────────────────────────────────────────────────
 
 /**
- * Las cuatro acciones del portal que escriben una fila en `ai_usage_log`.
+ * Las cinco acciones del portal que escriben una fila en `ai_usage_log`.
  *
  * Los valores son exactamente los `endpoint` que ya se registran hoy — esta
  * lista es documentación viva, no una fuente de verdad que el código consulte
@@ -72,6 +72,8 @@ export const AI_CREDIT_ACTIONS: { endpoint: string; label: string }[] = [
   { endpoint: "portal:adapt-competitor", label: "Adaptar un post a mi marca" },
   { endpoint: "portal:cover", label: "Generar portadas" },
   { endpoint: "portal:copy", label: "Copy Expert" },
+  // 0016: "Dame ideas para este servicio". Las preguntas de afinado NO cobran.
+  { endpoint: "portal:product-ideas", label: "Ideas para un servicio" },
 ];
 
 /**

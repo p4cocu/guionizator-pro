@@ -41,6 +41,7 @@ import { effectiveLimit, PLAN_TRANSCRIPTIONS } from "@/lib/billing/plan";
 import { createServiceClient } from "@/lib/supabase/service";
 import { listPostCommentsByClient } from "@/lib/competencia/postComments";
 import { PORTAL_POST_COLUMNS } from "@/lib/portal/competencia";
+import { listPortalProducts } from "@/lib/portal/products";
 import CompetenciaPortalClient, { type PortalPostBase } from "./CompetenciaPortalClient";
 
 export default async function PortalCompetenciaPage({
@@ -113,6 +114,9 @@ export default async function PortalCompetenciaPage({
     listPostCommentsByClient(supabase, client.id, user.id, ownerId),
   ]);
 
+  // Servicios para "Adaptar también a un servicio" (0016). Solo si puede adaptar.
+  const products = canAdapt ? await listPortalProducts(supabase, client.id) : [];
+
   return (
     <CompetenciaPortalClient
       posts={posts}
@@ -126,6 +130,7 @@ export default async function PortalCompetenciaPage({
       transcriptionRemaining={transcriptionUsage?.remaining ?? null}
       adaptRemaining={adaptUsage?.remaining ?? null}
       adaptCreditBalance={adaptUsage?.creditBalance ?? 0}
+      products={products.map((p) => ({ id: p.id, nombre: p.nombre }))}
     />
   );
 }

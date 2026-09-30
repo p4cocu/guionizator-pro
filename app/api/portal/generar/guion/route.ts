@@ -44,8 +44,8 @@ type Body = BaseBody & {
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as Body;
-    const { clientId, brief, type } = readBase(body);
-    const { user, client, ctx } = await requireGenerationAccess(clientId);
+    const { clientId, brief, type, productId } = readBase(body);
+    const { user, client, ctx } = await requireGenerationAccess(clientId, { productId });
 
     // En modo simple la estructura la elige la IA: si llega una desde el
     // browser, se ignora. Así el modo que configuró Paco es el que manda.

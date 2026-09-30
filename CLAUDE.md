@@ -647,10 +647,10 @@ muestra del lado del cliente.
   llamada) y exigen `generar_ia` prendido, igual que "Adaptar a mi marca".
   Se guardan en `script_covers` / `script_copies`, que son **owner-only**
   (`0006` no les dio policies de miembro): se leen y escriben con service role,
-  con `owner_id` del dueño. El de portadas sigue siendo un **prompt duplicado**
-  de `/api/ai/cover`, misma disciplina que el resto de este archivo; el de copy
-  **ya no**: desde la migración `0014` los dos importan `lib/ai/copyPrompt.ts`
-  (ver "Publicación externa y copy en dos versiones").
+  con `owner_id` del dueño. Ninguno de los dos prompts está duplicado: copy
+  vive en `lib/ai/copyPrompt.ts` (desde `0014`) y portadas en
+  `lib/ai/coverPrompt.ts` (desde 2026-09-30); estudio y portal importan el
+  mismo texto.
 - **`ImagePromptsPanel` no se porta**: queda como herramienta interna.
 
 **Endurecimiento de `/api/ai/cover` y `/api/ai/copy`.** Las dos recibían el
@@ -936,10 +936,36 @@ producto/servicio tiene una **ficha de oferta** y los guiones se pueden hacer
   ("cupos limitados esta semana") y reescribía la oferta ("pagas por lo que
   usas" donde la ficha decía "sin plazos forzosos"). Al tocar el prompt,
   reprobar eso.
-- **Fuera del portal, a propósito** (por ahora): `/portal/.../generar`,
-  "Adaptar a mi marca" del cliente y las herramientas del guion del portal
-  (`lib/portal/generate.ts`, `scriptTools.ts`) **no** leen la ficha. Un guion con
-  `product_id` abierto desde el portal genera copy/portada sin el servicio.
+- **Filtro "Servicio" en `/guiones` y `/guiones/hechos`** (`?servicio=<id>`,
+  `getProductFilterOptions`): con una marca elegida lista solo sus servicios;
+  la tarjeta lleva el badge "◆ servicio". Las pestañas arrastran el filtro.
+
+### La ficha en el portal (2026-09-30) — sin migración
+
+- **Generar** (`/portal/[id]/generar`): mismo selector, ideas y preguntas que
+  el estudio. `requireGenerationAccess(clientId, { productId })` →
+  `loadGenerationContext` carga la ficha con service role **filtrando dueño y
+  marca** y la pega en `ctx.clientContext` (sin `notas`); `ctx.product` es el
+  único origen válido del `product_id` que se guarda (`saveGeneratedScript`),
+  nunca el id crudo del browser.
+- **"Dame ideas" cuesta 1 generación** (decisión de Paco): acción
+  `pedirIdeasServicio`, endpoint `portal:product-ideas` en `AI_CREDIT_ACTIONS`,
+  cierra con `settleGeneration`, y si la IA no devuelve ideas no se cobra. Las
+  **preguntas de afinado son gratis** (`pedirPreguntasServicio`, nunca falla
+  hacia el cliente).
+- **"Adaptar a mi marca"** del portal: selector de servicio; usa
+  `PRODUCT_ADAPT_COMPLETE`, ahora exportado desde `lib/ai/productContext.ts`
+  y compartido con el estudio (antes vivía dentro de la ruta).
+- **Copy y portadas del portal** leen el servicio del guion
+  (`ToolScript.product_id`), igual que el estudio.
+- **Investigación** muestra la ficha de cada servicio (`ProductFichas.tsx`) y
+  un `collaborator` la **edita** (descripción + diez campos; nombre, tipo,
+  altas y bajas siguen siendo del estudio). Va con service role por
+  `lib/portal/products.ts` → `requireProductEditor` + `updatePortalProduct`,
+  que filtra `client_id` a mano: el miembro solo tiene `select` sobre
+  `client_products` y una policy de update le dejaría tocar cualquier columna
+  desde PostgREST. Un `viewer` la ve pero no la toca. Las respuestas de afinado
+  guardadas desde Generar pasan por el mismo candado.
 
 ## Fase E — Cobro con Stripe (`lib/billing/*`, migración `0013`)
 
@@ -1028,7 +1054,7 @@ en `2022-08-01`), no con la que el SDK tiene pinneada — por eso el mismo objet
 llega con una forma u otra según por dónde entró, y por eso los tres helpers
 leen **las dos formas**.
 
-### ⚠️ Las cuatro acciones de IA exigen rol `collaborator`
+### ⚠️ Las acciones de IA del portal exigen rol `collaborator`
 
 `requireGenerationAccess` chequea **cuatro** candados: sesión + acceso a la
 marca, el flag `generar_ia`, el cobro, y **el rol**. Un `viewer` recibe 403.
@@ -1054,8 +1080,9 @@ del ciclo, esa acción sale **gratis para siempre** y el rastro de auditoría
 miente sobre de dónde salió. `settleGeneration` (`lib/portal/generate.ts`)
 descuenta del saldo cuando corresponde y escribe el `paid_with` verdadero.
 
-Las cuatro acciones de `AI_CREDIT_ACTIONS` tienen que cerrar así:
-`/api/portal/generar/guion`, `adaptPortalPost` (competencia) y —desde el
+Las cinco acciones de `AI_CREDIT_ACTIONS` tienen que cerrar así:
+`/api/portal/generar/guion`, `adaptPortalPost` (competencia),
+`pedirIdeasServicio` (desde 2026-09-30) y —desde el
 2026-08-26— `generarPortadas` y `generarCopy` (`toolsActions.ts`), que se
 habían quedado con el cierre de Fase D y por eso regalaban crédito. El bug se
 detectó probando: una fila `portal:copy` marcada `plan` con el cupo del ciclo ya
@@ -1172,7 +1199,10 @@ que rige al resto de este archivo, y la razón es concreta: el copy pasó a tene
 respuesta, y dos formatos de salida se desincronizan a la primera corrección.
 Lo que sigue separado es la **ejecución**, que es lo que justificaba la copia:
 el portal lee con service role, cobra cupo y cierra con `settleGeneration`.
-El prompt de **portadas sigue duplicado** (`/api/ai/cover` vs `scriptTools.ts`).
+El prompt de **portadas** siguió el mismo camino el 2026-09-30:
+`lib/ai/coverPrompt.ts`, importado por `/api/ai/cover` y `scriptTools.ts`. Se
+había desincronizado a la primera: el estudio mandaba el servicio del guion y
+el portal no.
 
 - Las dos versiones se piden en **una sola llamada**: dos llamadas costarían el
   doble de cupo en el portal y darían textos que no se hablan entre sí.

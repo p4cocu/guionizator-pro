@@ -46,6 +46,14 @@ import { billingMessage, getBillingState } from "../billing/access";
 import { consumeCredit } from "../billing/credits";
 import { readSubscription } from "../billing/subscription";
 import { effectiveLimit, PLAN_AI_CREDITS, type AiPaymentSource } from "../billing/plan";
+import {
+  PRODUCT_ADAPT_COMPLETE,
+  PRODUCT_SCRIPT_GUIDANCE,
+  buildProductContext,
+  withProductContext,
+} from "../ai/productContext";
+import { loadProduct } from "../products/load";
+import type { Product } from "../products/fields";
 
 export type ScriptType = "reel" | "carousel";
 
@@ -70,7 +78,18 @@ export type GenerationContext = {
   /** Cerebro activo del dueño. `undefined` = cae al `brain/system-prompt.md`. */
   brainContent?: string;
   brainVersionId: string | null;
+  /**
+   * Servicio que promueve el guion (ficha de oferta, migración 0016), ya
+   * validado contra la marca. Su ficha ya va pegada dentro de `clientContext`;
+   * esto queda para guardarlo y para sumar la instrucción al mensaje.
+   */
+  product: Product | null;
 };
+
+/** La instrucción de "este guion promueve un servicio", o vacío. */
+function productGuidance(ctx: GenerationContext): string {
+  return ctx.product ? `\n${PRODUCT_SCRIPT_GUIDANCE}\n` : "";
+}
 
 type ClientRow = Record<string, string | null> & { owner_id: string };
 
@@ -101,7 +120,10 @@ function buildClientContext(c: ClientRow): string {
  * El acceso a la marca ya lo validó `requirePortalClient` en la ruta; acá se
  * resuelve el `owner_id` para el insert, el log y la lectura del cerebro.
  */
-export async function loadGenerationContext(clientId: string): Promise<GenerationContext> {
+export async function loadGenerationContext(
+  clientId: string,
+  productId?: string | null,
+): Promise<GenerationContext> {
   const admin = createServiceClient();
 
   const { data: client, error } = await admin
@@ -122,12 +144,20 @@ export async function loadGenerationContext(clientId: string): Promise<Generatio
     .eq("is_active", true)
     .maybeSingle();
 
+  // Service role saltea la RLS: el filtro por dueño Y por marca lo pone
+  // `loadProduct`. Un id de otra marca no se encuentra y se genera sin servicio.
+  const product = await loadProduct(admin, { productId, ownerId: row.owner_id, clientId });
+
   return {
     ownerId: row.owner_id,
     clientName: row.nombre ?? "",
-    clientContext: buildClientContext(row),
+    clientContext: withProductContext(
+      buildClientContext(row),
+      product ? buildProductContext(product) : null,
+    ),
     brainContent: (brain?.content as string | undefined) ?? undefined,
     brainVersionId: (brain?.id as string | undefined) ?? null,
+    product,
   };
 }
 
@@ -146,7 +176,10 @@ export async function loadGenerationContext(clientId: string): Promise<Generatio
  * dibuje el botón no impide que alguien las invoque. Por eso el flag se revalida
  * acá y no se confía en la pantalla.
  */
-export async function requireGenerationAccess(clientId: string): Promise<{
+export async function requireGenerationAccess(
+  clientId: string,
+  options?: { productId?: string | null },
+): Promise<{
   user: User;
   client: PortalClient;
   ctx: GenerationContext;
@@ -195,7 +228,7 @@ export async function requireGenerationAccess(clientId: string): Promise<{
     }
   }
 
-  const ctx = await loadGenerationContext(client.id);
+  const ctx = await loadGenerationContext(client.id, options?.productId);
   return { user, client, ctx };
 }
 
@@ -380,7 +413,7 @@ export async function generateBigIdea(
 
 Brief:
 ${input.brief.trim()}
-
+${productGuidance(ctx)}
 Tu tarea: define LA BIG IDEA de este guion — el mensaje central más poderoso que queremos transmitir.
 
 La Big Idea debe:
@@ -418,7 +451,7 @@ export async function generateStructures(
 
 Brief:
 ${input.brief.trim()}
-${input.bigIdea?.trim() ? `\nBig Idea (mensaje central confirmado por el usuario — todas las estructuras deben servir a este mensaje):\n"${input.bigIdea.trim()}"\n` : ""}
+${productGuidance(ctx)}${input.bigIdea?.trim() ? `\nBig Idea (mensaje central confirmado por el usuario — todas las estructuras deben servir a este mensaje):\n"${input.bigIdea.trim()}"\n` : ""}
 Aplica el Paso 0 de tu flujo. Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
 {
   "discarded": {"name": "nombre exacto de la estructura descartada", "reason": "razón en ≤15 palabras"},
@@ -537,7 +570,7 @@ export async function generateScript(
 
 Brief:
 ${input.brief.trim()}
-${bigIdeaLine}
+${productGuidance(ctx)}${bigIdeaLine}
 ${structureBlock}
 ${albornaRules}
 Genera el guion completo. Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
@@ -665,7 +698,7 @@ Instrucciones:
 2. Aterrízalo al cliente: su producto, su cliente ideal, su dolor/deseo y su tono de voz.
 3. Elige del cerebro la estructura narrativa que mejor encaje y devuélvela en "structure_name".
 4. Propón un "title" de publicación.
-
+${ctx.product ? PRODUCT_ADAPT_COMPLETE : ""}
 Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
 ${format}`;
 
@@ -725,6 +758,12 @@ export async function saveGeneratedScript(input: {
   title: string | null;
   content: Record<string, unknown>;
   brainVersionId: string | null;
+  /**
+   * Servicio del guion (0016). Tiene que venir de `ctx.product` —ya validado
+   * contra la marca por `loadGenerationContext`—, nunca crudo del browser: la
+   * FK aceptaría el servicio de cualquier marca.
+   */
+  productId?: string | null;
 }): Promise<string> {
   const admin = createServiceClient();
 
@@ -741,6 +780,7 @@ export async function saveGeneratedScript(input: {
       brain_version_id: input.brainVersionId,
       status: "preproduccion",
       generated_by: input.userId,
+      product_id: input.productId ?? null,
     })
     .select("id")
     .single();

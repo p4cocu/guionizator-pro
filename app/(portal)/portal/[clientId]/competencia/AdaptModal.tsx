@@ -38,16 +38,20 @@ type Preview = { content: Record<string, unknown>; structureName: string; brief:
 
 export default function AdaptModal({
   clientId,
+  products = [],
   post,
   onClose,
   onAdapted,
 }: {
   clientId: string;
+  /** Servicios de la marca (0016): "Adaptar también a un servicio". */
+  products?: { id: string; nombre: string }[];
   post: { id: string; username: string; type: string | null };
   onClose: () => void;
   onAdapted: () => void;
 }) {
   const type: ScriptType = post.type === "carousel" ? "carousel" : "reel";
+  const [productId, setProductId] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +68,7 @@ export default function AdaptModal({
     setError(null);
     setStarted(true);
     try {
-      const res = await adaptPortalPost(clientId, post.id, type);
+      const res = await adaptPortalPost(clientId, post.id, type, productId || null);
       if (res.ok) {
         setPreview({ content: res.content, structureName: res.structureName, brief: res.brief });
         setDraft(toTextDraft(res.content, type));
@@ -96,6 +100,7 @@ export default function AdaptModal({
         structureName: preview.structureName,
         title: title.trim() || null,
         content,
+        productId: productId || null,
       });
       if (res.ok) setSavedId(res.scriptId);
       else setError(res.error);
@@ -124,6 +129,32 @@ export default function AdaptModal({
               post y reescribirlos 100% con tu voz, tu producto y tu tono. Esto
               gasta una generación de tu cupo mensual.
             </p>
+            {products.length > 0 && (
+              <div className={s.modalField}>
+                <label className="field-label" htmlFor="adapt-product">
+                  Adaptar también a un servicio (opcional)
+                </label>
+                <select
+                  id="adapt-product"
+                  className="input"
+                  value={productId}
+                  onChange={(e) => setProductId(e.target.value)}
+                >
+                  <option value="">— Solo a mi marca —</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre}
+                    </option>
+                  ))}
+                </select>
+                {productId && (
+                  <p className={s.modalHint} style={{ marginTop: 6 }}>
+                    El ángulo ganador se aterriza en el problema, el proceso y el llamado a la
+                    acción de ese servicio.
+                  </p>
+                )}
+              </div>
+            )}
             <div className={s.modalActions}>
               <button type="button" className="btn btn-primary" onClick={generate}>
                 Adaptar →

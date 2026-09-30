@@ -86,6 +86,12 @@ export default function ScriptCard({
           <span className={styles.externalBadge}>⏺ Grabado fuera</span>
         </div>
       )}
+      {/* Servicio que promueve (migración 0016). */}
+      {script.client_products?.nombre && (
+        <div>
+          <span className={styles.productBadge}>◆ {script.client_products.nombre}</span>
+        </div>
+      )}
       {/* Lo pidió el cliente desde su portal (add-on de IA, Fase D etapa 6). */}
       {script.generated_by && (
         <div>

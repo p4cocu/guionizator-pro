@@ -11,7 +11,7 @@
  */
 
 import Link from "next/link";
-import { getScripts, getClientOptions, type ScriptType } from "../actions";
+import { getScripts, getClientOptions, getProductFilterOptions, type ScriptType } from "../actions";
 import styles from "../guiones.module.css";
 import ClientFilter from "../ClientFilter";
 import ScriptCard from "../ScriptCard";
@@ -20,15 +20,17 @@ import GuionesTabs from "../GuionesTabs";
 export default async function GuionesHechosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cliente?: string; tipo?: string }>;
+  searchParams: Promise<{ cliente?: string; tipo?: string; servicio?: string }>;
 }) {
-  const { cliente, tipo } = await searchParams;
+  const { cliente, tipo, servicio } = await searchParams;
   const scriptType = (tipo === "reel" || tipo === "carousel") ? (tipo as ScriptType) : undefined;
 
-  const [scripts, clients] = await Promise.all([
-    getScripts(cliente, scriptType, ["publicado"]),
+  const [scripts, clients, services] = await Promise.all([
+    getScripts(cliente, scriptType, ["publicado"], servicio || undefined),
     getClientOptions(),
+    getProductFilterOptions(),
   ]);
+  const selectedService = services.find((sv) => sv.id === servicio);
 
   const selectedClient = clients.find((c) => c.id === cliente);
   const typeLabel = scriptType === "reel" ? "Reels" : scriptType === "carousel" ? "Carruseles" : null;
@@ -44,17 +46,18 @@ export default async function GuionesHechosPage({
             {scripts.length !== 1 ? "s" : ""}{" "}
             {selectedClient ? `de ${selectedClient.nombre}` : "en total"}
             {typeLabel ? ` · ${typeLabel}` : ""}
+            {selectedService ? ` · ◆ ${selectedService.nombre}` : ""}
           </p>
         </div>
         <div className={styles.headerActions}>
-          <ClientFilter clients={clients} basePath="/guiones/hechos" showEstados={false} />
+          <ClientFilter clients={clients} services={services} basePath="/guiones/hechos" showEstados={false} />
           <Link href="/guiones/nuevo" className="btn btn-primary" style={{ whiteSpace: "nowrap" }}>
             + Nuevo guion
           </Link>
         </div>
       </div>
 
-      <GuionesTabs active="hechos" cliente={cliente} tipo={tipo} doneCount={scripts.length} />
+      <GuionesTabs active="hechos" cliente={cliente} tipo={tipo} servicio={servicio} doneCount={scripts.length} />
 
       <div className={styles.grid}>
         {scripts.length === 0 ? (

@@ -42,6 +42,23 @@ export const PRODUCT_SCRIPT_GUIDANCE = `Este contenido PROMUEVE el servicio/prod
 - Aporta valor primero y haz que el servicio aparezca como la solución natural, sin sonar a anuncio.
 - Si la ficha trae objeciones, prueba social o un proceso, úsalos donde sumen; si trae CTA, el cierre invita a ESE CTA.`;
 
+/**
+ * Qué hacer con el servicio al ADAPTAR un post de competencia. Cambia según el
+ * modo porque la ligera tiene una regla opuesta: no tocar la esencia del post.
+ * Ahí el servicio entra solo por el cierre. Lo usan el estudio
+ * (`/api/ai/adapt-competitor`) y el portal (`adaptCompetitorPost`).
+ */
+export const PRODUCT_ADAPT_COMPLETE = `
+Servicio a promover: el de la ficha "Servicio que promueve este contenido" de arriba.
+- Aterriza el patrón ganador en ESE servicio: el problema, el público y el cierre salen de su ficha.
+- El cierre invita al CTA de la ficha (si lo tiene).
+- Usa objeciones, proceso o prueba social de la ficha solo donde sumen, sin convertirlo en anuncio.`;
+
+export const PRODUCT_ADAPT_LIGHT = `
+Servicio a promover: el de la ficha "Servicio que promueve este contenido" de arriba.
+- NO cambies el ángulo ni el desarrollo del post: solo el cierre.
+- El cierre conecta la idea con ese servicio en 1-2 frases naturales e invita a su CTA (si la ficha lo tiene).`;
+
 /** Concatena perfil de marca + ficha. `null`/vacío = solo la marca. */
 export function withProductContext(brandContext: string, productContext: string | null): string {
   return productContext ? `${brandContext}\n\n${productContext}` : brandContext;

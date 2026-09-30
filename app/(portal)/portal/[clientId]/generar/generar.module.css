@@ -129,6 +129,124 @@
   margin-top: 16px;
 }
 
+/* ── Servicio: ideas y preguntas de afinado (migración 0016) ── */
+.productRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.ideas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(0, 159, 125, 0.25);
+  background: rgba(0, 159, 125, 0.04);
+}
+
+.ideaStages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ideaStage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ideaStageLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--emerald);
+}
+
+.ideaStageHint {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+.idea {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.idea:hover:not(:disabled) {
+  border-color: rgba(0, 159, 125, 0.5);
+}
+
+.ideaActive {
+  border-color: var(--emerald);
+  background: rgba(0, 159, 125, 0.1);
+}
+
+.ideaMeta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ideaHook {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.questions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+  padding: 14px;
+  border-radius: var(--r-md);
+  border: 1px dashed rgba(255, 214, 0, 0.4);
+  background: rgba(255, 214, 0, 0.04);
+}
+
+.question {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.questionSave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .ideaStages {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Estructuras (modo completo) ──
  * Mismo look que .structureCard de app/(app)/guiones/guiones.module.css a
  * propósito (bug reportado: acá el fondo era --glass-base, más claro que el

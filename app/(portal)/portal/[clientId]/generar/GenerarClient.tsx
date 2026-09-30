@@ -31,7 +31,19 @@ import {
   type ScriptTextDraft,
 } from "@/lib/portal/scriptEdit";
 import { generationModeSteps, type PortalGenerationMode } from "@/lib/portal/generationMode";
-import { guardarGuion } from "./actions";
+import {
+  IDEA_STAGES,
+  appendProductAnswers,
+  type ProductIdea,
+  type ProductQuestion,
+} from "@/lib/ai/productPrompts";
+import type { ProductOption } from "@/lib/products/fields";
+import {
+  guardarGuion,
+  guardarRespuestaEnFicha,
+  pedirIdeasServicio,
+  pedirPreguntasServicio,
+} from "./actions";
 import s from "./generar.module.css";
 
 type ScriptType = "reel" | "carousel";
@@ -72,15 +84,35 @@ type Props = {
   /** ¿Tiene prendida la sección Guiones? Si no, no se le ofrece el link. */
   canSeeScripts: boolean;
   initialUsage: Usage;
+  /** Servicios de la marca (ficha de oferta, migración 0016). */
+  products?: ProductOption[];
 };
 
-export default function GenerarClient({ clientId, mode, canSeeScripts, initialUsage }: Props) {
+export default function GenerarClient({
+  clientId,
+  mode,
+  canSeeScripts,
+  initialUsage,
+  products: initialProducts = [],
+}: Props) {
   const completo = mode === "completo";
   const steps = generationModeSteps(mode);
 
   const [step, setStep] = useState(0);
   const [type, setType] = useState<ScriptType>("reel");
   const [brief, setBrief] = useState("");
+
+  // Servicio que promueve el guion (0016). Mismo flujo que el estudio: ideas
+  // (cobran 1 generación) y 1-2 preguntas si a la ficha le falta algo (gratis).
+  const [products, setProducts] = useState<ProductOption[]>(initialProducts);
+  const [productId, setProductId] = useState("");
+  const selectedProduct = products.find((p) => p.id === productId) ?? null;
+  const [ideas, setIdeas] = useState<ProductIdea[] | null>(null);
+  const [pickedIdeaId, setPickedIdeaId] = useState<string | null>(null);
+  const [questions, setQuestions] = useState<ProductQuestion[] | null>(null);
+  const [questionsFor, setQuestionsFor] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [saveToFicha, setSaveToFicha] = useState<Record<string, boolean>>({});
 
   const [bigIdea, setBigIdea] = useState("");
   const [structures, setStructures] = useState<Structure[]>([]);
@@ -110,7 +142,7 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
     const res = await fetch(`/api/portal/generar/${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_id: clientId, ...body }),
+      body: JSON.stringify({ client_id: clientId, product_id: productId || undefined, ...body }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error ?? "No se pudo completar el pedido.");
@@ -132,7 +164,9 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
 
   // ── Paso: generar el guion (los dos modos terminan acá) ───────────────────
 
-  async function generar(structure?: Structure | null) {
+  // `briefText` existe porque, al contestar las preguntas de afinado, el brief
+  // nuevo todavía no llegó al estado cuando se dispara la llamada.
+  async function generar(structure?: Structure | null, briefText: string = brief) {
     setLoading("Escribiendo el guion… puede tardar hasta un minuto.");
     setError(null);
     try {
@@ -141,7 +175,7 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
         structure_name: string;
         usage: Usage;
       }>("guion", {
-        brief,
+        brief: briefText,
         type,
         big_idea: completo ? bigIdea : undefined,
         structure_name: structure?.name,
@@ -165,21 +199,139 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
 
   // ── Paso 1 → 2 ────────────────────────────────────────────────────────────
 
+  // ── Servicio: ideas y preguntas de afinado (0016) ─────────────────────────
+
+  function elegirServicio(id: string) {
+    setProductId(id);
+    setIdeas(null);
+    setPickedIdeaId(null);
+    setQuestions(null);
+    setQuestionsFor(null);
+    setAnswers({});
+    setSaveToFicha({});
+  }
+
+  async function pedirIdeas() {
+    if (!selectedProduct) return;
+    setLoading("Pensando ideas para tu servicio…");
+    setError(null);
+    try {
+      const res = await pedirIdeasServicio({
+        clientId,
+        productId: selectedProduct.id,
+        brief: pickedIdeaId ? null : brief,
+      });
+      if (res.ok) {
+        setIdeas(res.ideas);
+        setPickedIdeaId(null);
+        setUsage(res.usage);
+      } else {
+        setError(res.error);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudieron generar ideas.");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  function usarIdea(idea: ProductIdea) {
+    setPickedIdeaId(idea.id);
+    setType(idea.format);
+    setBrief(`${idea.brief}\n\nGancho sugerido: "${idea.hook}"`);
+  }
+
   async function avanzarDesdeBrief() {
     if (!brief.trim()) {
       setError("Escribe de qué quieres que hable el guion.");
       return;
     }
 
+    // Si a la ficha le falta un dato clave, 1-2 preguntas antes (una vez por
+    // servicio). Si no hay preguntas o algo falla, se sigue directo.
+    if (selectedProduct && selectedProduct.missing.length > 0 && questionsFor !== selectedProduct.id) {
+      setLoading("Revisando la ficha de tu servicio…");
+      setError(null);
+      try {
+        const qs = await pedirPreguntasServicio({
+          clientId,
+          productId: selectedProduct.id,
+          brief,
+        });
+        setQuestionsFor(selectedProduct.id);
+        if (qs.length > 0) {
+          setQuestions(qs);
+          setAnswers({});
+          setSaveToFicha(Object.fromEntries(qs.map((q) => [q.id, true])));
+          return;
+        }
+      } catch {
+        setQuestionsFor(selectedProduct.id);
+      } finally {
+        setLoading(null);
+      }
+    }
+
+    await seguirDesdeBrief(brief);
+  }
+
+  async function continuarConRespuestas() {
+    if (!questions) return;
+    const finalBrief = appendProductAnswers(brief, questions, answers);
+
+    // Guardar en la ficha lo marcado. Best effort: la respuesta ya viaja en el
+    // brief, así que un fallo acá no frena el guion.
+    const toSave = questions.filter((q) => saveToFicha[q.id] && (answers[q.id] ?? "").trim());
+    if (selectedProduct && toSave.length > 0) {
+      setLoading("Guardando en la ficha…");
+      const results = await Promise.allSettled(
+        toSave.map((q) =>
+          guardarRespuestaEnFicha({
+            clientId,
+            productId: selectedProduct.id,
+            field: q.field,
+            value: answers[q.id],
+          }),
+        ),
+      );
+      const saved = toSave
+        .filter((_, i) => {
+          const r = results[i];
+          return r.status === "fulfilled" && r.value.ok;
+        })
+        .map((q) => q.field);
+      if (saved.length > 0) {
+        setProducts((prev) =>
+          prev.map((p) =>
+            p.id === selectedProduct.id
+              ? { ...p, missing: p.missing.filter((k) => !saved.includes(k)) }
+              : p,
+          ),
+        );
+      }
+      setLoading(null);
+    }
+
+    setBrief(finalBrief);
+    setQuestions(null);
+    await seguirDesdeBrief(finalBrief);
+  }
+
+  async function saltarPreguntas() {
+    setQuestions(null);
+    await seguirDesdeBrief(brief);
+  }
+
+  async function seguirDesdeBrief(briefText: string) {
     if (!completo) {
-      await generar(null);
+      await generar(null, briefText);
       return;
     }
 
     setLoading("Buscando la idea central…");
     setError(null);
     try {
-      const data = await post<{ big_idea: string }>("big-idea", { brief, type });
+      const data = await post<{ big_idea: string }>("big-idea", { brief: briefText, type });
       setBigIdea(data.big_idea);
       setStep(1);
     } catch (e) {
@@ -227,6 +379,7 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
         title: title.trim() || null,
         // Lo editado, mergeado sobre el content original (ver `scriptEdit.ts`).
         content: draft ? applyTextDraft(generated.content, draft) : generated.content,
+        productId: productId || null,
       });
       if (res.ok) {
         setSavedId(res.scriptId);
@@ -289,6 +442,81 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
       {/* ── Paso 0: brief ── */}
       {step === 0 && (
         <div className={s.card}>
+          {products.length > 0 && (
+            <div className={s.field}>
+              <label className="field-label" htmlFor="servicio">
+                ¿Sobre qué producto o servicio? (opcional)
+              </label>
+              <select
+                id="servicio"
+                className="input"
+                value={productId}
+                onChange={(e) => elegirServicio(e.target.value)}
+                disabled={!!loading || !!questions}
+              >
+                <option value="">— Ninguno: contenido de marca —</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+
+              {selectedProduct && (
+                <div className={s.productRow}>
+                  <span className={s.hint} style={{ margin: 0 }}>
+                    El guion va a promover este servicio con los datos de su ficha.
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={pedirIdeas}
+                    disabled={!!loading || blocked || !!questions}
+                  >
+                    {ideas ? "↻ Otras ideas" : "✦ Dame ideas"} (usa 1 generación)
+                  </button>
+                </div>
+              )}
+
+              {selectedProduct && ideas && ideas.length > 0 && (
+                <div className={s.ideas}>
+                  <p className={s.hint} style={{ margin: 0 }}>
+                    Elige una y se llena el pedido. Puedes ajustarlo antes de seguir.
+                  </p>
+                  <div className={s.ideaStages}>
+                    {IDEA_STAGES.map((stage) => {
+                      const list = ideas.filter((i) => i.stage === stage.id);
+                      if (list.length === 0) return null;
+                      return (
+                        <div key={stage.id} className={s.ideaStage}>
+                          <span className={s.ideaStageLabel}>
+                            {stage.label}
+                            <span className={s.ideaStageHint}>{stage.hint}</span>
+                          </span>
+                          {list.map((idea) => (
+                            <button
+                              key={idea.id}
+                              type="button"
+                              className={`${s.idea} ${pickedIdeaId === idea.id ? s.ideaActive : ""}`}
+                              onClick={() => usarIdea(idea)}
+                              disabled={!!loading || !!questions}
+                              title={idea.brief}
+                            >
+                              <span className={s.ideaMeta}>
+                                {idea.format === "carousel" ? "Carrusel" : "Reel"} · {idea.angle}
+                              </span>
+                              <span className={s.ideaHook}>&ldquo;{idea.hook}&rdquo;</span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className={s.field}>
             <label className="field-label">Tipo de contenido</label>
             <div className={s.typeToggle}>
@@ -322,8 +550,11 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
               maxLength={4000}
               placeholder="Ej: quiero contar por qué la mayoría abandona a los dos meses, y que se entienda que no es falta de disciplina sino de método."
               value={brief}
-              onChange={(e) => setBrief(e.target.value)}
-              disabled={!!loading || blocked}
+              onChange={(e) => {
+                setBrief(e.target.value);
+                setPickedIdeaId(null);
+              }}
+              disabled={!!loading || blocked || !!questions}
             />
             <p className={s.hint}>
               Mientras más contexto le des —a quién le hablas, qué quieres que
@@ -331,15 +562,71 @@ export default function GenerarClient({ clientId, mode, canSeeScripts, initialUs
             </p>
           </div>
 
+          {/* Preguntas de afinado: a la ficha le falta un dato clave (0016). */}
+          {questions && selectedProduct && (
+            <div className={s.questions}>
+              <p className={s.hint} style={{ margin: 0 }}>
+                A la ficha de <strong>{selectedProduct.nombre}</strong> le falta algo que cambia el
+                guion. Responde si quieres (es opcional):
+              </p>
+              {questions.map((q) => (
+                <div key={q.id} className={s.question}>
+                  <label className="field-label">{q.question}</label>
+                  <textarea
+                    className="textarea"
+                    rows={2}
+                    maxLength={2000}
+                    placeholder={q.placeholder}
+                    value={answers[q.id] ?? ""}
+                    onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                    disabled={!!loading}
+                  />
+                  <label className={s.questionSave}>
+                    <input
+                      type="checkbox"
+                      checked={saveToFicha[q.id] ?? false}
+                      onChange={(e) =>
+                        setSaveToFicha((prev) => ({ ...prev, [q.id]: e.target.checked }))
+                      }
+                      disabled={!!loading}
+                    />
+                    Guardar en la ficha para no volver a preguntarlo
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className={s.actions}>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={avanzarDesdeBrief}
-              disabled={!!loading || blocked || !brief.trim()}
-            >
-              {completo ? "Buscar la idea central →" : "Generar guion →"}
-            </button>
+            {questions ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={saltarPreguntas}
+                  disabled={!!loading}
+                >
+                  Saltar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={continuarConRespuestas}
+                  disabled={!!loading || blocked}
+                >
+                  Continuar →
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={avanzarDesdeBrief}
+                disabled={!!loading || blocked || !brief.trim()}
+              >
+                {completo ? "Buscar la idea central →" : "Generar guion →"}
+              </button>
+            )}
           </div>
         </div>
       )}

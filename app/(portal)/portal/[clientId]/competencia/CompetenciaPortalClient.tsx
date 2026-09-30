@@ -94,6 +94,7 @@ export default function CompetenciaPortalClient({
   transcriptionRemaining: initialTranscriptionRemaining,
   adaptRemaining: initialAdaptRemaining,
   adaptCreditBalance,
+  products = [],
 }: {
   posts: PortalPost[];
   clientId: string;
@@ -115,6 +116,8 @@ export default function CompetenciaPortalClient({
   adaptRemaining: number | null;
   /** Saldo de recargas compradas (Fase E). No vence. */
   adaptCreditBalance: number;
+  /** Servicios de la marca, para "Adaptar también a un servicio" (0016). */
+  products?: { id: string; nombre: string }[];
 }) {
   const [posts, setPosts] = useState(initialPosts);
   const [query, setQuery] = useState("");
@@ -533,6 +536,7 @@ export default function CompetenciaPortalClient({
       {adaptingPost && (
         <AdaptModal
           clientId={clientId}
+          products={products}
           post={adaptingPost}
           onClose={() => setAdaptingPost(null)}
           onAdapted={() => setAdaptRemaining((r) => (r === null ? null : Math.max(0, r - 1)))}

@@ -8,7 +8,13 @@
  */
 
 import Link from "next/link";
-import { getScripts, getClientOptions, countDoneScripts, type ScriptType } from "./actions";
+import {
+  getScripts,
+  getClientOptions,
+  getProductFilterOptions,
+  countDoneScripts,
+  type ScriptType,
+} from "./actions";
 import { STATUS_LABELS } from "./labels";
 import styles from "./guiones.module.css";
 import ClientFilter from "./ClientFilter";
@@ -18,17 +24,26 @@ import GuionesTabs from "./GuionesTabs";
 export default async function GuionesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cliente?: string; tipo?: string; estado?: string | string[] }>;
+  searchParams: Promise<{
+    cliente?: string;
+    tipo?: string;
+    estado?: string | string[];
+    /** Servicio (migración 0016). */
+    servicio?: string;
+  }>;
 }) {
-  const { cliente, tipo, estado } = await searchParams;
+  const { cliente, tipo, estado, servicio } = await searchParams;
   const scriptType = (tipo === "reel" || tipo === "carousel") ? (tipo as ScriptType) : undefined;
   const estadoRaw = estado ?? [];
   const estados = Array.isArray(estadoRaw) ? estadoRaw : [estadoRaw];
-  const [scripts, clients, doneCount] = await Promise.all([
-    getScripts(cliente, scriptType, estados),
+  const productId = servicio || undefined;
+  const [scripts, clients, doneCount, services] = await Promise.all([
+    getScripts(cliente, scriptType, estados, productId),
     getClientOptions(),
-    countDoneScripts(cliente, scriptType),
+    countDoneScripts(cliente, scriptType, productId),
+    getProductFilterOptions(),
   ]);
+  const selectedService = services.find((sv) => sv.id === servicio);
 
   const selectedClient = clients.find((c) => c.id === cliente);
   const typeLabel = scriptType === "reel" ? "Reels" : scriptType === "carousel" ? "Carruseles" : null;
@@ -44,11 +59,12 @@ export default async function GuionesPage({
             {scripts.length} guion{scripts.length !== 1 ? "es" : ""}{" "}
             {selectedClient ? `de ${selectedClient.nombre}` : "en total"}
             {typeLabel ? ` · ${typeLabel}` : ""}
+            {selectedService ? ` · ◆ ${selectedService.nombre}` : ""}
             {estadosLabel}
           </p>
         </div>
         <div className={styles.headerActions}>
-          <ClientFilter clients={clients} />
+          <ClientFilter clients={clients} services={services} />
           <Link href="/guiones/papelera" className="btn btn-ghost" style={{ whiteSpace: "nowrap" }}>
             🗑 Papelera
           </Link>
@@ -58,7 +74,7 @@ export default async function GuionesPage({
         </div>
       </div>
 
-      <GuionesTabs active="proceso" cliente={cliente} tipo={tipo} doneCount={doneCount} />
+      <GuionesTabs active="proceso" cliente={cliente} tipo={tipo} servicio={servicio} doneCount={doneCount} />
 
       <div className={styles.grid}>
         {scripts.length === 0 ? (

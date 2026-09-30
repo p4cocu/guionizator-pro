@@ -25,6 +25,8 @@ export type BaseBody = {
   brief?: string;
   type?: string;
   big_idea?: string;
+  /** Servicio que promueve el guion (0016). Se valida contra la marca en `loadGenerationContext`. */
+  product_id?: string | null;
 };
 
 /** Valida lo que mandan las tres rutas. Lanza `PortalGenerationError` (400). */
@@ -32,6 +34,7 @@ export function readBase(body: BaseBody): {
   clientId: string;
   brief: string;
   type: ScriptType;
+  productId: string | null;
 } {
   const clientId = body.client_id?.trim();
   const brief = body.brief?.trim();
@@ -48,7 +51,10 @@ export function readBase(body: BaseBody): {
     throw new PortalGenerationError("Elige si es un Reel o un carrusel.");
   }
 
-  return { clientId, brief, type };
+  const productId =
+    typeof body.product_id === "string" && body.product_id.trim() ? body.product_id.trim() : null;
+
+  return { clientId, brief, type, productId };
 }
 
 /**

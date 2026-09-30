@@ -22,8 +22,8 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as BaseBody;
-    const { clientId, brief, type } = readBase(body);
-    const { client, ctx } = await requireGenerationAccess(clientId);
+    const { clientId, brief, type, productId } = readBase(body);
+    const { client, ctx } = await requireGenerationAccess(clientId, { productId });
 
     if (client.aiGenerationMode !== "completo") {
       throw new PortalGenerationError("Esta marca genera en modo simple.", 400);

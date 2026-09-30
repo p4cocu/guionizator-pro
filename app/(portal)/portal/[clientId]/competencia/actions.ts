@@ -122,9 +122,11 @@ export async function adaptPortalPost(
   clientId: string,
   postId: string,
   type: ScriptType,
+  /** Servicio al que se adapta, además de la marca (0016). Se valida contra la marca. */
+  productId?: string | null,
 ): Promise<AdaptResult> {
   try {
-    const { user, client, ctx } = await requireGenerationAccess(clientId);
+    const { user, client, ctx } = await requireGenerationAccess(clientId, { productId });
     const state = await assertCanGenerate(clientId, ctx.ownerId, client.aiGenerationLimit);
 
     const admin = createServiceClient();

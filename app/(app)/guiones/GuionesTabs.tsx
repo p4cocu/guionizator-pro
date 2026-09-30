@@ -3,7 +3,7 @@
  *
  * Son links (no estado de cliente) por la misma razón que las de
  * `/guiones/nuevo`: cada vista es una consulta distinta y se resuelve en el
- * servidor. Se arrastran `cliente` y `tipo` para no perder el filtro al
+ * servidor. Se arrastran `cliente`, `tipo` y `servicio` para no perder el filtro al
  * cambiar de pestaña; el filtro de estado no, porque en "Hechos" el estado
  * está fijo en `publicado`.
  */
@@ -15,16 +15,19 @@ export default function GuionesTabs({
   active,
   cliente,
   tipo,
+  servicio,
   doneCount,
 }: {
   active: "proceso" | "hechos";
   cliente?: string;
   tipo?: string;
+  servicio?: string;
   doneCount: number;
 }) {
   const p = new URLSearchParams();
   if (cliente) p.set("cliente", cliente);
   if (tipo) p.set("tipo", tipo);
+  if (servicio) p.set("servicio", servicio);
   const qs = p.toString();
   const suffix = qs ? `?${qs}` : "";
 

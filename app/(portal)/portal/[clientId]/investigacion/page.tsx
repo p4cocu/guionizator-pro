@@ -1,6 +1,7 @@
 /**
  * `/portal/[clientId]/investigacion` — el perfil de marca y la investigación
- * cargada, en solo lectura.
+ * cargada, en solo lectura. Excepción (0016): la ficha de cada servicio la
+ * puede editar un `collaborator` (ver `ProductFichas.tsx`).
  *
  * Candado 2: revalida el flag `investigacion` antes de consultar.
  *
@@ -12,15 +13,11 @@
  */
 
 import { requirePortalClient, requirePortalSession, portalClientLabel } from "@/lib/portal/access";
+import { listPortalProducts } from "@/lib/portal/products";
+import ProductFichas from "./ProductFichas";
 import s from "./investigacion.module.css";
 
 type Research = { id: string; fuente: string; resumen: string; created_at: string };
-type Product = {
-  id: string;
-  nombre: string;
-  descripcion: string | null;
-  tipo: string | null;
-};
 
 export default async function PortalInvestigacionPage({
   params,
@@ -31,21 +28,20 @@ export default async function PortalInvestigacionPage({
   const { supabase, user } = await requirePortalSession();
   const client = await requirePortalClient(user.id, clientId, "investigacion");
 
-  const [{ data: research }, { data: products }] = await Promise.all([
+  const [{ data: research }, productos] = await Promise.all([
     supabase
       .from("client_research")
       .select("id, fuente, resumen, created_at")
       .eq("client_id", client.id)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("client_products")
-      .select("id, nombre, descripcion, tipo")
-      .eq("client_id", client.id)
-      .order("created_at", { ascending: true }),
+    // Con la ficha de oferta completa (0016). La sesión del miembro alcanza:
+    // `client_products_member_select`.
+    listPortalProducts(supabase, client.id),
   ]);
 
   const investigacion = (research ?? []) as Research[];
-  const productos = (products ?? []) as Product[];
+  // Editar la ficha: mismo candado que aprobar o editar guiones.
+  const canEditFicha = client.role !== "viewer";
 
   return (
     <div className={s.wrap}>
@@ -85,19 +81,7 @@ export default async function PortalInvestigacionPage({
         <h3 className={s.sectionTitle}>
           Qué vendes{productos.length > 0 ? ` (${productos.length})` : ""}
         </h3>
-        {productos.length === 0 ? (
-          <p className={s.empty}>Todavía no hay productos ni servicios cargados.</p>
-        ) : (
-          <div className={s.cards}>
-            {productos.map((p) => (
-              <article key={p.id} className={s.card}>
-                <h4 className={s.cardTitle}>{p.nombre}</h4>
-                {p.tipo && <span className={s.tipo}>{p.tipo}</span>}
-                {p.descripcion && <p className={s.cardBody}>{p.descripcion}</p>}
-              </article>
-            ))}
-          </div>
-        )}
+        <ProductFichas clientId={client.id} products={productos} canEdit={canEditFicha} />
       </section>
 
       <section className={s.section}>

@@ -21,12 +21,29 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  assertCanGenerate,
   generationErrorInfo,
+  getGenerationState,
   PortalGenerationError,
   requireGenerationAccess,
   rethrowIfNextControlFlow,
   saveGeneratedScript,
+  settleGeneration,
 } from "@/lib/portal/generate";
+import { MODEL_FAST } from "@/lib/ai/anthropic";
+import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
+import {
+  PRODUCT_IDEAS_SYSTEM,
+  PRODUCT_QUESTIONS_SYSTEM,
+  buildProductIdeasPrompt,
+  buildProductQuestionsPrompt,
+  normalizeProductIdeas,
+  normalizeProductQuestions,
+  type ProductIdea,
+  type ProductQuestion,
+} from "@/lib/ai/productPrompts";
+import { missingKeyFields } from "@/lib/products/fields";
+import { PortalProductError, requireProductEditor, updatePortalProduct } from "@/lib/portal/products";
 
 export type GuardarResult = { ok: true; scriptId: string } | { ok: false; error: string };
 
@@ -42,11 +59,15 @@ export async function guardarGuion(input: {
   structureName: string;
   title: string | null;
   content: Record<string, unknown>;
+  /** Servicio del guion (0016). Se revalida contra la marca antes de guardarlo. */
+  productId?: string | null;
 }): Promise<GuardarResult> {
   let scriptId: string;
 
   try {
-    const { user, ctx } = await requireGenerationAccess(input.clientId);
+    const { user, ctx } = await requireGenerationAccess(input.clientId, {
+      productId: input.productId,
+    });
 
     if (input.type !== "reel" && input.type !== "carousel") {
       throw new PortalGenerationError("Tipo de contenido desconocido.");
@@ -72,6 +93,7 @@ export async function guardarGuion(input: {
       // El cerebro NO viaja por el browser: se resuelve de nuevo en el servidor,
       // así la fila queda atada a la versión que realmente escribió el guion.
       brainVersionId: ctx.brainVersionId,
+      productId: ctx.product?.id ?? null,
     });
   } catch (e) {
     // `redirect()` de `requirePortalSession` viaja como excepción: si se la
@@ -90,4 +112,155 @@ export async function guardarGuion(input: {
   revalidatePath("/guiones");
 
   return { ok: true, scriptId };
+}
+
+// ─── Servicio: ideas, preguntas de afinado y guardar en la ficha (0016) ─────
+
+type UsageSummary = {
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+  creditBalance: number;
+  nextSource: "plan" | "credit";
+};
+
+/**
+ * "Dame ideas para este servicio". **Cuesta 1 generación** (decisión de Paco,
+ * 2026-09-30): es una llamada a la IA de ~12s, y gratis sería una canilla
+ * abierta con la API key del dueño. Mismo cierre que las otras acciones de
+ * pago: `assertCanGenerate` antes, `settleGeneration` después (nunca
+ * `logAiGeneration` pelado — ver CLAUDE.md).
+ */
+export async function pedirIdeasServicio(input: {
+  clientId: string;
+  productId: string;
+  brief?: string | null;
+}): Promise<
+  { ok: true; ideas: ProductIdea[]; usage: UsageSummary } | { ok: false; error: string }
+> {
+  try {
+    const { user, client, ctx } = await requireGenerationAccess(input.clientId, {
+      productId: input.productId,
+    });
+    if (!ctx.product) throw new PortalGenerationError("Ese servicio ya no existe.", 404);
+
+    const state = await assertCanGenerate(input.clientId, ctx.ownerId, client.aiGenerationLimit);
+
+    let ideas: ProductIdea[];
+    try {
+      const raw = await generateJsonPlain({
+        label: "portal:product-ideas",
+        model: MODEL_FAST,
+        maxTokens: 3000,
+        system: PRODUCT_IDEAS_SYSTEM,
+        // `ctx.clientContext` ya trae la ficha pegada debajo de la marca (y sin
+        // `notas`), por eso el bloque del servicio va vacío.
+        userMessage: buildProductIdeasPrompt({
+          brandContext: ctx.clientContext,
+          productContext: "",
+          currentBrief: input.brief?.trim().slice(0, MAX_BRIEF_LENGTH) || null,
+        }),
+      });
+      ideas = normalizeProductIdeas(raw);
+    } catch (e) {
+      if (e instanceof AiJsonError) {
+        throw new PortalGenerationError("La IA no devolvió ideas válidas. Intenta de nuevo.", 502);
+      }
+      throw e;
+    }
+    // Sin ideas no se cobra: el cliente no recibió nada.
+    if (ideas.length === 0) {
+      throw new PortalGenerationError("La IA no devolvió ideas. Intenta de nuevo.", 502);
+    }
+
+    await settleGeneration({
+      state,
+      ownerId: ctx.ownerId,
+      clientId: input.clientId,
+      userId: user.id,
+      endpoint: "portal:product-ideas",
+    });
+
+    const usage = await getGenerationState(input.clientId, ctx.ownerId, client.aiGenerationLimit, {
+      freshBalance: true,
+    });
+
+    return {
+      ok: true,
+      ideas,
+      usage: {
+        used: usage.used,
+        limit: usage.limit,
+        remaining: usage.remaining,
+        creditBalance: usage.creditBalance,
+        nextSource: usage.nextSource,
+      },
+    };
+  } catch (e) {
+    rethrowIfNextControlFlow(e);
+    const { message, status } = generationErrorInfo(e);
+    if (status >= 500) console.error("[portal/generar/ideas]", e);
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * 1-2 preguntas sobre lo que le falta a la ficha. **Gratis** (llamada chica de
+ * ~2s) y **nunca falla hacia el cliente**: cualquier error devuelve `[]` y el
+ * flujo sigue directo, igual que en el estudio.
+ */
+export async function pedirPreguntasServicio(input: {
+  clientId: string;
+  productId: string;
+  brief: string;
+}): Promise<ProductQuestion[]> {
+  try {
+    const { ctx } = await requireGenerationAccess(input.clientId, { productId: input.productId });
+    if (!ctx.product) return [];
+
+    const missing = missingKeyFields(ctx.product);
+    if (missing.length === 0) return [];
+
+    const raw = await generateJsonPlain({
+      label: "portal:product-questions",
+      model: MODEL_FAST,
+      maxTokens: 600,
+      system: PRODUCT_QUESTIONS_SYSTEM,
+      userMessage: buildProductQuestionsPrompt({
+        brandContext: ctx.clientContext,
+        productContext: "",
+        missing,
+        brief: input.brief.slice(0, MAX_BRIEF_LENGTH),
+      }),
+    });
+    return normalizeProductQuestions(raw, missing);
+  } catch (e) {
+    rethrowIfNextControlFlow(e);
+    if (!(e instanceof AiJsonError)) console.error("[portal/generar/preguntas]", e);
+    return [];
+  }
+}
+
+/** Guarda una respuesta de afinado en la ficha (solo `collaborator` o dueño). */
+export async function guardarRespuestaEnFicha(input: {
+  clientId: string;
+  productId: string;
+  field: string;
+  value: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireProductEditor(input.clientId);
+    await updatePortalProduct({
+      clientId: input.clientId,
+      productId: input.productId,
+      details: { [input.field]: input.value },
+    });
+    revalidatePath(`/portal/${input.clientId}/investigacion`);
+    return { ok: true };
+  } catch (e) {
+    rethrowIfNextControlFlow(e);
+    if (e instanceof PortalProductError) return { ok: false, error: e.message };
+    console.error("[portal/generar/ficha]", e);
+    return { ok: false, error: "No se pudo guardar en la ficha." };
+  }
 }
