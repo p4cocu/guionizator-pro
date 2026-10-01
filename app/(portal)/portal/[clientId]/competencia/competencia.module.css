@@ -271,6 +271,22 @@
   white-space: pre-wrap;
 }
 
+.transcriptDownload {
+  margin-top: 8px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--emerald);
+  cursor: pointer;
+}
+
+.transcriptDownload:hover {
+  text-decoration: underline;
+}
+
 .cardActions {
   display: flex;
   align-items: center;

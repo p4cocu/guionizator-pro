@@ -23,6 +23,7 @@ import {
 import { DIMENSIONS, labelFor, colorFor } from "@/lib/competencia/taxonomy";
 import { looksLikePublicId, normalizePublicId } from "@/lib/competencia/publicId";
 import { accountLabel, UNKNOWN_ACCOUNT } from "@/lib/competencia/savedLink";
+import { downloadTranscript } from "@/lib/competencia/transcriptExport";
 import {
   MAX_POST_COMMENT_LENGTH,
   type PostComment,
@@ -660,6 +661,16 @@ export default function CompetenciaClient({ clients }: Props) {
               <span className={s.transcribedBadge} style={{ opacity: 0.5 }}>
                 Sin transcripción
               </span>
+            )}
+            {p.transcription && (
+              <button
+                className={s.transcribeBtn}
+                style={{ marginLeft: "auto" }}
+                onClick={() => downloadTranscript(p)}
+                title="Descargar la transcripción en Markdown"
+              >
+                ⬇ .md
+              </button>
             )}
             <button
               className={s.transcribeBtn}

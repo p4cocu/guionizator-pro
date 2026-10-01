@@ -21,6 +21,7 @@ import type { OutlierFlags } from "@/lib/competencia/outliers";
 import { labelFor, colorFor } from "@/lib/competencia/taxonomy";
 import { normalizePublicId } from "@/lib/competencia/publicId";
 import { accountLabel, type SavedLinkType } from "@/lib/competencia/savedLink";
+import { downloadTranscript } from "@/lib/competencia/transcriptExport";
 import {
   MAX_POST_COMMENT_LENGTH,
   type PostComment,
@@ -1031,6 +1032,13 @@ function PostCard({
         <div className={s.transcript}>
           <p className={s.transcriptTitle}>Lo que dice el video</p>
           <p className={s.transcriptBody}>{post.transcription}</p>
+          <button
+            type="button"
+            className={s.transcriptDownload}
+            onClick={() => downloadTranscript(post)}
+          >
+            ⬇ Descargar transcripción (.md)
+          </button>
         </div>
       )}
 
