@@ -21,7 +21,6 @@ Checklist acordado el 2026-10-02. Rama de trabajo: `feat/estrategia-contenido`.
 
 ## Siguiente
 
-- [ ] **Validar Vercel en uso real** y después apagar Netlify: reenviar un evento desde el dashboard de Stripe (debe dar 200), conectar/renovar Instagram, reseteo de contraseña por mail, un login del portal. Cuando pase unos días sin problemas: borrar `netlify/functions`, `netlify.toml`, `@netlify/plugin-nextjs`, `/.netlify/functions` de `PUBLIC_PATHS`, la rama de `SCRAPE_FN_SECRET` en `startScrape`, y pausar el sitio de Netlify
 - [ ] Con el techo de 300 s de Vercel: subir "Mi semana" a 7 piezas e `IDEAS_COUNT` a 6 (hoy topados por Netlify)
 - [ ] `/publicar` (Instagram Etapa B, stand-by): Vercel corta los cuerpos en 4.5 MB → si se retoma, subir directo a Supabase Storage con URL firmada
 - [ ] **Datos para posts de investigación**: hoy hay 4 posts clasificados en toda la base. Ponerle nicho a las cuentas y transcribir + clasificar al menos 10 reels por nicho (Whisper cuesta por video). Probar el post de investigación de punta a punta contra la API cuando haya datos
@@ -39,6 +38,16 @@ Checklist acordado el 2026-10-02. Rama de trabajo: `feat/estrategia-contenido`.
 - [ ] Precio: **$300 MXN/mes para todos** (decisión 2026-10-02) — revisar textos de venta/landing que digan otra cosa
 - [ ] "Mi semana" más rápida (hoy Haiku 4.5, ~18s para 5): opciones sin implementar — recortar la salida, mostrar las ideas mientras se generan (streaming), o una llamada corta que arma el arco de la semana + una llamada en paralelo por día
 - [ ] **Al final — Auditoría de lo que sobra**: al terminar todo lo anterior, revisar qué secciones quedaron obsoletas (candidatos ya vistos: "Sugerir del baúl" vs ganchos de 3 capas, categorías viejas del baúl como "pregunta impactante", Tendencias vs fuente de noticias de /estrategia, Prompts, Instagram en pausa)
+
+## Pendientes de revisión de la mudanza a Vercel (al terminar todo)
+
+Decidido 2026-10-02: se revisan al final, después de las implementaciones.
+
+- [ ] **Stripe**: Developers → Webhooks → endpoint `https://guionizator.pacocuevasia.com/api/stripe/webhook` → "Resend" de un evento reciente. Tiene que dar **200**: es lo único que confirma que el `STRIPE_WEBHOOK_SECRET` cargado en Vercel es el correcto
+- [ ] **Instagram**: conectar o renovar un token desde el perfil de un cliente
+- [ ] **Contraseña**: "¿Olvidaste tu contraseña?" desde `/login` (llega el mail y `/nueva-contrasena` funciona)
+- [ ] **Portal**: entrar con una cuenta de cliente
+- [ ] Si todo pasa: **apagar Netlify** — borrar `netlify/functions`, `netlify.toml`, `@netlify/plugin-nextjs`, `/.netlify/functions` de `PUBLIC_PATHS`, la rama de `SCRAPE_FN_SECRET` en `startScrape`, y pausar el sitio de Netlify
 
 ## Después (no prioritario)
 
