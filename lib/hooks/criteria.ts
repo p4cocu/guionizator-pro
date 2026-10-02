@@ -100,7 +100,7 @@ export const HOOK_RULES_PROMPT = `## Reglas del gancho (análisis de 1000 videos
 Un gancho son los primeros 3 segundos y tiene TRES capas:
 - **Texto en pantalla** (lo que se lee): 8 a 12 palabras, idealmente ~8. Es la capa más importante en negocios, ventas, marca personal y tecnología.
 - **Visual** (lo que se ve en el primer segundo): algo CONCRETO que ejemplifica el gancho — un objeto en mano, una acción, una pantalla con un resultado, una escena real. Cámara fija; el movimiento lo pone la persona (entra al cuadro, señala, muestra), no la edición.
-- **Verbal** (lo que se dice): abre DECLARANDO — una afirmación directa o un número. Prohibido divagar ("hace mucho tiempo…", "mucha gente…", "¿sabías que…?") y prohibidas las preguntas débiles ("¿te pasa?", "¿verdad?").
+- **Verbal** (lo que se dice): abre DECLARANDO — una afirmación directa o un número. El número tiene que ser REAL: si no está escrito en el contexto, deja el hueco "[N]" para que la marca ponga su dato; nunca inventes un porcentaje ni una estadística ("el 40% de…"). Prohibido divagar ("hace mucho tiempo…", "mucha gente…", "¿sabías que…?") y prohibidas las preguntas débiles ("¿te pasa?", "¿verdad?").
 Además: se tiene que entender sin sonido; la claridad le gana a la creatividad; el gancho vende el siguiente segundo, no el tema completo.`;
 
 /**

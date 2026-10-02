@@ -147,7 +147,7 @@ ${context ? `\nDe qué trata el video: ${context.slice(0, 2000)}\n` : ""}
 ## Tu tarea
 1. \`checks\`: evalúa los 7 criterios TAL COMO ESTÁ. Si una capa no está escrita, los criterios que dependen de ella son "falla" (no "na"): un gancho sin texto en pantalla falla \`texto_pantalla\` y \`largo_texto\`. Usa "na" solo para lo que de verdad no se puede saber.
 2. \`verdict\`: el problema principal en una frase (máx 20 palabras).
-3. \`improved\`: reescribe el gancho completo en 3 capas para que pase los 7, conservando la idea y la promesa. Mismas reglas de largo: texto 8-12 palabras, verbal máx 18, visual máx 25.
+3. \`improved\`: reescribe el gancho completo en 3 capas para que pase los 7, conservando la idea y la promesa. Mismas reglas de largo: texto 8-12 palabras, verbal máx 18, visual máx 25. Si el original no trae un número, la versión mejorada tampoco lo inventa: usa "[N]" o abre declarando sin cifra.
 
 Prohibido inventar cifras o resultados que no estén en el gancho o el contexto (si hace falta un número, deja "[N]").
 
