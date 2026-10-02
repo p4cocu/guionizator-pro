@@ -49,7 +49,9 @@ const taxonomyList = (items: TaxonomyItem[]) =>
 
 // ─── 1. Generador de ideas ───────────────────────────────────────────────────
 
-export const IDEAS_COUNT = 6;
+// Era 6: con 6 ideas se midieron 23.4s (2026-10-02), al borde del límite de
+// Netlify (~26s). Volver a subirlo después de la mudanza a Vercel.
+export const IDEAS_COUNT = 5;
 
 export const STRATEGY_IDEAS_SYSTEM = `Eres estratega de contenido para Instagram en LATAM, formado en el método de Andrea Estratega: cada pieza nace de un pilar y una línea narrativa, le habla a UN nivel de consciencia, tiene un propósito (viral, valor o venta), un formato que la empaqueta, y abre con un gancho de 3 capas. No eres profesor: eres guía hacia la solución única de la marca.
 Tus ideas son ESPECÍFICAS de la marca: nunca propones algo que serviría igual para cualquier cuenta.
@@ -93,6 +95,10 @@ export function buildStrategyIdeasPrompt(input: {
       "Fuente: **preguntas y mensajes reales de clientes** (abajo). Cada idea responde una pregunta o duda que aparece ahí; el gancho puede citarla casi literal.",
     competencia:
       "Fuente: **patrones que están funcionando en la competencia** (abajo). Copia el PATRÓN (tipo de gancho, estructura, pilar de valor, ángulo), NUNCA el tema, los datos ni las frases. Las ideas son de esta marca.",
+    investigacion:
+      "Fuente: **una investigación real sobre reels del nicho** (abajo, números YA calculados). Cada idea es un post de autoridad tipo \"analicé N reels de …\": el gancho y el brief usan esos números TAL CUAL (mismo N, mismos %, mismas medianas) — prohibido redondear hacia arriba, inventar otros números o atribuir resultados que no estén ahí. El hallazgo es de PATRONES (qué ganchos y estructuras usan los que más se ven), no de lo que dice cada reel. No nombres las cuentas (@): habla del nicho. Cierra llevando el hallazgo a lo que hace esta marca. Formato sugerido: `investigacion`.",
+    contracorriente:
+      "Fuente: **contracorriente**. TODAS las ideas son contracorriente (formato `contracorriente`): ni demos, ni casos, ni tutoriales sueltos. Cada idea rompe UNA creencia común del nicho del cliente ideal (las objeciones y miedos de la estrategia son la mina: \"un arquitecto sale caro\", \"eso lo hago yo solo\"). Abre declarando lo contrario de lo que todos repiten, sostenlo con un argumento o mecanismo concreto (no con cifras inventadas) y conecta con la solución única de la marca. Polariza sin insultar al cliente. Formato sugerido: `contracorriente`.",
   };
 
   const constraints = [
@@ -333,4 +339,29 @@ Reglas:
 
 Devuelve ÚNICAMENTE este JSON:
 {"avatar": "...", "dolores": "...", "deseos": "...", "objeciones": "...", "transformacion": "...", "diferenciador": "...", "fuentes": "...", "pillars": [{"name": "...", "objective": "...", "andrea_pillar": "problema|solucion|resultado", "share": 25, "topics": "...", "formats": "..."}]}`;
+}
+
+/**
+ * Red de seguridad en código contra cifras inventadas (probado 2026-10-02: con
+ * la regla en el prompt igual salían "47 veces", "200 pacientes olvidados").
+ * Toda cifra de 10 o más que NO aparezca en el contexto que recibió el modelo
+ * se cambia por "[N]" para que la marca ponga su dato real. Las de 1 a 9 se
+ * dejan: son conteos de lista ("3 cosas que…"), no afirmaciones.
+ */
+export function maskInventedNumbers<T extends Record<string, unknown>>(idea: T, context: string, fields: (keyof T)[]): T {
+  // Formato MX: coma de miles, punto decimal ("12,000", "1.5").
+  const clean = (n: string) => n.replace(/,/g, "").replace(/\.$/, "");
+  const known = new Set((context.match(/\d[\d.,]*/g) ?? []).map(clean));
+  const out = { ...idea };
+  for (const f of fields) {
+    const v = out[f];
+    if (typeof v !== "string") continue;
+    out[f] = v.replace(/\d[\d.,]*\d|\d/g, (m, offset: number, whole: string) => {
+      // Horas ("11:45pm") no son afirmaciones: se dejan.
+      if (whole[offset - 1] === ":" || whole[offset + m.length] === ":") return m;
+      const n = clean(m);
+      return Number(n) >= 10 && !known.has(n) ? "[N]" : m;
+    }) as T[keyof T];
+  }
+  return out;
 }

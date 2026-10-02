@@ -88,6 +88,46 @@
   color: var(--flare);
 }
 
+/* Nicho por cuenta (0020) */
+.nicheTag {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--emerald);
+  cursor: pointer;
+}
+
+.nicheTagEmpty {
+  color: var(--text-dim);
+  border-style: dashed;
+}
+
+.nicheInput {
+  width: 120px;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--emerald);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.nicheBulk {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.nicheBulkInput {
+  max-width: 220px;
+  font-size: 13px;
+  padding: 6px 10px;
+}
+
 /* ── Controles de búsqueda ── */
 .searchRow {
   display: flex;

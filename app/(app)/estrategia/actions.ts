@@ -30,6 +30,16 @@ import {
   type StrategyFieldKey,
 } from "@/lib/strategy/pillars";
 import { strategyFromTest } from "@/lib/strategy/runTest";
+import {
+  MIN_RESEARCH_POSTS,
+  computeResearch,
+  normalizeNiche,
+  normalizeTopic,
+  researchOptions,
+  researchToPrompt,
+  type ResearchOption,
+  type ResearchPost,
+} from "@/lib/competencia/research";
 import { missingTestAnswers, sanitizeTestAnswers, type TestAnswers } from "@/lib/strategy/test";
 import {
   STRATEGY_DRAFT_SYSTEM,
@@ -38,6 +48,7 @@ import {
   buildStrategyIdeasPrompt,
   normalizeStrategyDraft,
   normalizeStrategyIdeas,
+  maskInventedNumbers,
 } from "@/lib/strategy/prompts";
 
 /**
@@ -208,10 +219,54 @@ export type GenerateIdeasInput = {
   value_pillar?: string | null;
   hook_type?: string | null;
   script_structure?: string | null;
+  /** Fuente "investigacion" (0020): nicho obligatorio, tema opcional. */
+  research_niche?: string | null;
+  research_topic?: string | null;
 };
 
 export type WeekIdea = ContentIdea & { day: number | null };
 export type GenerateIdeasResult = { ok: true; ideas: WeekIdea[] } | { ok: false; error: string };
+
+/**
+ * Los posts clasificados de TODAS tus marcas con el nicho de su cuenta (0020).
+ * Se cruzan por `client_id` + `username` porque `competitor_posts` no tiene FK
+ * a `competitors`. Investigación por nicho = tus datos de todas las marcas.
+ */
+async function loadResearchPosts(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ownerId: string,
+): Promise<ResearchPost[]> {
+  const [{ data: accounts }, { data: posts }] = await Promise.all([
+    supabase.from("competitors").select("client_id, username, niche").eq("owner_id", ownerId).not("niche", "is", null),
+    supabase
+      .from("competitor_posts")
+      .select("client_id, username, shortcode, permalink, topic, hook_type, script_structure, value_pillar, video_views, likes, comments, transcription")
+      .eq("owner_id", ownerId)
+      .eq("is_disliked", false)
+      .not("classified_at", "is", null)
+      .limit(5000),
+  ]);
+  const nicheOf = new Map((accounts ?? []).map((a) => [`${a.client_id}|${a.username}`, normalizeNiche(a.niche)]));
+  return (posts ?? []).map((p) => ({
+    key: (p.shortcode as string | null) || (p.permalink as string | null) || `${p.client_id}|${p.username}|${p.transcription?.slice(0, 40)}`,
+    username: p.username as string,
+    niche: nicheOf.get(`${p.client_id}|${p.username}`) ?? null,
+    topic: normalizeTopic(p.topic),
+    hook_type: p.hook_type as string | null,
+    script_structure: p.script_structure as string | null,
+    value_pillar: p.value_pillar as string | null,
+    video_views: p.video_views as number | null,
+    likes: p.likes as number | null,
+    comments: p.comments as number | null,
+    transcription: p.transcription as string | null,
+  }));
+}
+
+/** Nichos y temas disponibles para la fuente "Post de investigación". */
+export async function getResearchOptions(): Promise<ResearchOption[]> {
+  const { supabase, user } = await getAuthUser();
+  return researchOptions(await loadResearchPosts(supabase, user.id));
+}
 
 /** Material de las fuentes que viven en la base (tendencias, competencia). */
 async function loadSourceMaterial(
@@ -288,6 +343,20 @@ export async function generateIdeas(input: GenerateIdeasInput): Promise<Generate
         return { ok: false, error: "No hay tendencias pendientes. Agrega algunas en /tendencias." };
       if (input.source === "competencia" && !material)
         return { ok: false, error: "Esta marca no tiene posts de competencia clasificados todavía." };
+      if (input.source === "investigacion") {
+        if (!input.research_niche) return { ok: false, error: "Elige el nicho de la investigación." };
+        const stats = computeResearch(await loadResearchPosts(supabase, user.id), {
+          niche: input.research_niche,
+          topic: input.research_topic,
+        });
+        if (!stats || stats.posts < MIN_RESEARCH_POSTS) {
+          return {
+            ok: false,
+            error: `Solo hay ${stats?.posts ?? 0} reels clasificados ${input.research_topic ? "de ese tema " : ""}en ese nicho. Con menos de ${MIN_RESEARCH_POSTS} la afirmación no se sostiene: clasifica más en Competencia${input.research_topic ? " o quita el tema" : ""}.`,
+          };
+        }
+        material = researchToPrompt(stats);
+      }
     }
 
     const { data: prev } = await supabase
@@ -317,7 +386,14 @@ export async function generateIdeas(input: GenerateIdeasInput): Promise<Generate
           level: input.level ? toAwarenessLevel(input.level) : null,
           purpose: isPurpose(input.purpose) ? input.purpose : null,
           format: input.format ?? null,
-          format_style: FORMAT_STYLES.some((f) => f.id === input.format_style) ? input.format_style! : null,
+          // Las fuentes de autoridad (0020) llevan su formato sí o sí: probado,
+          // sin forzarlo 2 de 5 ideas "contracorriente" salían como demo o caso.
+          format_style:
+            input.source === "contracorriente" || input.source === "investigacion"
+              ? input.source
+              : FORMAT_STYLES.some((f) => f.id === input.format_style)
+                ? input.format_style!
+                : null,
           value_pillar: input.value_pillar || null,
           hook_type: input.hook_type || null,
           script_structure: input.script_structure || null,
@@ -326,10 +402,13 @@ export async function generateIdeas(input: GenerateIdeasInput): Promise<Generate
         weekSlots,
       }),
     });
+    const brandContext = buildClientContext(brand);
+    const strategyContext = buildStrategyContext(strategy);
+    const knownContext = `${brandContext}\n${strategyContext}\n${material ?? ""}`;
     let ideas = normalizeStrategyIdeas(raw, {
       pillarKeys: strategy.pillars.map((p) => p.key),
       source: input.source,
-    });
+    }).map((idea) => maskInventedNumbers(idea, knownContext, ["hook", "hook_text", "hook_visual", "angle", "brief"]));
     // En "Mi semana" la casilla manda: si la IA se corrió de día o de nivel, se
     // reacomoda por posición.
     if (weekSlots) {

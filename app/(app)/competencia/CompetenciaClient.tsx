@@ -12,7 +12,10 @@ import {
   getLatestResults,
   getScrapeStatus,
   listCompetitors,
+  listKnownNiches,
   removeCompetitor,
+  setCompetitorNiche,
+  setNicheForUnlabeled,
   startScrape,
   toggleDislikePost,
   toggleFavoritePost,
@@ -97,12 +100,33 @@ declare global {
   }
 }
 
+/**
+ * Con transcripción y sin clasificar — o clasificado antes de 0020 sin tema, o
+ * con un tema de más de 3 palabras (los primeros que salieron demasiado
+ * específicos y no agrupan). Reclasificar cuesta lo mismo que clasificar
+ * (1 llamada a MODEL_FAST) y trae el tema en la misma respuesta.
+ */
+function needsClassify(p: CompetitorPost): boolean {
+  if (!p.transcription || p.transcription.trim() === "") return false;
+  return !p.classified_at || !p.topic || p.topic.split(" ").length > 3;
+}
+
 export default function CompetenciaClient({ clients }: Props) {
   const [clientId, setClientId] = useState(clients[0]?.id ?? "");
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [newUser, setNewUser] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [isAdding, startAdd] = useTransition();
+  // Nicho por cuenta (0020): alimenta los posts de investigación de /estrategia.
+  const [knownNiches, setKnownNiches] = useState<string[]>([]);
+  const [editingNicheId, setEditingNicheId] = useState<string | null>(null);
+  const [nicheDraft, setNicheDraft] = useState("");
+  const [bulkNiche, setBulkNiche] = useState("");
+  const [nicheError, setNicheError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listKnownNiches().then(setKnownNiches).catch(() => {});
+  }, []);
 
   const [nPosts, setNPosts] = useState(10);
   const [sinceDate, setSinceDate] = useState("");
@@ -318,7 +342,7 @@ export default function CompetenciaClient({ clients }: Props) {
 
   // Posts con transcripción lista pero aún sin clasificar (para el botón masivo).
   const pendingClassifyCount = useMemo(
-    () => posts.filter((p) => p.transcription && p.transcription.trim() !== "" && !p.classified_at).length,
+    () => posts.filter(needsClassify).length,
     [posts],
   );
 
@@ -336,6 +360,42 @@ export default function CompetenciaClient({ clients }: Props) {
         setAddError(res.error);
       }
     });
+  }
+
+  function rememberNiche(niche: string | null | undefined) {
+    if (niche) setKnownNiches((prev) => (prev.includes(niche) ? prev : [...prev, niche].sort()));
+  }
+
+  async function saveNiche(id: string) {
+    setNicheError(null);
+    try {
+      const res = await setCompetitorNiche(id, nicheDraft);
+      if (!res.ok) {
+        setNicheError(res.error ?? "No se pudo guardar el nicho.");
+        return;
+      }
+      setCompetitors((prev) => prev.map((c) => (c.id === id ? { ...c, niche: res.niche ?? null } : c)));
+      rememberNiche(res.niche);
+      setEditingNicheId(null);
+    } catch (e) {
+      setNicheError(e instanceof Error ? e.message : "No se pudo guardar el nicho.");
+    }
+  }
+
+  async function applyBulkNiche() {
+    setNicheError(null);
+    try {
+      const res = await setNicheForUnlabeled(clientId, bulkNiche);
+      if (!res.ok) {
+        setNicheError(res.error ?? "No se pudo guardar el nicho.");
+        return;
+      }
+      setCompetitors((prev) => prev.map((c) => (c.niche ? c : { ...c, niche: res.niche ?? null })));
+      rememberNiche(res.niche);
+      setBulkNiche("");
+    } catch (e) {
+      setNicheError(e instanceof Error ? e.message : "No se pudo guardar el nicho.");
+    }
   }
 
   async function handleRemove(id: string) {
@@ -440,9 +500,7 @@ export default function CompetenciaClient({ clients }: Props) {
   // Clasifica en lote todos los posts con transcripción y sin clasificar,
   // con concurrencia limitada (3) para no saturar la API ni perder robustez.
   async function handleClassifyPending() {
-    const pending = posts.filter(
-      (p) => p.transcription && p.transcription.trim() !== "" && !p.classified_at
-    );
+    const pending = posts.filter(needsClassify);
     if (pending.length === 0) return;
     setBulkClassify({ done: 0, total: pending.length });
 
@@ -697,6 +755,7 @@ export default function CompetenciaClient({ clients }: Props) {
                 </span>
               );
             })}
+            {p.topic && <span className={s.classTag}>Tema: {p.topic}</span>}
           </div>
         )}
 
@@ -875,6 +934,32 @@ export default function CompetenciaClient({ clients }: Props) {
                 {c.followers != null && (
                   <span className={s.chipMeta}>{fmt(c.followers)}</span>
                 )}
+                {editingNicheId === c.id ? (
+                  <input
+                    className={s.nicheInput}
+                    list="known-niches"
+                    autoFocus
+                    placeholder="nicho"
+                    value={nicheDraft}
+                    onChange={(e) => setNicheDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveNiche(c.id);
+                      if (e.key === "Escape") setEditingNicheId(null);
+                    }}
+                    onBlur={() => saveNiche(c.id)}
+                  />
+                ) : (
+                  <button
+                    className={`${s.nicheTag} ${c.niche ? "" : s.nicheTagEmpty}`}
+                    onClick={() => {
+                      setNicheDraft(c.niche ?? "");
+                      setEditingNicheId(c.id);
+                    }}
+                    title="Nicho de la cuenta: con esto /estrategia arma posts de investigación"
+                  >
+                    {c.niche ?? "+ nicho"}
+                  </button>
+                )}
                 <button
                   className={s.chipX}
                   onClick={() => handleRemove(c.id)}
@@ -886,6 +971,31 @@ export default function CompetenciaClient({ clients }: Props) {
             ))}
           </div>
         )}
+        <datalist id="known-niches">
+          {knownNiches.map((n) => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
+        {competitors.some((c) => !c.niche) && (
+          <div className={s.nicheBulk}>
+            <span className={s.chipMeta}>
+              {competitors.filter((c) => !c.niche).length} cuenta
+              {competitors.filter((c) => !c.niche).length !== 1 ? "s" : ""} sin nicho:
+            </span>
+            <input
+              className={`input ${s.nicheBulkInput}`}
+              list="known-niches"
+              placeholder="ej. dentistas"
+              value={bulkNiche}
+              onChange={(e) => setBulkNiche(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyBulkNiche()}
+            />
+            <button className="btn btn-ghost" onClick={applyBulkNiche} disabled={!bulkNiche.trim()}>
+              Aplicar a las que no tienen
+            </button>
+          </div>
+        )}
+        {nicheError && <p className={s.error}>{nicheError}</p>}
       </div>
 
       {/* ── Controles de búsqueda ── */}
@@ -1040,7 +1150,7 @@ export default function CompetenciaClient({ clients }: Props) {
               </button>
             ) : (
               <span className={s.classBarHint}>
-                Clasificación al día — se etiqueta gancho, estructura y pilar de cada post transcrito.
+                Clasificación al día — se etiqueta gancho, estructura, pilar y tema de cada post transcrito.
               </span>
             )}
           </div>

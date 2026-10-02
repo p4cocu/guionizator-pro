@@ -1035,6 +1035,37 @@ existe en el estudio: botón "🧭 Hacer el test" en `/estrategia`.
   siguiente "Guardar estrategia". El último test respondido (del cliente o
   tuyo) se ve en un desplegable arriba del formulario.
 
+## Posts de autoridad: investigación y contracorriente (migración `0020`)
+
+Dos fuentes nuevas en el generador de `/estrategia`.
+
+- **Post de investigación** ("analicé N reels de cuentas de dentistas…"). Para
+  que la afirmación sea verdad: `competitors.niche` (lo pones con "+ nicho" en
+  cada cuenta de `/competencia`, o en lote a las que no tienen) y
+  `competitor_posts.topic` (lo pone `classifyPost` en la misma llamada).
+  **Los números los calcula `lib/competencia/research.ts`, nunca la IA**: el
+  prompt recibe el bloque armado (`researchToPrompt`) con la orden de usarlos
+  tal cual. Debajo de `MIN_RESEARCH_POSTS` (10) no se arma. Cuenta los posts
+  clasificados de **todas** tus marcas (por nicho), sin duplicar el mismo reel
+  guardado en dos marcas. ⚠️ Clasificar exige transcripción: al 2026-10-02 había
+  solo 4 posts clasificados en toda la base, así que para usarla hay que
+  transcribir y clasificar antes.
+- **Temas**: se le pasan al modelo los temas existentes de 1-3 palabras para que
+  reuse el texto exacto. ⚠️ Probado: si se le pasan temas largos, los copia a
+  cada post nuevo y nunca agrupan. "Clasificar pendientes" incluye los
+  clasificados sin tema o con tema de más de 3 palabras.
+- **Contracorriente**: rompe una creencia del nicho a partir de las objeciones
+  del cliente ideal. En las dos fuentes de autoridad el `format_style` se
+  **fuerza en código**: sin eso, 2 de 5 ideas salían como demo o caso.
+- **`maskInventedNumbers`** (`lib/strategy/prompts.ts`) corre sobre toda idea
+  generada: cualquier cifra ≥ 10 que no esté en el contexto que recibió el
+  modelo pasa a `[N]` (los conteos de lista de 1-9 y las horas se dejan).
+  Existe porque el modelo seguía escribiendo "47 veces" o "200 pacientes" con la
+  regla en el prompt. No atrapa casos inventados sin número ("esta clínica dejó
+  de contestar…").
+- `IDEAS_COUNT` bajó de 6 a **5**: 6 ideas tardaban 23.4 s, al borde del límite
+  de Netlify. Subirlo después de la mudanza a Vercel.
+
 ## Ganchos de 3 capas (migración `0018`)
 
 El análisis de 1000 ganchos de Andrea: el gancho tiene **3 capas** — lo que se

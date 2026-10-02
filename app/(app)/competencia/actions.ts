@@ -1,5 +1,6 @@
 "use server";
 
+import { normalizeNiche, normalizeTopic } from "@/lib/competencia/research";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { runScrapeJob } from "@/lib/competencia/scrape";
@@ -53,13 +54,15 @@ export type Competitor = {
   username: string;
   display_name: string | null;
   followers: number | null;
+  /** Nicho de la cuenta (0020): alimenta los posts de investigación. */
+  niche: string | null;
 };
 
 export async function listCompetitors(clientId: string): Promise<Competitor[]> {
   const { supabase, user } = await getAuthUser();
   const { data } = await supabase
     .from("competitors")
-    .select("id, username, display_name, followers")
+    .select("id, username, display_name, followers, niche")
     .eq("owner_id", user.id)
     .eq("client_id", clientId)
     .order("created_at", { ascending: true });
@@ -87,7 +90,7 @@ export async function addCompetitor(
       username,
       display_name: displayName?.trim() || null,
     })
-    .select("id, username, display_name, followers")
+    .select("id, username, display_name, followers, niche")
     .single();
 
   if (error) {
@@ -96,6 +99,37 @@ export async function addCompetitor(
   }
   revalidatePath("/competencia");
   return { ok: true, competitor: data as Competitor };
+}
+
+/** Nicho de una cuenta (0020). Vacío = sin nicho. */
+export async function setCompetitorNiche(id: string, rawNiche: string): Promise<{ ok: boolean; niche?: string | null; error?: string }> {
+  const { supabase, user } = await getAuthUser();
+  const niche = normalizeNiche(rawNiche);
+  const { error } = await supabase.from("competitors").update({ niche }).eq("id", id).eq("owner_id", user.id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, niche };
+}
+
+/** Pone el mismo nicho a todas las cuentas de la marca que todavía no tienen. */
+export async function setNicheForUnlabeled(clientId: string, rawNiche: string): Promise<{ ok: boolean; niche?: string | null; error?: string }> {
+  const { supabase, user } = await getAuthUser();
+  const niche = normalizeNiche(rawNiche);
+  if (!niche) return { ok: false, error: "Escribe un nicho." };
+  const { error } = await supabase
+    .from("competitors")
+    .update({ niche })
+    .eq("owner_id", user.id)
+    .eq("client_id", clientId)
+    .is("niche", null);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, niche };
+}
+
+/** Los nichos que ya usaste (en todas tus marcas), para sugerirlos al escribir. */
+export async function listKnownNiches(): Promise<string[]> {
+  const { supabase, user } = await getAuthUser();
+  const { data } = await supabase.from("competitors").select("niche").eq("owner_id", user.id).not("niche", "is", null);
+  return [...new Set((data ?? []).map((r) => r.niche as string))].sort();
 }
 
 export async function removeCompetitor(id: string) {
@@ -233,6 +267,8 @@ export type CompetitorPost = {
   value_pillar: string | null;
   classification_notes: string | null;
   classified_at: string | null;
+  /** Tema corto (0020). Null en los clasificados antes de 0020. */
+  topic: string | null;
   is_outlier: boolean;
   outlier_multiple: number | null;
   account_median_comments: number | null;
@@ -240,7 +276,7 @@ export type CompetitorPost = {
 
 /** Columnas base de un post (sin los derivados de outlier). */
 const POST_COLUMNS =
-  "id, public_id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual, hook_type, script_structure, value_pillar, classification_notes, classified_at";
+  "id, public_id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual, hook_type, script_structure, value_pillar, classification_notes, classified_at, topic";
 
 export type LatestResults = {
   scrapeId: string | null;
@@ -483,6 +519,7 @@ export type Classification = {
   value_pillar: string | null;
   classification_notes: string | null;
   classified_at: string | null;
+  topic: string | null;
 };
 
 export type ClassifyResult =
@@ -521,17 +558,36 @@ export async function classifyPost(postId: string): Promise<ClassifyResult> {
     return { ok: false, error: "Falta ANTHROPIC_API_KEY." };
   }
 
+  // Temas ya usados (0020): se le pasan al modelo para que reuse uno en vez de
+  // inventar un sinónimo. Si no, "recordatorios de citas" y "recordatorio de
+  // cita" quedarían como dos temas y el conteo por tema no serviría.
+  const { data: topicRows } = await supabase
+    .from("competitor_posts")
+    .select("topic")
+    .eq("owner_id", user.id)
+    .not("topic", "is", null)
+    .limit(1000);
+  // Solo los de 1-3 palabras: si se le pasara uno largo, lo reusaría tal cual
+  // y el tema largo se perpetuaría (pasó probando: "editar videos con
+  // inteligencia artificial" se copiaba a cada post nuevo).
+  const knownTopics = [...new Set((topicRows ?? []).map((r) => r.topic as string))]
+    .filter((t) => t.split(" ").length <= 3)
+    .slice(0, 60);
+
   const prompt = `Eres analista experto en contenido de Instagram (Reels y carruseles) en español latinoamericano, formado en la metodología de Andrea Estratega (Fórmula 100K).
 
 Clasifica el siguiente contenido en TRES dimensiones. Elige SIEMPRE exactamente una opción por dimensión (la que mejor domine la pieza), usando el slug exacto.
 
 ${buildTaxonomyPrompt()}
 
+Además, el TEMA del post (\`topic\`): de qué habla, en 1 a 3 palabras, en minúsculas. Tiene que ser AMPLIO para que muchos posts compartan el mismo tema (sirve para contar "analicé 25 reels sobre X"): "edición de video", no "editar videos por voz con chatgpt"; "precios", no "precios de ortodoncia invisible". No repitas el nicho ni la herramienta ("con inteligencia artificial", "con chatgpt"). No es el gancho ni la estructura: es el asunto.
+${knownTopics.length ? `Temas que ya existen — si alguno aplica, usa EXACTAMENTE ese texto en vez de crear uno parecido:\n${knownTopics.map((t) => `- ${t}`).join("\n")}\n` : ""}
 Devuelve ÚNICAMENTE este JSON (sin markdown, sin explicaciones fuera del JSON):
 {
   "hook_type": "<slug de tipo de gancho>",
   "script_structure": "<slug de estructura>",
   "value_pillar": "<slug de pilar>",
+  "topic": "<tema corto>",
   "notes": "1 frase breve explicando por qué elegiste esas categorías"
 }
 
@@ -561,6 +617,7 @@ ${transcription.slice(0, 4000) || "(sin transcripción; clasifica con base en la
     classification_notes:
       typeof parsed.notes === "string" ? parsed.notes.trim().slice(0, 500) : null,
     classified_at: new Date().toISOString(),
+    topic: normalizeTopic(parsed.topic),
   };
 
   const { error: updateError } = await supabase
@@ -571,6 +628,7 @@ ${transcription.slice(0, 4000) || "(sin transcripción; clasifica con base en la
       value_pillar: classification.value_pillar,
       classification_notes: classification.classification_notes,
       classified_at: classification.classified_at,
+      topic: classification.topic,
     })
     .eq("id", postId)
     .eq("owner_id", user.id);

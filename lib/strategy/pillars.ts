@@ -365,7 +365,7 @@ export function buildStrategyContext(s: Strategy): string {
 
 // ─── Fuentes del generador de ideas ──────────────────────────────────────────
 
-export type IdeaSource = "matriz" | "tendencias" | "build" | "preguntas" | "competencia";
+export type IdeaSource = "matriz" | "tendencias" | "build" | "preguntas" | "competencia" | "investigacion" | "contracorriente";
 
 export const IDEA_SOURCES: {
   id: IdeaSource;
@@ -405,6 +405,19 @@ export const IDEA_SOURCES: {
     id: "competencia",
     label: "Lo que funciona en Competencia",
     hint: "Toma el patrón (gancho, estructura, pilar de valor) de los posts destacados ya clasificados — no el tema.",
+    needsText: false,
+  },
+  {
+    // 0020. Los números los calcula `lib/competencia/research.ts`, nunca la IA.
+    id: "investigacion",
+    label: "Post de investigación",
+    hint: "\"Analicé N reels de cuentas de…\": con los datos reales de Competencia por nicho (y tema). Te posiciona como autoridad.",
+    needsText: false,
+  },
+  {
+    id: "contracorriente",
+    label: "Contracorriente",
+    hint: "Rompe una creencia común de tu nicho (sale de las objeciones de tu cliente ideal). Polariza y te posiciona.",
     needsText: false,
   },
 ];

@@ -25,6 +25,7 @@ import {
 import { Layers } from "@/components/hooks/HookParts";
 import StrategyTestForm from "@/components/strategy/StrategyTestForm";
 import { testAnswersToText, type TestAnswers } from "@/lib/strategy/test";
+import { MIN_RESEARCH_POSTS, type ResearchOption } from "@/lib/competencia/research";
 import {
   HOOK_TYPES,
   SCRIPT_STRUCTURES,
@@ -37,6 +38,7 @@ import {
   draftStrategy,
   draftStrategyFromTest,
   generateIdeas,
+  getResearchOptions,
   saveIdea,
   saveStrategy,
   scheduleWeek,
@@ -147,6 +149,10 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
   // ── Generador ──
   const [source, setSource] = useState<IdeaSource>("matriz");
   const [sourceText, setSourceText] = useState("");
+  // Fuente "Post de investigación" (0020): nichos y temas con su conteo real.
+  const [researchOpts, setResearchOpts] = useState<ResearchOption[] | null>(null);
+  const [researchNiche, setResearchNiche] = useState("");
+  const [researchTopic, setResearchTopic] = useState("");
   const [pillarKey, setPillarKey] = useState("");
   const [level, setLevel] = useState("");
   const [purpose, setPurpose] = useState("");
@@ -287,6 +293,8 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
         value_pillar: valuePillar || null,
         hook_type: hookType || null,
         script_structure: structure || null,
+        research_niche: source === "investigacion" ? researchNiche || null : null,
+        research_topic: source === "investigacion" ? researchTopic || null : null,
       });
       if (!res.ok) {
         setGenError(res.error);
@@ -745,7 +753,14 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
                     key={s.id}
                     type="button"
                     className={`card ${styles.source} ${source === s.id ? styles.sourceActive : ""}`}
-                    onClick={() => setSource(s.id)}
+                    onClick={() => {
+                      setSource(s.id);
+                      if (s.id === "investigacion" && !researchOpts) {
+                        getResearchOptions()
+                          .then(setResearchOpts)
+                          .catch(() => setResearchOpts([]));
+                      }
+                    }}
                   >
                     <strong>{s.label}</strong>
                     <span>{s.hint}</span>
@@ -760,6 +775,62 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
                   value={sourceText}
                   onChange={(e) => setSourceText(e.target.value)}
                 />
+              )}
+              {source === "investigacion" && (
+                <div className={styles.filters}>
+                  {researchOpts === null ? (
+                    <p className={styles.muted}>Contando tus reels de Competencia…</p>
+                  ) : researchOpts.length === 0 ? (
+                    <p className={styles.muted}>
+                      Todavía no hay reels clasificados de cuentas con nicho. En Competencia, ponle nicho a cada cuenta
+                      (&quot;+ nicho&quot;), transcribe sus reels y dale a &quot;Clasificar pendientes&quot;.
+                    </p>
+                  ) : (
+                    <>
+                      <label className="field">
+                        <span className="field-label">Nicho</span>
+                        <select
+                          className="select"
+                          value={researchNiche}
+                          onChange={(e) => {
+                            setResearchNiche(e.target.value);
+                            setResearchTopic("");
+                          }}
+                        >
+                          <option value="">Elige un nicho</option>
+                          {researchOpts.map((o) => (
+                            <option key={o.niche} value={o.niche}>
+                              {o.niche} — {o.count} reels
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span className="field-label">Tema (opcional)</span>
+                        <select
+                          className="select"
+                          value={researchTopic}
+                          onChange={(e) => setResearchTopic(e.target.value)}
+                          disabled={!researchNiche}
+                        >
+                          <option value="">Todos los temas</option>
+                          {(researchOpts.find((o) => o.niche === researchNiche)?.topics ?? []).map((t) => (
+                            <option key={t.topic} value={t.topic}>
+                              {t.topic} — {t.count}
+                              {t.count < MIN_RESEARCH_POSTS ? " (pocos)" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {researchNiche && (
+                        <p className={styles.muted}>
+                          Mínimo {MIN_RESEARCH_POSTS} reels para armar el post: los números salen de tus datos, no
+                          de la IA.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               )}
 
               <h2 className={styles.h2}>2. Afina (opcional)</h2>
