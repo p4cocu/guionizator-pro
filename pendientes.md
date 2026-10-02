@@ -14,6 +14,7 @@ Checklist acordado el 2026-10-02. Rama de trabajo: `feat/estrategia-contenido`.
 - [x] **Deploy** de la rama (2026-10-02), probado en el navegador: Mi semana, revisor de ganchos, 3 ganchos de 3 capas. De paso: el revisor inventaba estadísticas ("el 40% de…") en la versión mejorada — corregido en `HOOK_RULES_PROMPT`
 - [x] **Test de estrategia** (migración `0019`): sección "Tu estrategia" en el portal (reemplaza directo, gratis) + "Hacer el test" en `/estrategia`
 - [x] **5. Esqueleto visible al adaptar** (migración `0021`): paso previo en "Adaptar a mi marca" de `/competencia` con gancho, primer problema (segundo estimado en código), cómo retiene, cómo cierra y el esqueleto en piezas + "Tu interpretación"; viaja a la adaptación completa y a la ligera. Se guarda por post (lo reusa el punto 6)
+- [x] **Deploy del punto 5** (2026-10-02), probado en el navegador: esqueleto, "Rehacer", reel sin transcripción y esqueleto + interpretación en el brief de la completa
 - [x] **4. Posts de autoridad** (migración `0020`): nicho por cuenta en Competencia, tema por post en `classifyPost`, fuentes "Post de investigación" (números calculados en código, mínimo 10 reels) y "Contracorriente" en `/estrategia`, filtro de cifras inventadas (`maskInventedNumbers`)
 
 ## Siguiente
