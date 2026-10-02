@@ -274,3 +274,82 @@
   flex: 1;
   font-size: 13px;
 }
+
+/* ── Ganchos de 3 capas (0018) ── */
+
+.hookBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
+
+
+.hookMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.metaBtn {
+  background: none;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  padding: 3px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.metaBtn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--emerald);
+}
+
+.metaTag {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+
+
+
+
+
+
+
+
+
+
+.review {
+  border-left: 2px solid var(--signal);
+  padding: 6px 0 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reviewVerdict {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--signal);
+}
+
+.reviewLabel {
+  margin: 0;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.layeredItem {
+  align-items: flex-start;
+}

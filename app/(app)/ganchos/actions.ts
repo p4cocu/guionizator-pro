@@ -4,6 +4,13 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { MODEL_FAST } from "@/lib/ai/anthropic";
 import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
+import { buildClientContext } from "@/lib/ai/clientContext";
+import {
+  HOOK_REVIEW_SYSTEM,
+  buildHookReviewPrompt,
+  normalizeHookReview,
+  type HookReview,
+} from "@/lib/hooks/prompts";
 
 export type HookCategory =
   | "pregunta_impactante"
@@ -152,4 +159,61 @@ export async function getHooks(): Promise<Hook[]> {
     .eq("owner_id", user.id)
     .order("created_at", { ascending: false });
   return (data ?? []) as Hook[];
+}
+
+// ── Revisor de ganchos (0018) ────────────────────────────────────────────────
+
+export type ReviewHookInput = {
+  verbal: string;
+  text_overlay?: string | null;
+  visual?: string | null;
+  context?: string | null;
+  client_id?: string | null;
+};
+
+export type ReviewHookResult = { ok: true; review: HookReview } | { ok: false; error: string };
+
+/**
+ * Califica un gancho escrito a mano con los 7 criterios de Andrea y propone una
+ * versión de 3 capas. No guarda nada: guardar en el baúl es un paso aparte.
+ * `MODEL_FAST` (~6s medido).
+ */
+export async function reviewHook(input: ReviewHookInput): Promise<ReviewHookResult> {
+  const verbal = input.verbal.trim().slice(0, 500);
+  const textOverlay = input.text_overlay?.trim().slice(0, 300) || null;
+  if (!verbal && !textOverlay) return { ok: false, error: "Escribe al menos la frase o el texto en pantalla." };
+
+  try {
+    const { supabase, user } = await getAuthUser();
+    let brandContext: string | null = null;
+    if (input.client_id) {
+      const { data: client } = await supabase
+        .from("clients")
+        .select("nombre, marca, que_vende, cliente_ideal, nicho, dolor, deseo, tono, notas")
+        .eq("id", input.client_id)
+        .eq("owner_id", user.id)
+        .maybeSingle();
+      if (client) brandContext = buildClientContext(client);
+    }
+
+    const raw = await generateJsonPlain({
+      label: "hook-review",
+      model: MODEL_FAST,
+      maxTokens: 1200,
+      system: HOOK_REVIEW_SYSTEM,
+      userMessage: buildHookReviewPrompt({
+        brandContext,
+        verbal,
+        textOverlay,
+        visual: input.visual?.trim().slice(0, 500) || null,
+        context: input.context?.trim().slice(0, 2000) || null,
+      }),
+    });
+    const review = normalizeHookReview(raw, textOverlay);
+    if (!review) return { ok: false, error: "La IA no devolvió una revisión válida. Intenta de nuevo." };
+    return { ok: true, review };
+  } catch (e) {
+    if (e instanceof AiJsonError) return { ok: false, error: "La IA no devolvió una revisión válida. Intenta de nuevo." };
+    return { ok: false, error: e instanceof Error ? e.message : "No se pudo revisar el gancho." };
+  }
 }

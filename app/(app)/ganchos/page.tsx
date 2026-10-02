@@ -12,7 +12,10 @@ export default async function GanchosPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const hooks = await getHooks();
+  const [hooks, { data: clientes }] = await Promise.all([
+    getHooks(),
+    supabase.from("clients").select("id, nombre").eq("owner_id", user.id).order("nombre"),
+  ]);
 
-  return <GanchosClient initialHooks={hooks} />;
+  return <GanchosClient initialHooks={hooks} clientes={clientes ?? []} />;
 }

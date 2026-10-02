@@ -264,3 +264,85 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Revisor de ganchos (0018) ── */
+.reviewer {
+  padding: 20px;
+  margin-bottom: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.reviewerHint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+
+.reviewerGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.reviewerWide {
+  grid-column: 1 / -1;
+}
+
+.reviewerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.reviewerError {
+  font-size: 13px;
+  color: var(--flare);
+}
+
+.reviewerResult {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 14px;
+}
+
+.reviewerScore {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reviewerType {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.reviewerVerdict {
+  font-size: 13px;
+  color: var(--signal);
+  margin: 0 0 8px;
+}
+
+.reviewerWhy {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+  margin: 8px 0 0;
+}
+
+@media (max-width: 760px) {
+  .reviewerGrid,
+  .reviewerResult {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

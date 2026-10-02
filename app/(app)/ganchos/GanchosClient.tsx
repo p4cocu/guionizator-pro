@@ -3,9 +3,16 @@
 import { useState, useTransition } from "react";
 import { deleteHook, updateHookTemplate, type Hook } from "./actions";
 import { CATEGORY_LABELS } from "./constants";
+import HookReviewer from "./HookReviewer";
 import s from "./ganchos.module.css";
 
-export default function GanchosClient({ initialHooks }: { initialHooks: Hook[] }) {
+export default function GanchosClient({
+  initialHooks,
+  clientes,
+}: {
+  initialHooks: Hook[];
+  clientes: { id: string; nombre: string }[];
+}) {
   const [hooks, setHooks] = useState<Hook[]>(initialHooks);
   const [filterCat, setFilterCat] = useState<string>("todas");
   const [copied, setCopied] = useState<string | null>(null);
@@ -43,6 +50,8 @@ export default function GanchosClient({ initialHooks }: { initialHooks: Hook[] }
           ← Ir a Competencia
         </a>
       </div>
+
+      <HookReviewer clientes={clientes} onSaved={(h) => setHooks((prev) => [h, ...prev])} />
 
       {/* ── Filtros de categoría ── */}
       {categories.length > 0 && (

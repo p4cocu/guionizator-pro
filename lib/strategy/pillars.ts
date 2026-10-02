@@ -10,21 +10,181 @@
  * Módulo puro (no importa Supabase): lo usan la pantalla y las server actions.
  */
 
-// ─── Etapa del embudo / nivel de consciencia ─────────────────────────────────
+// ─── Método Andrea Estratega (2026-10-02) ────────────────────────────────────
+// Fuente: "Tu estrategia de contenido está rota (3 pilares)" y "4 niveles de
+// consciencia de un Reel". Una pieza = pilar + línea narrativa + PROPÓSITO +
+// FORMATO, dirigida a UN nivel de consciencia, con un reparto que depende de la
+// ETAPA de la cuenta.
 
-export type FunnelStage = "atraer" | "nutrir" | "convertir";
+/** Los 3 pilares de Andrea: el camino del cliente hasta la compra. */
+export type AndreaPillar = "problema" | "solucion" | "resultado";
 
-export const FUNNEL_STAGES: { id: FunnelStage; label: string; hint: string }[] = [
-  { id: "atraer", label: "Atraer", hint: "Todavía no sabe que tiene el problema: alcance, gente nueva" },
-  { id: "nutrir", label: "Nutrir", hint: "Ya lo sabe y compara: confianza, autoridad, prueba" },
-  { id: "convertir", label: "Convertir", hint: "Está listo: oferta, proceso, CTA directo" },
+export const ANDREA_PILLARS: { id: AndreaPillar; label: string; hint: string }[] = [
+  { id: "problema", label: "Problema", hint: "Hacer consciente al cliente de lo que le pasa (y de lo que de verdad quiere)" },
+  { id: "solucion", label: "Solución única", hint: "Tu diferencial: tu método, tu sistema, cómo lo haces tú" },
+  { id: "resultado", label: "Resultado", hint: "El fruto: resultados, casos, el estilo de vida después" },
 ];
 
-export function isFunnelStage(v: unknown): v is FunnelStage {
-  return v === "atraer" || v === "nutrir" || v === "convertir";
+export function isAndreaPillar(v: unknown): v is AndreaPillar {
+  return v === "problema" || v === "solucion" || v === "resultado";
 }
 
+/** Los 5 niveles de consciencia (el video dice 4, explica 5). */
+export type AwarenessLevel = "inconsciente" | "emocional" | "racional" | "oportunidad" | "solucion_unica";
+
+export const AWARENESS_LEVELS: { id: AwarenessLevel; label: string; hint: string }[] = [
+  {
+    id: "inconsciente",
+    label: "Inconsciente",
+    hint: "Siente la frustración pero no sabe nombrarla. Videos de síntomas, errores, 'te pasa esto', escenas actuadas.",
+  },
+  {
+    id: "emocional",
+    label: "Emocional",
+    hint: "Ya ve el problema; ahora qué le hace sentir (culpa, cansancio). Storytelling, reflexión, acompañar sin juzgar.",
+  },
+  {
+    id: "racional",
+    label: "Racional",
+    hint: "Puede nombrarlo y quiere entenderlo. Mostrar el patrón que lo frena, contenido explicativo.",
+  },
+  {
+    id: "oportunidad",
+    label: "Oportunidad",
+    hint: "Sabe que hay solución. Tutoriales profundos con tu experiencia: te posicionan como autoridad.",
+  },
+  {
+    id: "solucion_unica",
+    label: "Solución única",
+    hint: "Quiere TU solución. Método, resultados, testimonios, promesa y CTA directo.",
+  },
+];
+
+/** Las etapas viejas (atraer/nutrir/convertir) se leen mapeadas. */
+export function toAwarenessLevel(v: unknown): AwarenessLevel {
+  if (AWARENESS_LEVELS.some((l) => l.id === v)) return v as AwarenessLevel;
+  if (v === "nutrir") return "racional";
+  if (v === "convertir") return "solucion_unica";
+  return "inconsciente";
+}
+
+export type Purpose = "viral" | "valor" | "venta";
+
+export const PURPOSES: { id: Purpose; label: string; hint: string; cta: "frio" | "tibio" | "caliente" }[] = [
+  { id: "viral", label: "Viral", hint: "Tratamiento simple y digerible, para gente nueva", cta: "frio" },
+  { id: "valor", label: "Valor", hint: "Tratamiento profundo, con ejemplos y experiencia propia", cta: "tibio" },
+  { id: "venta", label: "Venta", hint: "Formato viral + llamado a la acción directo", cta: "caliente" },
+];
+
+export function isPurpose(v: unknown): v is Purpose {
+  return v === "viral" || v === "valor" || v === "venta";
+}
+
+/** El "empaque" del mensaje. Variar formatos evita que todo se vea igual. */
+export const FORMAT_STYLES: { id: string; label: string; purpose: Purpose[] }[] = [
+  { id: "camara_claim", label: "A cámara con claim fuerte en pantalla", purpose: ["viral", "venta"] },
+  { id: "objeto_en_mano", label: "Cara + objeto en mano", purpose: ["viral"] },
+  { id: "pov", label: "POV / escena actuada", purpose: ["viral"] },
+  { id: "errores", label: "Errores comunes / 'deja de…'", purpose: ["viral"] },
+  { id: "versus", label: "Versus / comparación", purpose: ["viral", "valor"] },
+  { id: "numero_lista", label: "Número + lista ('3 señales de…')", purpose: ["viral", "valor"] },
+  { id: "pizarra", label: "Pizarra / esquema explicado", purpose: ["valor"] },
+  { id: "pantalla", label: "Grabación de pantalla con voz", purpose: ["valor", "venta"] },
+  { id: "storytelling", label: "Storytelling a cámara", purpose: ["valor"] },
+  { id: "caso_real", label: "Caso real / prueba en vivo", purpose: ["valor", "venta"] },
+  { id: "investigacion", label: "Investigación ('analicé N…')", purpose: ["viral", "valor"] },
+  { id: "contracorriente", label: "Contracorriente (rompe una creencia)", purpose: ["viral", "venta"] },
+  { id: "demo", label: "Demo del producto/servicio", purpose: ["venta"] },
+  { id: "carrusel_pasos", label: "Carrusel paso a paso", purpose: ["valor"] },
+  { id: "carrusel_antes_despues", label: "Carrusel antes / después", purpose: ["valor", "venta"] },
+];
+
+export function formatStyleLabel(id: string | null | undefined): string | null {
+  if (!id) return null;
+  return FORMAT_STYLES.find((f) => f.id === id)?.label ?? id;
+}
+
+/** Etapa de la cuenta → qué pilares y propósitos priorizar en el mes. */
+export type AccountPhase = "freshman" | "sophomore" | "junior" | "senior";
+
+export const ACCOUNT_PHASES: {
+  id: AccountPhase;
+  label: string;
+  hint: string;
+  /** Lo que se le dice al modelo al repartir el mes. */
+  mix: string;
+}[] = [
+  {
+    id: "freshman",
+    label: "Freshman — sin audiencia",
+    hint: "Casi no hay leads ni audiencia. Objetivo: que te vean y empezar conversaciones.",
+    mix: "Prioriza el pilar PROBLEMA (el más viral). Propósitos: mayoría viral, algo de valor, venta solo sutil e indirecta (viral + CTA suave a un recurso o a escribir).",
+  },
+  {
+    id: "sophomore",
+    label: "Sophomore — oferta en construcción",
+    hint: "Ya crea contenido pero la oferta todavía no está clara. Objetivo: posicionarse y hacer visible qué vende.",
+    mix: "Prioriza SOLUCIÓN ÚNICA y luego PROBLEMA conectado con tu diferencial. Propósitos: viral y valor por igual, una de venta por semana.",
+  },
+  {
+    id: "junior",
+    label: "Junior — leads pero pocas ventas",
+    hint: "Tiene leads y producto, pero todavía no le confían. Objetivo: confianza y primeras ventas.",
+    mix: "Prioriza SOLUCIÓN ÚNICA y RESULTADO. Propósitos: prioridad valor (educar a quien ya te sigue), menos viral, una de venta.",
+  },
+  {
+    id: "senior",
+    label: "Senior — escalar ventas",
+    hint: "Ya vende y quiere escalar. Objetivo: escalar con sistema.",
+    mix: "Todos los pilares con foco en diferenciación, autoridad, casos y testimonios. Viral enfocado en diferenciación (gancho viral, cierre con tu método), dos de valor, una de venta.",
+  },
+];
+
+export function isAccountPhase(v: unknown): v is AccountPhase {
+  return ACCOUNT_PHASES.some((p) => p.id === v);
+}
+
+/**
+ * La semana por niveles de consciencia (Andrea): lun-mar inconsciencia, mié
+ * emocional, jue racional, vie-sáb oportunidad, dom solución única. Si no se
+ * publica diario, se recorta empezando por lo que menos mueve.
+ */
+export const WEEK_PLANS: Record<number, { day: number; level: AwarenessLevel }[]> = {
+  3: [
+    { day: 0, level: "inconsciente" },
+    { day: 3, level: "oportunidad" },
+    { day: 5, level: "solucion_unica" },
+  ],
+  4: [
+    { day: 0, level: "inconsciente" },
+    { day: 2, level: "racional" },
+    { day: 4, level: "oportunidad" },
+    { day: 6, level: "solucion_unica" },
+  ],
+  5: [
+    { day: 0, level: "inconsciente" },
+    { day: 2, level: "emocional" },
+    { day: 3, level: "racional" },
+    { day: 4, level: "oportunidad" },
+    { day: 6, level: "solucion_unica" },
+  ],
+  7: [
+    { day: 0, level: "inconsciente" },
+    { day: 1, level: "inconsciente" },
+    { day: 2, level: "emocional" },
+    { day: 3, level: "racional" },
+    { day: 4, level: "oportunidad" },
+    { day: 5, level: "oportunidad" },
+    { day: 6, level: "solucion_unica" },
+  ],
+};
+
+export const WEEK_DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+
 // ─── Pilares ─────────────────────────────────────────────────────────────────
+// Se quedan los 5 pilares TEMÁTICOS de cada marca (lo específico) y cada uno
+// se etiqueta con su pilar de Andrea (la lógica de venta). Decisión de Paco,
+// 2026-10-02.
 
 export type Pillar = {
   /** Estable: es lo que guarda `content_ideas.pillar_key`. */
@@ -32,10 +192,11 @@ export type Pillar = {
   name: string;
   /** Qué hace este pilar por la marca, en una frase. */
   objective: string;
-  stage: FunnelStage;
+  /** A cuál de los 3 pilares de Andrea pertenece (problema/solución/resultado). */
+  andrea_pillar: AndreaPillar;
   /** % del contenido del mes que debería ocupar. */
   share: number;
-  /** Temas / sub-temas que entran acá, uno por línea. */
+  /** Líneas narrativas (subtemas / objeciones), una por línea. */
   topics: string;
   /** Formatos que mejor le quedan ("cámara + pantalla", "carrusel"…). */
   formats: string;
@@ -82,12 +243,13 @@ export const STRATEGY_FIELDS: {
 
 export type Strategy = Record<StrategyFieldKey, string | null> & {
   client_id: string;
+  account_phase: AccountPhase | null;
   pillars: Pillar[];
   updated_at: string | null;
 };
 
 export const STRATEGY_COLUMNS =
-  "client_id, avatar, dolores, deseos, objeciones, transformacion, diferenciador, fuentes, pillars, updated_at";
+  "client_id, avatar, dolores, deseos, objeciones, transformacion, diferenciador, fuentes, account_phase, pillars, updated_at";
 
 export function emptyStrategy(clientId: string): Strategy {
   return {
@@ -99,6 +261,7 @@ export function emptyStrategy(clientId: string): Strategy {
     transformacion: null,
     diferenciador: null,
     fuentes: null,
+    account_phase: null,
     pillars: [],
     updated_at: null,
   };
@@ -131,11 +294,19 @@ export function sanitizePillars(raw: unknown): Pillar[] {
     while (seen.has(key)) key = `${key}_2`;
     seen.add(key);
     const share = Math.round(Number(p.share));
+    // Pilares viejos traían `stage` (atraer/nutrir/convertir): se mapean.
+    const andrea: AndreaPillar = isAndreaPillar(p.andrea_pillar)
+      ? p.andrea_pillar
+      : p.stage === "convertir"
+        ? "solucion"
+        : p.stage === "nutrir"
+          ? "resultado"
+          : "problema";
     out.push({
       key,
       name,
       objective: str(p.objective, 400),
-      stage: isFunnelStage(p.stage) ? p.stage : "atraer",
+      andrea_pillar: andrea,
       share: Number.isFinite(share) ? Math.min(100, Math.max(0, share)) : 0,
       topics: str(p.topics, 2000),
       formats: str(p.formats, 300),
@@ -150,7 +321,11 @@ export function sanitizeStrategy(raw: Record<string, unknown>) {
   const fields = Object.fromEntries(
     STRATEGY_FIELDS.map((f) => [f.key, str(raw[f.key]) || null]),
   ) as Record<StrategyFieldKey, string | null>;
-  return { ...fields, pillars: sanitizePillars(raw.pillars) };
+  return {
+    ...fields,
+    account_phase: isAccountPhase(raw.account_phase) ? raw.account_phase : null,
+    pillars: sanitizePillars(raw.pillars),
+  };
 }
 
 export function normalizeStrategyRow(row: Record<string, unknown> | null, clientId: string): Strategy {
@@ -168,17 +343,20 @@ export function buildStrategyContext(s: Strategy): string {
     .map((f) => (s[f.key] ? `**${f.label}:**\n${s[f.key]}` : null))
     .filter(Boolean)
     .join("\n\n");
+  const andreaLabel = (id: AndreaPillar) => ANDREA_PILLARS.find((a) => a.id === id)?.label ?? id;
   const pillars = s.pillars
     .map(
       (p) =>
-        `- \`${p.key}\` **${p.name}** (${p.stage}, ${p.share}%): ${p.objective}` +
-        (p.topics ? `\n  Temas: ${p.topics.replace(/\n+/g, " · ")}` : "") +
+        `- \`${p.key}\` **${p.name}** (pilar de Andrea: ${andreaLabel(p.andrea_pillar)}, ${p.share}% del mes): ${p.objective}` +
+        (p.topics ? `\n  Líneas narrativas: ${p.topics.replace(/\n+/g, " · ")}` : "") +
         (p.formats ? `\n  Formatos: ${p.formats}` : ""),
     )
     .join("\n");
+  const phase = ACCOUNT_PHASES.find((ph) => ph.id === s.account_phase);
   return [
     "## Estrategia de contenido de la marca",
     fields,
+    phase && `### Etapa de la cuenta: ${phase.label}\n${phase.hint}\nReparto: ${phase.mix}`,
     pillars && `### Pilares de contenido\n${pillars}`,
   ]
     .filter(Boolean)
@@ -241,12 +419,21 @@ export type ContentIdea = {
   id: string;
   pillar_key: string | null;
   source: IdeaSource | null;
-  stage: FunnelStage;
+  /** Nivel de consciencia (columna `stage`, reusada en 0018). */
+  stage: AwarenessLevel;
+  purpose: Purpose | null;
   format: "reel" | "carousel";
+  /** Id de `FORMAT_STYLES` (o texto libre si la IA propuso otro). */
+  format_style: string | null;
   value_pillar: string | null;
   hook_type: string | null;
   script_structure: string | null;
+  /** Capa verbal del gancho. */
   hook: string;
+  /** Capa de texto en pantalla. */
+  hook_text: string | null;
+  /** Capa visual del primer segundo. */
+  hook_visual: string | null;
   angle: string | null;
   brief: string;
   why: string | null;
@@ -255,4 +442,4 @@ export type ContentIdea = {
 };
 
 export const IDEA_COLUMNS =
-  "id, pillar_key, source, stage, format, value_pillar, hook_type, script_structure, hook, angle, brief, why, used_at, created_at";
+  "id, pillar_key, source, stage, purpose, format, format_style, value_pillar, hook_type, script_structure, hook, hook_text, hook_visual, angle, brief, why, used_at, created_at";

@@ -3,17 +3,26 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  FUNNEL_STAGES,
+  ACCOUNT_PHASES,
+  ANDREA_PILLARS,
+  AWARENESS_LEVELS,
+  FORMAT_STYLES,
   IDEA_SOURCES,
   MAX_PILLARS,
+  PURPOSES,
   STRATEGY_FIELDS,
+  WEEK_DAYS,
+  formatStyleLabel,
+  type AccountPhase,
+  type AndreaPillar,
+  type AwarenessLevel,
   type ContentIdea,
-  type FunnelStage,
   type IdeaSource,
   type Pillar,
   type Strategy,
   type StrategyFieldKey,
 } from "@/lib/strategy/pillars";
+import { Layers } from "@/components/hooks/HookParts";
 import {
   HOOK_TYPES,
   SCRIPT_STRUCTURES,
@@ -21,7 +30,16 @@ import {
   colorFor,
   labelFor,
 } from "@/lib/competencia/taxonomy";
-import { deleteIdea, draftStrategy, generateIdeas, saveIdea, saveStrategy, setIdeaUsed } from "./actions";
+import {
+  deleteIdea,
+  draftStrategy,
+  generateIdeas,
+  saveIdea,
+  saveStrategy,
+  scheduleWeek,
+  setIdeaUsed,
+  type WeekIdea,
+} from "./actions";
 import styles from "./estrategia.module.css";
 
 type Cliente = { id: string; nombre: string; marca: string | null };
@@ -34,16 +52,29 @@ type Props = {
   initialIdeas: ContentIdea[];
 };
 
-const STAGE_LABEL: Record<FunnelStage, string> = Object.fromEntries(
-  FUNNEL_STAGES.map((s) => [s.id, s.label]),
-) as Record<FunnelStage, string>;
+const LEVEL_LABEL: Record<AwarenessLevel, string> = Object.fromEntries(
+  AWARENESS_LEVELS.map((l) => [l.id, l.label]),
+) as Record<AwarenessLevel, string>;
+const ANDREA_LABEL: Record<AndreaPillar, string> = Object.fromEntries(
+  ANDREA_PILLARS.map((a) => [a.id, a.label]),
+) as Record<AndreaPillar, string>;
+const PURPOSE_LABEL: Record<string, string> = Object.fromEntries(PURPOSES.map((p) => [p.id, p.label]));
+
+/** El próximo lunes (o hoy si es lunes), en YYYY-MM-DD local. */
+function nextMonday(): string {
+  const d = new Date();
+  const add = (8 - d.getDay()) % 7;
+  d.setDate(d.getDate() + add);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 function newPillar(): Pillar {
   return {
     key: `pilar_${Math.random().toString(36).slice(2, 7)}`,
     name: "",
     objective: "",
-    stage: "atraer",
+    andrea_pillar: "problema",
     share: 20,
     topics: "",
     formats: "",
@@ -55,14 +86,23 @@ function briefFor(idea: ContentIdea, pillars: Pillar[]): string {
   const pillar = pillars.find((p) => p.key === idea.pillar_key);
   const meta = [
     pillar && `Pilar: ${pillar.name}`,
-    `Etapa: ${STAGE_LABEL[idea.stage] ?? idea.stage}`,
+    `Nivel de consciencia: ${LEVEL_LABEL[idea.stage] ?? idea.stage}`,
+    idea.purpose && `Propósito: ${PURPOSE_LABEL[idea.purpose]}`,
+    idea.format_style && `Formato: ${formatStyleLabel(idea.format_style)}`,
     idea.hook_type && `Gancho: ${labelFor("hook_type", idea.hook_type)}`,
     idea.script_structure && `Estructura sugerida: ${labelFor("script_structure", idea.script_structure)}`,
     idea.value_pillar && `Valor: ${labelFor("value_pillar", idea.value_pillar)}`,
   ]
     .filter(Boolean)
     .join(" · ");
-  return `Gancho: "${idea.hook}"\n\n${idea.brief}\n\n(${meta})`;
+  const hook = [
+    `Gancho (dice): "${idea.hook}"`,
+    idea.hook_text && `Texto en pantalla: "${idea.hook_text}"`,
+    idea.hook_visual && `Primer segundo: ${idea.hook_visual}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return `${hook}\n\n${idea.brief}\n\n(${meta})`;
 }
 
 function scriptHref(clientId: string, idea: ContentIdea, pillars: Pillar[]) {
@@ -87,6 +127,7 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
       >,
   );
   const [pillars, setPillars] = useState<Pillar[]>(initialStrategy.pillars);
+  const [phase, setPhase] = useState<AccountPhase | "">(initialStrategy.account_phase ?? "");
   const [savedPillars, setSavedPillars] = useState<Pillar[]>(initialStrategy.pillars);
   const [dirty, setDirty] = useState(false);
   const [saving, startSaving] = useTransition();
@@ -99,14 +140,21 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
   const [source, setSource] = useState<IdeaSource>("matriz");
   const [sourceText, setSourceText] = useState("");
   const [pillarKey, setPillarKey] = useState("");
-  const [stage, setStage] = useState("");
+  const [level, setLevel] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [formatStyle, setFormatStyle] = useState("");
   const [format, setFormat] = useState("");
+  const [mode, setMode] = useState<"sueltas" | "semana">("sueltas");
+  const [weekPosts, setWeekPosts] = useState(3);
+  const [weekStart, setWeekStart] = useState(nextMonday);
+  const [scheduling, startScheduling] = useTransition();
+  const [scheduleMsg, setScheduleMsg] = useState<string | null>(null);
   const [valuePillar, setValuePillar] = useState("");
   const [hookType, setHookType] = useState("");
   const [structure, setStructure] = useState("");
   const [generating, startGenerating] = useTransition();
   const [genError, setGenError] = useState<string | null>(null);
-  const [fresh, setFresh] = useState<ContentIdea[]>([]);
+  const [fresh, setFresh] = useState<WeekIdea[]>([]);
 
   // ── Banco ──
   const [ideas, setIdeas] = useState<ContentIdea[]>(initialIdeas);
@@ -156,7 +204,7 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
   function handleSave() {
     setStrategyError(null);
     startSaving(async () => {
-      const res = await saveStrategy({ client_id: clientId, fields, pillars });
+      const res = await saveStrategy({ client_id: clientId, fields, account_phase: phase || null, pillars });
       if (!res.ok) {
         setStrategyError(res.error);
         return;
@@ -199,8 +247,11 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
         source,
         source_text: sourceDef.needsText ? sourceText : null,
         pillar_key: pillarKey || null,
-        stage: stage || null,
+        level: mode === "semana" ? null : level || null,
+        purpose: purpose || null,
         format: format === "reel" || format === "carousel" ? format : null,
+        format_style: formatStyle || null,
+        week_posts: mode === "semana" ? weekPosts : null,
         value_pillar: valuePillar || null,
         hook_type: hookType || null,
         script_structure: structure || null,
@@ -210,6 +261,19 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
         return;
       }
       setFresh(res.ideas);
+      setScheduleMsg(null);
+    });
+  }
+
+  function handleSchedule() {
+    setGenError(null);
+    startScheduling(async () => {
+      const res = await scheduleWeek({ client_id: clientId, start_date: weekStart, ideas: fresh });
+      if (!res.ok) {
+        setGenError(res.error);
+        return;
+      }
+      setScheduleMsg(`✓ ${res.created} piezas agendadas en el calendario como "Idea".`);
     });
   }
 
@@ -270,9 +334,17 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
     return (
       <article key={idea.id} className={`card ${styles.idea}`}>
         <div className={styles.ideaTags}>
-          {pillar && <span className="badge badge--emerald">{pillar.name}</span>}
-          <span className={`badge ${styles.tagMuted}`}>{STAGE_LABEL[idea.stage] ?? idea.stage}</span>
-          <span className={`badge ${styles.tagMuted}`}>{idea.format === "carousel" ? "Carrusel" : "Reel"}</span>
+          {pillar && (
+            <span className="badge badge--emerald" title={`Pilar de Andrea: ${ANDREA_LABEL[pillar.andrea_pillar]}`}>
+              {pillar.name} · {ANDREA_LABEL[pillar.andrea_pillar]}
+            </span>
+          )}
+          <span className={`badge ${styles.tagMuted}`}>{LEVEL_LABEL[idea.stage] ?? idea.stage}</span>
+          {idea.purpose && <span className={`badge ${styles.tagMuted}`}>{PURPOSE_LABEL[idea.purpose]}</span>}
+          <span className={`badge ${styles.tagMuted}`}>
+            {idea.format === "carousel" ? "Carrusel" : "Reel"}
+            {idea.format_style && ` · ${formatStyleLabel(idea.format_style)}`}
+          </span>
           {(["hook_type", "script_structure", "value_pillar"] as const).map((dim) =>
             idea[dim] ? (
               <span
@@ -285,7 +357,7 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
             ) : null,
           )}
         </div>
-        <p className={styles.ideaHook}>“{idea.hook}”</p>
+        <Layers verbal={idea.hook} text={idea.hook_text} visual={idea.hook_visual} />
         {idea.angle && <p className={styles.ideaAngle}>{idea.angle}</p>}
         <p className={styles.ideaBrief}>{idea.brief}</p>
         {idea.why && <p className={styles.ideaWhy}>Por qué funciona: {idea.why}</p>}
@@ -387,6 +459,34 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
             La propuesta de la IA solo llena los campos vacíos y no se guarda hasta que tú guardas.
           </p>
 
+          <div className={`card ${styles.phaseBox}`}>
+            <label className="field">
+              <span className="field-label">Etapa de la cuenta</span>
+              <select
+                className="select"
+                value={phase}
+                onChange={(e) => {
+                  setPhase(e.target.value as AccountPhase | "");
+                  setDirty(true);
+                  setSaveMsg(null);
+                }}
+              >
+                <option value="">Sin definir</option>
+                {ACCOUNT_PHASES.map((ph) => (
+                  <option key={ph.id} value={ph.id}>
+                    {ph.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {phase && (
+              <p className={styles.muted}>
+                {ACCOUNT_PHASES.find((ph) => ph.id === phase)?.hint}{" "}
+                <strong>Reparto:</strong> {ACCOUNT_PHASES.find((ph) => ph.id === phase)?.mix}
+              </p>
+            )}
+          </div>
+
           <div className={styles.fieldsGrid}>
             {STRATEGY_FIELDS.map((f) => (
               <label key={f.key} className={`field ${f.key === "avatar" ? styles.fieldWide : ""}`}>
@@ -404,6 +504,9 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
 
           <div className={styles.pillarsHead}>
             <h2 className={styles.h2}>Pilares de contenido</h2>
+            <span className={styles.muted}>
+              {ANDREA_PILLARS.map((a) => `${a.label}: ${pillars.filter((p) => p.andrea_pillar === a.id).length}`).join(" · ")}
+            </span>
             <span className={shareTotal === 100 ? styles.ok : styles.warn}>
               Reparto del mes: {shareTotal}%{shareTotal !== 100 && " (debería sumar 100)"}
             </span>
@@ -447,13 +550,14 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
                   />
                   <select
                     className="select"
-                    value={p.stage}
-                    onChange={(e) => updatePillar(idx, { stage: e.target.value as FunnelStage })}
-                    aria-label="Etapa"
+                    value={p.andrea_pillar}
+                    onChange={(e) => updatePillar(idx, { andrea_pillar: e.target.value as AndreaPillar })}
+                    aria-label="Pilar de Andrea"
+                    title={ANDREA_PILLARS.find((a) => a.id === p.andrea_pillar)?.hint}
                   >
-                    {FUNNEL_STAGES.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.label}
+                    {ANDREA_PILLARS.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.label}
                       </option>
                     ))}
                   </select>
@@ -479,7 +583,7 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
                 <textarea
                   className="textarea"
                   rows={4}
-                  placeholder="Temas, uno por línea"
+                  placeholder="Líneas narrativas (subtemas, objeciones), una por línea"
                   value={p.topics}
                   onChange={(e) => updatePillar(idx, { topics: e.target.value })}
                 />
@@ -534,6 +638,47 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
             </div>
           ) : (
             <>
+              <div className={styles.toolbar}>
+                <button
+                  type="button"
+                  className={`${styles.tab} ${mode === "sueltas" ? styles.tabActive : ""}`}
+                  onClick={() => setMode("sueltas")}
+                >
+                  Ideas sueltas
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.tab} ${mode === "semana" ? styles.tabActive : ""}`}
+                  onClick={() => setMode("semana")}
+                >
+                  Mi semana (niveles de consciencia)
+                </button>
+              </div>
+              {mode === "semana" && (
+                <div className={`card ${styles.phaseBox}`}>
+                  <div className={styles.weekControls}>
+                    <label className="field">
+                      <span className="field-label">Piezas por semana</span>
+                      <select className="select" value={weekPosts} onChange={(e) => setWeekPosts(Number(e.target.value))}>
+                        {[3, 4, 5].map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span className="field-label">Empieza el lunes</span>
+                      <input className="input" type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
+                    </label>
+                  </div>
+                  <p className={styles.muted}>
+                    Una idea por día, cada una para un nivel de consciencia distinto, encadenadas: lo que el lunes nombra como
+                    síntoma, el domingo lo resuelve con tu oferta.
+                  </p>
+                </div>
+              )}
+
               <h2 className={styles.h2}>1. ¿De dónde sale la idea?</h2>
               <div className={styles.sources}>
                 {IDEA_SOURCES.map((s) => (
@@ -572,12 +717,40 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
                   </select>
                 </label>
                 <label className="field">
-                  <span className="field-label">Etapa</span>
-                  <select className="select" value={stage} onChange={(e) => setStage(e.target.value)}>
-                    <option value="">Mezcla</option>
-                    {FUNNEL_STAGES.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.label}
+                  <span className="field-label">Nivel de consciencia</span>
+                  <select
+                    className="select"
+                    value={mode === "semana" ? "" : level}
+                    onChange={(e) => setLevel(e.target.value)}
+                    disabled={mode === "semana"}
+                    title={mode === "semana" ? "En 'Mi semana' cada día tiene su nivel" : undefined}
+                  >
+                    <option value="">{mode === "semana" ? "Uno por día" : "Mezcla"}</option>
+                    {AWARENESS_LEVELS.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span className="field-label">Propósito</span>
+                  <select className="select" value={purpose} onChange={(e) => setPurpose(e.target.value)}>
+                    <option value="">Según nivel y etapa</option>
+                    {PURPOSES.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span className="field-label">Estilo de formato</span>
+                  <select className="select" value={formatStyle} onChange={(e) => setFormatStyle(e.target.value)}>
+                    <option value="">Que varíe</option>
+                    {FORMAT_STYLES.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.label}
                       </option>
                     ))}
                   </select>
@@ -627,8 +800,14 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
 
               <div className={styles.toolbar}>
                 <button type="button" className="btn btn-primary" onClick={handleGenerate} disabled={generating}>
-                  {generating ? "Generando ideas…" : "✦ Generar ideas"}
+                  {generating ? "Generando…" : mode === "semana" ? "✦ Armar mi semana" : "✦ Generar ideas"}
                 </button>
+                {mode === "semana" && fresh.length > 0 && fresh.some((i) => i.day !== null) && (
+                  <button type="button" className="btn btn-secondary" onClick={handleSchedule} disabled={scheduling}>
+                    {scheduling ? "Agendando…" : "Agendar semana en el calendario"}
+                  </button>
+                )}
+                {scheduleMsg && <span className={styles.ok}>{scheduleMsg}</span>}
                 {fresh.length > 0 && (
                   <span className={styles.muted}>
                     Guarda las que te sirvan; las demás se pierden al recargar.
@@ -639,7 +818,12 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
               {rowError && <p className={styles.error}>{rowError}</p>}
 
               <div className={styles.ideas}>
-                {fresh.map((idea) => renderIdea(idea, false))}
+                {fresh.map((idea) => (
+                  <div key={idea.id} className={styles.ideaWrap}>
+                    {idea.day !== null && <p className={styles.dayLabel}>{WEEK_DAYS[idea.day]}</p>}
+                    {renderIdea(idea, false)}
+                  </div>
+                ))}
               </div>
             </>
           )}

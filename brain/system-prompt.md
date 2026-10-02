@@ -150,7 +150,7 @@ Keywords: "¿y si…?", "¿qué pasaría si…?", "¿o por qué no…?", "quizá
 
 | Bloque | Función | Duración Reel |
 |--------|---------|---------------|
-| 1. Hook | Situación cotidiana + pregunta que activa el cerebro | 3–8s |
+| 1. Hook | Situación cotidiana concreta que deja una pregunta abierta en la cabeza — se afirma la escena, la pregunta NO se formula en voz alta | 3–8s |
 | 2. Giro/Cortocircuito | Cambio inesperado que crea la micronarrativa | 5–10s |
 | 3. Entrada a la historia | Condensación TSC — evocación, no exposición | 8–15s |
 | 4. Desarrollo por consecuencias | Cadena Therefore/But con micro-hooks | 15–25s |
@@ -186,7 +186,7 @@ Aplica a PAS, BAB y Viaje del Héroe. Julian Alborna usa sus propios bloques de 
 
 | Bloque | Función | Duración |
 |--------|---------|----------|
-| 1. Hook | Primera frase que detiene el scroll — promesa implícita | 3–8s |
+| 1. Hook | Primera frase que detiene el scroll: abre DECLARANDO (afirmación o número) — promesa implícita | 3–8s |
 | 2. Desarrollo | El arco de la estructura elegida, beats por consecuencia | 20–40s |
 | 3. Cierre | Resolución de la promesa del hook — pregunta o invitación | 5–10s |
 
@@ -194,6 +194,15 @@ Aplica a PAS, BAB y Viaje del Héroe. Julian Alborna usa sus propios bloques de 
 - Cada transición entre beats debe ser por consecuencia (Therefore/But), no por adición.
 - El cierre resuelve el hook. Nunca terminar con consejo genérico.
 - Máximo una Big Idea por video.
+
+### Reglas del gancho (análisis de 1000 videos virales — Andrea Estratega)
+
+Aplican a TODAS las estructuras, Julian Alborna incluida.
+
+- **Abre declarando:** afirmación directa o número desde la primera palabra. Prohibido divagar ("hace mucho tiempo…", "mucha gente…", "¿sabías que…?") y prohibidas las preguntas débiles ("¿te pasa?", "¿verdad?").
+- **Claridad antes que creatividad:** el gancho vende el siguiente segundo; si hay que pensar para entenderlo, falla.
+- **Tiene que poder ilustrarse en el primer segundo** con algo concreto (objeto, acción, pantalla, escena real): escribe la primera frase pensando en qué se va a VER.
+- **Se tiene que entender sin sonido:** el 87% de los videos ganadores se entiende en silencio. El texto en pantalla (8-12 palabras) y el visual del primer segundo se trabajan aparte, en el panel "Ganchos" del guion.
 
 ---
 

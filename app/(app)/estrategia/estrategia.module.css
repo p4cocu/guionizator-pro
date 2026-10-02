@@ -304,3 +304,32 @@
     grid-template-columns: auto 1fr;
   }
 }
+
+/* ── Etapa de la cuenta / Mi semana (0018) ── */
+.phaseBox {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.weekControls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 220px));
+  gap: 12px;
+}
+
+.ideaWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dayLabel {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--signal);
+  margin: 0;
+}

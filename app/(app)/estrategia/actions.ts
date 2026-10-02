@@ -11,13 +11,19 @@ import {
   IDEA_COLUMNS,
   IDEA_SOURCES,
   STRATEGY_COLUMNS,
+  FORMAT_STYLES,
+  PURPOSES,
+  WEEK_PLANS,
   buildStrategyContext,
-  isFunnelStage,
+  formatStyleLabel,
   isIdeaSource,
+  isPurpose,
+  toAwarenessLevel,
   normalizeStrategyRow,
   sanitizePillars,
   sanitizeStrategy,
   type ContentIdea,
+  type AccountPhase,
   type IdeaSource,
   type Pillar,
   type Strategy,
@@ -85,12 +91,13 @@ export type SaveResult = { ok: true; updated_at: string } | { ok: false; error: 
 export async function saveStrategy(input: {
   client_id: string;
   fields: Partial<Record<StrategyFieldKey, string | null>>;
+  account_phase: AccountPhase | null;
   pillars: Pillar[];
 }): Promise<SaveResult> {
   try {
     const { supabase, user } = await getAuthUser();
     await loadBrand(supabase, user.id, input.client_id);
-    const clean = sanitizeStrategy({ ...input.fields, pillars: input.pillars });
+    const clean = sanitizeStrategy({ ...input.fields, account_phase: input.account_phase, pillars: input.pillars });
     const updated_at = new Date().toISOString();
     const { error } = await supabase.from("content_strategies").upsert(
       { client_id: input.client_id, owner_id: user.id, ...clean, updated_at },
@@ -155,14 +162,19 @@ export type GenerateIdeasInput = {
   source: IdeaSource;
   source_text?: string | null;
   pillar_key?: string | null;
-  stage?: string | null;
+  level?: string | null;
+  purpose?: string | null;
   format?: "reel" | "carousel" | null;
+  format_style?: string | null;
+  /** "Mi semana": cuántas piezas (3, 4 o 5). Genera una por casilla. */
+  week_posts?: number | null;
   value_pillar?: string | null;
   hook_type?: string | null;
   script_structure?: string | null;
 };
 
-export type GenerateIdeasResult = { ok: true; ideas: ContentIdea[] } | { ok: false; error: string };
+export type WeekIdea = ContentIdea & { day: number | null };
+export type GenerateIdeasResult = { ok: true; ideas: WeekIdea[] } | { ok: false; error: string };
 
 /** Material de las fuentes que viven en la base (tendencias, competencia). */
 async function loadSourceMaterial(
@@ -250,10 +262,13 @@ export async function generateIdeas(input: GenerateIdeasInput): Promise<Generate
       .limit(25);
 
     const pillar = strategy.pillars.find((p) => p.key === input.pillar_key) ?? null;
+    const weekSlots = input.week_posts && input.week_posts <= 5 ? (WEEK_PLANS[input.week_posts] ?? null) : null;
     const raw = await generateJsonPlain({
       label: "strategy-ideas",
       model: MODEL_FAST,
-      maxTokens: 3000,
+      // 5 ideas con gancho de 3 capas ≈ 1.9k tokens, ~18s medido. "Mi semana"
+      // se topa en 5 a propósito: 7 rozaría el límite de Netlify (~26s).
+      maxTokens: 3500,
       system: STRATEGY_IDEAS_SYSTEM,
       userMessage: buildStrategyIdeasPrompt({
         brandContext: buildClientContext(brand),
@@ -262,19 +277,31 @@ export async function generateIdeas(input: GenerateIdeasInput): Promise<Generate
         sourceMaterial: material,
         filters: {
           pillar,
-          stage: isFunnelStage(input.stage) ? input.stage : null,
+          level: input.level ? toAwarenessLevel(input.level) : null,
+          purpose: isPurpose(input.purpose) ? input.purpose : null,
           format: input.format ?? null,
+          format_style: FORMAT_STYLES.some((f) => f.id === input.format_style) ? input.format_style! : null,
           value_pillar: input.value_pillar || null,
           hook_type: input.hook_type || null,
           script_structure: input.script_structure || null,
         },
         previousHooks: (prev ?? []).map((r) => r.hook as string),
+        weekSlots,
       }),
     });
-    const ideas = normalizeStrategyIdeas(raw, {
+    let ideas = normalizeStrategyIdeas(raw, {
       pillarKeys: strategy.pillars.map((p) => p.key),
       source: input.source,
     });
+    // En "Mi semana" la casilla manda: si la IA se corrió de día o de nivel, se
+    // reacomoda por posición.
+    if (weekSlots) {
+      ideas = ideas.slice(0, weekSlots.length).map((idea, i) => ({
+        ...idea,
+        day: weekSlots[i].day,
+        stage: weekSlots[i].level,
+      }));
+    }
     if (ideas.length === 0) return { ok: false, error: "La IA no devolvió ideas. Intenta de nuevo." };
     return { ok: true, ideas };
   } catch (e) {
@@ -304,8 +331,12 @@ export async function saveIdea(clientId: string, idea: ContentIdea): Promise<Sav
         client_id: clientId,
         pillar_key: idea.pillar_key && pillarKeys.has(idea.pillar_key) ? idea.pillar_key : null,
         source: isIdeaSource(idea.source) ? idea.source : null,
-        stage: isFunnelStage(idea.stage) ? idea.stage : "atraer",
+        stage: toAwarenessLevel(idea.stage),
+        purpose: isPurpose(idea.purpose) ? idea.purpose : null,
         format: idea.format === "carousel" ? "carousel" : "reel",
+        format_style: s(idea.format_style, 60) || null,
+        hook_text: s(idea.hook_text, 200) || null,
+        hook_visual: s(idea.hook_visual, 300) || null,
         value_pillar: s(idea.value_pillar, 40) || null,
         hook_type: s(idea.hook_type, 40) || null,
         script_structure: s(idea.script_structure, 40) || null,
@@ -346,5 +377,87 @@ export async function setIdeaUsed(id: string, used: boolean): Promise<{ ok: bool
     return error ? { ok: false, error: error.message } : { ok: true, used_at };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "No se pudo actualizar." };
+  }
+}
+
+// ─── Agendar la semana ───────────────────────────────────────────────────────
+
+/** El brief que lleva cada entrada del calendario: idea + gancho de 3 capas. */
+function calendarBrief(idea: WeekIdea, pillar: Pillar | undefined): string {
+  const purpose = PURPOSES.find((p) => p.id === idea.purpose);
+  const lines: (string | null)[] = [
+    `Gancho — dice: "${idea.hook}"`,
+    idea.hook_text ? `Gancho — texto en pantalla: "${idea.hook_text}"` : null,
+    idea.hook_visual ? `Gancho — primer segundo: ${idea.hook_visual}` : null,
+    "",
+    idea.brief,
+    "",
+    [
+      pillar && `Pilar: ${pillar.name}`,
+      `Nivel de consciencia: ${idea.stage}`,
+      purpose && `Propósito: ${purpose.label}`,
+      idea.format_style && `Formato: ${formatStyleLabel(idea.format_style)}`,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  ];
+  return lines.filter((l) => l !== null).join("\n");
+}
+
+export type ScheduleWeekResult = { ok: true; created: number } | { ok: false; error: string };
+
+/**
+ * "Agendar semana": cada idea entra a `content_calendar` en estado `idea` el
+ * día que le toca a partir de `start_date` (el lunes). `status` no tiene CHECK
+ * en esa tabla; `format` usa el vocabulario del calendario (`reel`/`carrusel`).
+ */
+export async function scheduleWeek(input: {
+  client_id: string;
+  start_date: string;
+  ideas: WeekIdea[];
+}): Promise<ScheduleWeekResult> {
+  try {
+    const { supabase, user } = await getAuthUser();
+    // loadBrand valida que la marca sea del que llama (la FK aceptaría cualquiera).
+    const [, strategy] = await Promise.all([
+      loadBrand(supabase, user.id, input.client_id),
+      loadStrategyRow(supabase, user.id, input.client_id),
+    ]);
+    const start = new Date(`${input.start_date}T12:00:00Z`);
+    if (Number.isNaN(start.getTime())) return { ok: false, error: "Fecha de inicio inválida." };
+
+    const rows = input.ideas
+      .filter((i) => i.hook && i.brief)
+      .map((idea, idx) => {
+        const date = new Date(start);
+        date.setUTCDate(start.getUTCDate() + (idea.day ?? idx));
+        const day = date.getUTCDate();
+        const pillar = strategy.pillars.find((p) => p.key === idea.pillar_key);
+        const purpose = PURPOSES.find((p) => p.id === idea.purpose);
+        return {
+          owner_id: user.id,
+          client_id: input.client_id,
+          title: (idea.hook_text || idea.hook).slice(0, 200),
+          format: idea.format === "carousel" ? "carrusel" : "reel",
+          platforms: ["instagram"],
+          status: "idea",
+          pillar: pillar?.name ?? null,
+          month: date.getUTCMonth() + 1,
+          year: date.getUTCFullYear(),
+          week_number: Math.min(4, Math.ceil(day / 7)),
+          position: idx,
+          publish_date: date.toISOString().slice(0, 10),
+          brief: calendarBrief(idea, pillar),
+          cta_type: purpose?.cta ?? null,
+        };
+      });
+    if (rows.length === 0) return { ok: false, error: "No hay ideas para agendar." };
+
+    const { error } = await supabase.from("content_calendar").insert(rows);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/calendario");
+    return { ok: true, created: rows.length };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "No se pudo agendar la semana." };
   }
 }
