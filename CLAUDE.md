@@ -13,7 +13,9 @@ Vive en `guionizator.pacocuevasia.com`.
 - **CSS puro + CSS Modules** (sin Tailwind), tokens de marca Paco Cuevas en `app/globals.css`.
 - **Supabase** (Postgres + Auth + RLS) vía `@supabase/ssr`.
 - **Anthropic (Claude)** server-side con prompt caching (Fase 1+).
-- **Deploy: Netlify** (`@netlify/plugin-nextjs`).
+- **Deploy: Vercel** (Pro, proyecto `guionizator-pro`, región `pdx1` junto a Supabase
+  us-west-2) desde 2026-10-02. Netlify (`@netlify/plugin-nextjs`, sitio
+  `guionizator-pro.netlify.app`) queda **de respaldo** hasta validar — ver "Mudanza a Vercel".
 
 ## Decisiones de arquitectura
 
@@ -124,6 +126,13 @@ action de mutación sin `try/catch` en el cliente (evita la pantalla "This page 
 
 ## ⚠️ `proxy.ts` es la ÚNICA edge function del sitio
 
+> Escrito para Netlify (hasta 2026-10-02). En Vercel el middleware también corre
+> aparte de la página y una excepción ahí también da una pantalla de error de la
+> plataforma, así que **el `try/catch` sigue siendo obligatorio**. Lo que cambió es
+> el techo de tiempo: 300 s (Fluid, default de Pro) en vez de ~26 s — los
+> "⚠️ límite de Netlify" del resto de este archivo dejaron de ser un techo duro,
+> pero las mediciones siguen valiendo como latencia real para el usuario.
+
 En Netlify todo el SSR corre en una Function (`___netlify-server-handler`) y lo
 único que corre en el edge es el middleware
 (`___netlify-edge-handler-node-middleware`), o sea `proxy.ts` → `updateSession`.
@@ -171,7 +180,25 @@ secreto/token (no por sesión de usuario) debe agregarse a `PUBLIC_PATHS`
 chequear `res.ok` y tratar respuestas no-2xx como error (no asumir éxito solo
 porque no lanzó excepción).
 
-## Jobs programados (Netlify Scheduled Functions)
+## Jobs programados (Vercel Cron; Netlify de respaldo)
+
+Desde 2026-10-02 la lógica de cada job vive en **`lib/jobs/*.ts`** y la corren
+dos envoltorios: las rutas **`app/api/cron/{cleanup-competencia,
+refresh-instagram-tokens,cleanup-scripts-trash}`** (Vercel Cron, horarios en
+`vercel.json`: 07:00/07:10/07:20 UTC) y las Scheduled Functions de
+`netlify/functions/*-scheduled.ts`, que siguen activas mientras Netlify sea
+respaldo. Los tres jobs son idempotentes: que corran los dos el mismo día no
+hace daño.
+
+⚠️ **Las rutas de Vercel son URLs públicas** (a diferencia de Netlify, que da
+404 a toda invocación externa de una función con `schedule`): se autentican con
+`Authorization: Bearer CRON_SECRET` en `lib/jobs/cron.ts`, que **falla
+cerrado** (sin `CRON_SECRET`, 401 a todo). Sin ese chequeo cualquiera podría
+disparar el borrado en firme de la papelera. Y `/api/cron` está en
+`PUBLIC_PATHS` — sin eso el 307 a `/login` cuenta como ejecución exitosa para
+Vercel. Vercel Cron **solo corre sobre el deploy de production**, no en previews.
+Para correr uno a mano: `curl -H "Authorization: Bearer $CRON_SECRET" https://guionizator.pacocuevasia.com/api/cron/<job>`.
+
 
 - **`cleanup-competencia-scheduled`** (`netlify/functions/cleanup-competencia-scheduled.ts`,
   cron `@daily` en `netlify.toml`) — borra posts de `competitor_posts` vencidos,
@@ -1498,7 +1525,10 @@ Desde Fase E, además (todas **server-only**, ninguna con `NEXT_PUBLIC`):
 `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (distinto en local y en
 producción), `STRIPE_PRICE_SUBSCRIPTION`, `STRIPE_PRICE_CREDITS_20`,
 `STRIPE_PRICE_CREDITS_50` y `BILLING_ENFORCED` (`true` enciende el corte por
-impago). **No** hace falta publishable key: se usa Checkout hospedado, así que
+impago).
+
+Desde la mudanza a Vercel: `CRON_SECRET` (solo en Vercel, la manda Vercel Cron
+en el header `Authorization`). `SCRAPE_FN_SECRET` solo hace falta en Netlify. **No** hace falta publishable key: se usa Checkout hospedado, así que
 ningún dato de tarjeta pasa por esta app.
 
 ## Comandos
@@ -1506,9 +1536,41 @@ ningún dato de tarjeta pasa por esta app.
 - `npm run dev` — desarrollo local (http://localhost:3000)
 - `npm run build` — build de producción
 - `npm run lint` — linter
-- `netlify build && netlify deploy --prod` — deploy manual (el único que hay)
+- **`vercel deploy --prod --yes`** — deploy a producción (manual, sin CI; Vercel
+  compila en su lado). `vercel deploy --yes` = preview.
+- `netlify build && netlify deploy --prod` — solo para el **respaldo** de Netlify.
 
-### ⚠️ Deploy: dos formas de romper producción sin tocar una línea de código
+## Mudanza a Vercel (2026-10-02)
+
+Motivo: el límite de ~26 s de las Functions de Netlify (Gemini sobre video, "Mi
+semana" de 7, Sonnet en rutas síncronas). Lo que cambió:
+
+- **Dominio**: `guionizator.pacocuevasia.com` es un CNAME en el Zone Editor de
+  cPanel (HostGator, `ns98/ns99.hostgator.mx`) →
+  `74e2d1d2d09c4535.vercel-dns-016.com`, TTL 300. Volver a Netlify = apuntarlo
+  de nuevo a `guionizator-pro.netlify.app`. El sitio de Netlify sigue vivo y
+  funcional contra la misma base: es el plan de vuelta atrás.
+- **Como el dominio no cambió**, no se tocaron el endpoint del webhook de Stripe,
+  el redirect de Instagram ni las URLs de Supabase Auth.
+- **Scraper**: en Vercel (`process.env.VERCEL`) `startScrape` corre
+  `runScrapeJob` dentro de `after()` con service role; el tope lo da
+  `maxDuration = 800` en `competencia/page.tsx` (las server actions viven en la
+  función de la página que las llama). No hay fetch a otra URL, así que no hay
+  secreto ni `PUBLIC_PATHS` que olvidar. Fuera de Vercel sigue disparando
+  `scrape-competencia-background` de Netlify. Medido: 10 cuentas × 5 posts en 31 s.
+- **Medido en Vercel** (2026-10-02): "Mi semana" de 5 = 18.3 s, igual que en
+  Netlify — la latencia es del modelo, no del host. Lo que se ganó es el techo.
+- ⚠️ **Netlify enmascara las variables secretas** al exportarlas
+  (`netlify env:list --json` y `env:get` devuelven 20 asteriscos). Las que se
+  cargaron en Vercel salieron de `.env.local` (mismos valores que producción),
+  salvo `STRIPE_WEBHOOK_SECRET`, que es distinto y salió del dashboard de Stripe.
+  En Vercel son tipo *Secret*: tampoco se pueden volver a leer.
+- ⚠️ Vercel corta los **cuerpos de request en 4.5 MB**: el `bodySizeLimit:
+  500mb` de `next.config.ts` no sirve ahí. Afecta a `/publicar` (Instagram Etapa
+  B, en stand-by), que sube videos a través de la función — en Netlify ya cortaba
+  en ~6 MB. Si se retoma, subir directo a Supabase Storage con URL firmada.
+
+### ⚠️ Deploy de Netlify (respaldo): dos formas de romper producción sin tocar una línea de código
 
 Pasó el 2026-08-13, con el deploy de la etapa 1 de Fase D:
 
