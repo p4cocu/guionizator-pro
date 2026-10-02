@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { runScrapeJob } from "@/lib/competencia/scrape";
 import { resolveApifyToken } from "@/lib/competencia/apifyToken";
 import { MODEL_FAST } from "@/lib/ai/anthropic";
-import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
+import { AiJsonError, extractJson, generateJsonPlain } from "@/lib/ai/json";
 import { looksLikePublicId, normalizePublicId } from "@/lib/competencia/publicId";
 import { withOutliers } from "@/lib/competencia/outliers";
 import {
@@ -23,6 +23,15 @@ import {
   sanitizeSkeleton,
   type PostSkeleton,
 } from "@/lib/competencia/skeleton";
+import {
+  buildVisualHookPrompt,
+  FPS_BY_SECONDS,
+  sanitizeVisualHook,
+  toVisualHookSeconds,
+  type VisualHook,
+} from "@/lib/competencia/visualHook";
+import { resolveVideoUrl, transcribeErrorInfo, type PostVideoRow } from "@/lib/competencia/transcribe";
+import { analyzeVideoClip, GeminiError } from "@/lib/ai/gemini";
 import {
   buildTaxonomyPrompt,
   HOOK_TYPE_SLUGS,
@@ -307,6 +316,9 @@ export type CompetitorPost = {
   /** Esqueleto guardado (0021). jsonb crudo: leer con `sanitizeSkeleton`. */
   skeleton: unknown;
   skeleton_at: string | null;
+  /** Gancho visual (0023, Gemini). jsonb crudo: leer con `sanitizeVisualHook`. */
+  visual_hook: unknown;
+  visual_hook_at: string | null;
   is_outlier: boolean;
   outlier_multiple: number | null;
   account_median_comments: number | null;
@@ -314,7 +326,7 @@ export type CompetitorPost = {
 
 /** Columnas base de un post (sin los derivados de outlier). */
 const POST_COLUMNS =
-  "id, public_id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual, hook_type, script_structure, value_pillar, classification_notes, classified_at, topic, skeleton, skeleton_at";
+  "id, public_id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual, hook_type, script_structure, value_pillar, classification_notes, classified_at, topic, skeleton, skeleton_at, visual_hook, visual_hook_at";
 
 export type LatestResults = {
   scrapeId: string | null;
@@ -763,6 +775,82 @@ export async function extractSkeleton(
   if (error) return { ok: false, error: error.message };
 
   return { ok: true, skeleton, skeleton_at };
+}
+
+// ─── Gancho visual con Gemini (0023) ──────────────────────────────────────────
+
+export type VisualHookResult =
+  | { ok: true; visual_hook: VisualHook; visual_hook_at: string }
+  | { ok: false; error: string };
+
+/**
+ * Mira los primeros 3, 5 o 10 segundos del reel con Gemini y guarda las 3
+ * capas del gancho + los 7 criterios. Solo estudio y solo a pedido: cada
+ * análisis es una llamada de pago, por eso se guarda y "Rehacer" lo fuerza.
+ * Si el análisis guardado es de otro largo, se rehace con el pedido.
+ */
+export async function analyzeVisualHook(
+  postId: string,
+  opts?: { seconds?: number; force?: boolean },
+): Promise<VisualHookResult> {
+  const { supabase, user } = await getAuthUser();
+  const seconds = toVisualHookSeconds(opts?.seconds);
+
+  const { data: post } = await supabase
+    .from("competitor_posts")
+    .select("id, owner_id, client_id, username, permalink, type, caption, video_url, visual_hook, visual_hook_at, visual_hook_seconds")
+    .eq("id", postId)
+    .eq("owner_id", user.id)
+    .single();
+  if (!post) return { ok: false, error: "Post no encontrado." };
+  if (post.type === "image" || post.type === "carousel") {
+    return { ok: false, error: "El gancho visual se analiza solo en reels." };
+  }
+
+  if (!opts?.force && post.visual_hook_at && post.visual_hook_seconds === seconds) {
+    const saved = sanitizeVisualHook({ ...(post.visual_hook as object), seconds });
+    if (saved) return { ok: true, visual_hook: saved, visual_hook_at: post.visual_hook_at as string };
+  }
+
+  let videoUrl: string;
+  try {
+    videoUrl = await resolveVideoUrl(post as PostVideoRow);
+  } catch (e) {
+    return { ok: false, error: transcribeErrorInfo(e).message };
+  }
+
+  const prompt = buildVisualHookPrompt({ seconds, caption: (post.caption as string | null)?.trim() ?? "" });
+  let visual_hook: VisualHook | null = null;
+  // Un reintento si el JSON no parsea o salió cortado (mismo criterio que lib/ai/json.ts).
+  let maxOutputTokens = 4096;
+  for (let attempt = 0; attempt < 2 && !visual_hook; attempt++) {
+    try {
+      const res = await analyzeVideoClip({
+        videoUrl,
+        prompt,
+        endSeconds: seconds,
+        fps: FPS_BY_SECONDS[seconds],
+        json: true,
+        maxOutputTokens,
+      });
+      if (res.finishReason === "MAX_TOKENS") maxOutputTokens = 8192;
+      visual_hook = sanitizeVisualHook({ ...extractJson<Record<string, unknown>>(res.text), seconds });
+    } catch (e) {
+      if (e instanceof GeminiError) return { ok: false, error: e.message };
+      if (!(e instanceof SyntaxError)) throw e;
+    }
+  }
+  if (!visual_hook) return { ok: false, error: "Gemini no devolvió un análisis válido. Intenta de nuevo." };
+
+  const visual_hook_at = new Date().toISOString();
+  const { error } = await supabase
+    .from("competitor_posts")
+    .update({ visual_hook, visual_hook_at, visual_hook_seconds: seconds })
+    .eq("id", postId)
+    .eq("owner_id", user.id);
+  if (error) return { ok: false, error: error.message };
+
+  return { ok: true, visual_hook, visual_hook_at };
 }
 
 // ─── Estadísticas de clasificación (subvista de Análisis) ─────────────────────

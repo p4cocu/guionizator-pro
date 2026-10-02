@@ -1229,3 +1229,72 @@
   cursor: pointer;
 }
 
+
+/* ── Gancho visual con Gemini (0023) ── */
+.visualHookBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-top: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--emerald) 10%, transparent);
+  color: var(--emerald);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.visualHookBtn:hover {
+  background: color-mix(in srgb, var(--emerald) 20%, transparent);
+}
+
+.visualHookBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.visualHookSeconds {
+  display: inline-flex;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.visualHookSec {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 5px 14px;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.visualHookSec + .visualHookSec {
+  border-left: 1px solid var(--glass-border);
+}
+
+.visualHookSecActive {
+  background: color-mix(in srgb, var(--emerald) 18%, transparent);
+  color: var(--emerald);
+}
+
+.visualHookSec:disabled {
+  cursor: default;
+}
+
+.visualHookAdapt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}

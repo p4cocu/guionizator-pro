@@ -91,8 +91,9 @@ export function scoreChecks(checks: HookCheck[]): { ok: number; total: number } 
   return { ok: evaluables.filter((c) => c.status === "ok").length, total: evaluables.length };
 }
 
+/** Palabras reales: un emoji o un signo suelto ("👾", "→") no cuenta. */
 export function wordCount(s: string | null | undefined): number {
-  return (s ?? "").trim().split(/\s+/).filter(Boolean).length;
+  return (s ?? "").trim().split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
 }
 
 /** Reglas que se pegan a cualquier prompt que escriba ganchos. */

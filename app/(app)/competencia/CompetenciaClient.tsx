@@ -34,6 +34,7 @@ import {
 } from "@/lib/competencia/postCommentShape";
 import AdaptarModal from "./AdaptarModal";
 import GanchoModal from "./GanchoModal";
+import VisualHookModal from "./VisualHookModal";
 import ReporteModal from "./ReporteModal";
 import s from "./competencia.module.css";
 
@@ -157,6 +158,9 @@ export default function CompetenciaClient({ clients }: Props) {
   }, [adaptingPost]);
   const [adaptTargetClientId, setAdaptTargetClientId] = useState<string | null>(null);
   const [ganchoPost, setGanchoPost] = useState<CompetitorPost | null>(null);
+  // Gancho visual con Gemini (0023): se guarda el id, no el post, para que el
+  // modal lea siempre la versión actualizada de la lista.
+  const [visualHookPostId, setVisualHookPostId] = useState<string | null>(null);
   const [otherBrandPickerPostId, setOtherBrandPickerPostId] = useState<string | null>(null);
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
   const [classifyingId, setClassifyingId] = useState<string | null>(null);
@@ -797,6 +801,12 @@ export default function CompetenciaClient({ clients }: Props) {
           </button>
         )}
 
+        {p.permalink && p.type !== "image" && p.type !== "carousel" && (
+          <button className={s.visualHookBtn} onClick={() => setVisualHookPostId(p.id)}>
+            {p.visual_hook_at ? "👁 Ver gancho visual" : "👁 Gancho visual"}
+          </button>
+        )}
+
         <button
           className={s.adaptBtn}
           onClick={() => {
@@ -873,6 +883,7 @@ export default function CompetenciaClient({ clients }: Props) {
 
   const currentClient = clients.find((c) => c.id === clientId);
   const otherClients = clients.filter((c) => c.id !== clientId);
+  const visualHookPost = visualHookPostId ? posts.find((p) => p.id === visualHookPostId) ?? null : null;
 
   if (clients.length === 0) {
     return (
@@ -1389,6 +1400,16 @@ export default function CompetenciaClient({ clients }: Props) {
         <GanchoModal
           post={ganchoPost}
           onClose={() => setGanchoPost(null)}
+        />
+      )}
+
+      {visualHookPost && (
+        <VisualHookModal
+          post={visualHookPost}
+          onClose={() => setVisualHookPostId(null)}
+          onPostUpdate={(patch) =>
+            setPosts((prev) => prev.map((x) => (x.id === visualHookPost.id ? { ...x, ...patch } : x)))
+          }
         />
       )}
 

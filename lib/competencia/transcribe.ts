@@ -31,7 +31,7 @@ export class TranscribeCompetitorError extends Error {
   }
 }
 
-type PostRow = {
+export type PostVideoRow = {
   id: string;
   owner_id: string;
   client_id: string;
@@ -55,8 +55,9 @@ async function isUrlAlive(url: string): Promise<boolean> {
  * Resuelve un `video_url` utilizable para este post: el guardado si sigue
  * vivo, o uno fresco pedido a Apify si no. Actualiza `competitor_posts` con el
  * nuevo link para que el próximo intento no tenga que volver a pedirlo.
+ * También lo usa el análisis de gancho visual (`0023`).
  */
-async function resolveVideoUrl(post: PostRow): Promise<string> {
+export async function resolveVideoUrl(post: PostVideoRow): Promise<string> {
   if (post.video_url && (await isUrlAlive(post.video_url))) {
     return post.video_url;
   }
@@ -104,7 +105,7 @@ export async function transcribeCompetitorPost(
 
   if (error) throw new TranscribeCompetitorError(error.message, 500);
   if (!post) throw new TranscribeCompetitorError("Ese post no existe.", 404);
-  const row = post as PostRow;
+  const row = post as PostVideoRow;
 
   if (row.type === "image") {
     throw new TranscribeCompetitorError("Esto es una imagen, no tiene audio que transcribir.", 400);

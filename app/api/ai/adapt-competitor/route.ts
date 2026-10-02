@@ -11,6 +11,7 @@ import {
 } from "@/lib/ai/productContext";
 import { loadProductContext } from "@/lib/products/load";
 import { sanitizeSkeleton, skeletonInstruction } from "@/lib/competencia/skeleton";
+import { sanitizeVisualHook, visualHookInstruction } from "@/lib/competencia/visualHook";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -149,7 +150,7 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { client_id, post, type: typeOverride, adapt_type, context, product_id, skeleton, interpretation } = (await req.json()) as {
+    const { client_id, post, type: typeOverride, adapt_type, context, product_id, skeleton, interpretation, visual_hook } = (await req.json()) as {
       client_id: string;
       post: SourcePost;
       type?: "reel" | "carousel";
@@ -160,6 +161,8 @@ export async function POST(req: NextRequest) {
       /** Esqueleto del post fuente (0021) y "tu interpretación" del modal. */
       skeleton?: unknown;
       interpretation?: string;
+      /** Gancho visual del post fuente (0023, Gemini). */
+      visual_hook?: unknown;
     };
 
     if (!client_id || !post) {
@@ -202,10 +205,12 @@ export async function POST(req: NextRequest) {
     const isLight = adapt_type === "ligera";
     const hasProduct = productContext !== null;
 
-    const skeletonBlock = skeletonInstruction(
-      sanitizeSkeleton(skeleton),
-      typeof interpretation === "string" ? interpretation : "",
-    );
+    const skeletonBlock = [
+      skeletonInstruction(sanitizeSkeleton(skeleton), typeof interpretation === "string" ? interpretation : ""),
+      visualHookInstruction(sanitizeVisualHook(visual_hook)),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
     const userMessage = isLight
       ? buildLightPrompt(post, type, format, context, hasProduct, skeletonBlock)

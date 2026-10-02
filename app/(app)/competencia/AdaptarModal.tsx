@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveScriptWithNewIdea } from "../guiones/actions";
-import { extractSkeleton } from "./actions";
+import { analyzeVisualHook, extractSkeleton } from "./actions";
 import {
   INTERPRETATION_MAX,
   sanitizeSkeleton,
@@ -11,6 +11,13 @@ import {
   type PostSkeleton,
 } from "@/lib/competencia/skeleton";
 import SkeletonView from "@/components/skeleton/SkeletonView";
+import VisualHookView from "@/components/hooks/VisualHookView";
+import {
+  DEFAULT_VISUAL_HOOK_SECONDS,
+  sanitizeVisualHook,
+  visualHookInstruction,
+  type VisualHook,
+} from "@/lib/competencia/visualHook";
 import { getProductOptions } from "../clientes/productActions";
 import type { CompetitorPost } from "./actions";
 import s from "./competencia.module.css";
@@ -65,6 +72,7 @@ function buildCompletaBrief(
   post: CompetitorPost,
   skeleton: PostSkeleton | null,
   interpretation: string,
+  visualHook: VisualHook | null,
 ): string {
   const caption = (post.caption ?? "").trim().replace(/\s+/g, " ");
   const excerpt = caption.length > 300 ? caption.slice(0, 300) + "…" : caption;
@@ -88,6 +96,7 @@ function buildCompletaBrief(
     transcriptSection || null,
     `\nObjetivo: tomar el ángulo y gancho ganadores de este post y reescribirlos 100% con el estilo, productos y tono del cliente. No es una copia: apropiarse del patrón que funcionó.`,
     skeletonInstruction(skeleton, interpretation) || null,
+    visualHookInstruction(visualHook) || null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -104,6 +113,29 @@ export default function AdaptarModal({ post, clientId, clientName, onClose, onPo
   const [needsTranscription, setNeedsTranscription] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [interpretation, setInterpretation] = useState("");
+  // Gancho visual (0023). No se analiza solo: es una llamada de pago a Gemini.
+  const [visualHook, setVisualHook] = useState<VisualHook | null>(() => sanitizeVisualHook(post.visual_hook));
+  const [vhLoading, setVhLoading] = useState(false);
+  const [vhError, setVhError] = useState<string | null>(null);
+  const isVideoPost = post.type !== "carousel" && post.type !== "image";
+
+  async function runVisualHook() {
+    setVhLoading(true);
+    setVhError(null);
+    try {
+      const res = await analyzeVisualHook(post.id, { seconds: DEFAULT_VISUAL_HOOK_SECONDS });
+      if (!res.ok) {
+        setVhError(res.error);
+        return;
+      }
+      setVisualHook(res.visual_hook);
+      onPostUpdate?.({ visual_hook: res.visual_hook, visual_hook_at: res.visual_hook_at });
+    } catch (e) {
+      setVhError((e as Error).message || "No se pudo analizar el video.");
+    } finally {
+      setVhLoading(false);
+    }
+  }
 
   const runSkeleton = useCallback(
     async (force = false) => {
@@ -201,6 +233,7 @@ export default function AdaptarModal({ post, clientId, clientName, onClose, onPo
             product_id: productId || undefined,
             skeleton: skeleton ?? undefined,
             interpretation: interpretation.trim() || undefined,
+            visual_hook: visualHook ?? undefined,
           }),
         });
         const json = await res.json();
@@ -214,12 +247,12 @@ export default function AdaptarModal({ post, clientId, clientName, onClose, onPo
         setPhase("result");
       }
     },
-    [clientId, post, productId, skeleton, interpretation]
+    [clientId, post, productId, skeleton, interpretation, visualHook]
   );
 
   function handleContinuar() {
     if (adaptType === "completa") {
-      const brief = buildCompletaBrief(post, skeleton, interpretation);
+      const brief = buildCompletaBrief(post, skeleton, interpretation, visualHook);
       const type = post.type === "carousel" ? "carousel" : "reel";
       const params = new URLSearchParams({
         client_id: clientId,
@@ -361,6 +394,33 @@ export default function AdaptarModal({ post, clientId, clientName, onClose, onPo
                     </>
                   }
                 />
+              )}
+
+              {!skLoading && !transcribing && isVideoPost && (
+                <div className={s.visualHookAdapt}>
+                  <p className={s.adaptPickerLabel} style={{ margin: 0 }}>
+                    Gancho visual: lo que se lee y se ve en los primeros segundos (la transcripción no lo ve).
+                  </p>
+                  {vhLoading ? (
+                    <div className={s.modalLoading} style={{ padding: "20px 0" }}>
+                      <div className={s.spinner} />
+                      <p>Gemini está mirando los primeros {DEFAULT_VISUAL_HOOK_SECONDS} segundos…</p>
+                    </div>
+                  ) : visualHook ? (
+                    <VisualHookView
+                      hook={visualHook}
+                      compact
+                      footer={<>Primeros {visualHook.seconds} s del video. Viaja a la adaptación junto con la anatomía.</>}
+                    />
+                  ) : (
+                    <div className={s.skeletonNoticeActions}>
+                      <button className="btn btn-secondary" onClick={runVisualHook} type="button">
+                        👁 Analizar gancho visual ({DEFAULT_VISUAL_HOOK_SECONDS} s)
+                      </button>
+                    </div>
+                  )}
+                  {vhError && <p className={s.error}>{vhError}</p>}
+                </div>
               )}
 
               {!skLoading && !transcribing && (

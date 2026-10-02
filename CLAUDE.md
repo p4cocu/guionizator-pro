@@ -1171,6 +1171,46 @@ Panel **"Rendimiento en Instagram"** al pie de `/guiones/[id]` (solo con
 - `components/skeleton/SkeletonView.tsx` dibuja el esqueleto en los dos
   lugares (Adaptar y Multiplicar).
 
+## Gancho visual con Gemini (migración `0023`)
+
+La anatomía (`0021`) sale de la transcripción y solo ve lo que se **dice**; dos
+de las 3 capas del gancho (texto en pantalla y lo que se ve en el primer
+segundo) solo existen en el video. Botón **"👁 Gancho visual"** en cada reel de
+`/competencia` (`VisualHookModal.tsx`) y bloque opcional en el paso de anatomía
+de "Adaptar a mi marca". Solo estudio, solo a pedido (nunca automático: cada
+análisis es una llamada de pago).
+
+- **`lib/ai/gemini.ts`** — REST directo, sin SDK. `GEMINI_VISION_MODEL`
+  (`gemini-3.8-flash`, verificado contra `GET /v1beta/models` el 2026-10-02).
+  **Solo el inicio del video**: `videoMetadata.endOffset` = 3, 5 (default) o
+  10 s, con más `fps` cuanto más corto (`FPS_BY_SECONDS`: 8 / 5 / 3, ~25-30
+  cuadros). Se paga por cuadro: recortar es lo que deja analizar a más fps.
+- **Dos caminos**: ≤ 14 MB va inline en base64 (el caso normal, ~6-7 s
+  medido) y más pesado va por la Files API (subir → esperar `ACTIVE` →
+  analizar → borrar; **~41 s medido**, porque Google procesa el video entero
+  antes de recortar). Sobra con el techo de Vercel; en Netlify no habría
+  entrado.
+- El video sale de `competitor_posts.video_url` vía **`resolveVideoUrl`**
+  (exportada de `lib/competencia/transcribe.ts`, la misma de Whisper): si el
+  link firmado murió, pide uno fresco a Apify (~6.5 s).
+- **`lib/competencia/visualHook.ts`** (puro): prompt, `sanitizeVisualHook`, y
+  `visualHookInstruction`, que viaja a la adaptación completa (brief) y a la
+  ligera (`visual_hook` en el body de `/api/ai/adapt-competitor`). Devuelve las
+  3 capas, dónde vive el gancho, cámara (fija / movimiento / cortes), si se
+  entiende sin audio, tipo de gancho de `taxonomy.ts`, los **7 criterios de
+  `lib/hooks/criteria.ts`** y "la jugada" en genérico.
+  `withMeasuredChecks` pisa `texto_pantalla` y `largo_texto` en código.
+- Se guarda en `competitor_posts.visual_hook` + `visual_hook_at` +
+  `visual_hook_seconds`: abrirlo de nuevo no vuelve a pagar; analizar con otro
+  largo o "Rehacer" lo fuerza. `components/hooks/VisualHookView.tsx` lo dibuja
+  en los dos lugares (`compact` en Adaptar, sin checklist).
+- `wordCount` (`criteria.ts`) ya no cuenta emojis ni signos sueltos: un
+  letrero real de 7 palabras + 👾 contaba 8 y pasaba el criterio de largo.
+- ⚠️ Probado contra la API real (3 reels, cuadros revisados a mano con
+  ffmpeg): texto en pantalla, primer segundo y cámara salen fieles. Detalle
+  visto: en "lo que se dice" puede copiar la grafía del letrero ("por vos")
+  donde Whisper oyó otra ("por voz").
+
 ## Ganchos de 3 capas (migración `0018`)
 
 El análisis de 1000 ganchos de Andrea: el gancho tiene **3 capas** — lo que se
@@ -1520,6 +1560,8 @@ knowledge/              # fuente original de la base de conocimiento
 `SUPABASE_SERVICE_ROLE_KEY` (server-only; **también en local** desde `0006`, para
 leer `client_secrets`), `OPENAI_API_KEY` (server-only, desde la etapa 7 —
 Whisper; cuenta aparte de `ANTHROPIC_API_KEY`).
+`GEMINI_API_KEY` (server-only, desde `0023` — gancho visual; sale de Google AI
+Studio, cargada en Vercel production + preview).
 
 Desde Fase E, además (todas **server-only**, ninguna con `NEXT_PUBLIC`):
 `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (distinto en local y en
