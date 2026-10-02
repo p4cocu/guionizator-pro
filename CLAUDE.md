@@ -967,6 +967,43 @@ producto/servicio tiene una **ficha de oferta** y los guiones se pueden hacer
   desde PostgREST. Un `viewer` la ve pero no la toca. Las respuestas de afinado
   guardadas desde Generar pasan por el mismo candado.
 
+## Estrategia de contenido (`/estrategia`, migración `0017`)
+
+Hasta acá las ideas salían de **afuera** (Competencia, Tendencias). `/estrategia`
+es el lado de **adentro**: por marca, el cliente ideal + 5 pilares, un generador
+de ideas desde cero y un banco. Estudio solamente (owner-only, sin policies de
+miembro: el portal no la ve).
+
+- **`content_strategies`** (PK `client_id`): campos de texto del cliente ideal
+  (`avatar`, `dolores`, `deseos`, `objeciones`, `transformacion`,
+  `diferenciador`, `fuentes`) + `pillars` jsonb. Fuente de verdad de la forma:
+  **`lib/strategy/pillars.ts`** (`sanitizeStrategy` es el único camino de
+  escritura; un pilar tiene `key` estable, `name`, `objective`, `stage`
+  atraer/nutrir/convertir, `share` %, `topics`, `formats`).
+- **`content_ideas`**: el banco. `pillar_key`, `source`, `stage`, `format` y las
+  tres columnas de taxonomía son texto **sin CHECK** a propósito (las normaliza
+  el código; renombrar un pilar no debe romper un insert). `used_at` = ya se
+  hizo guion.
+- **Generador** (`lib/strategy/prompts.ts`, `MODEL_FAST`, ~15-17s medido):
+  pilar × cliente ideal × **fuente** (`matriz`, `tendencias` — lee las
+  pendientes de `/tendencias` con el ángulo FLUIA o Paco según la marca —,
+  `build`, `preguntas`, `competencia` — patrones de posts clasificados, nunca
+  el tema) × filtros opcionales de la taxonomía de Andrea (`taxonomy.ts`).
+  "Hacer guion" guarda la idea, la marca usada y abre `/guiones/nuevo` con
+  `client_id`, `brief` y `type` (params que ya existían).
+- ⚠️ Probado contra la API real: sin reglas explícitas el modelo **inventaba
+  cifras** ("47 mensajes"), **ofertas** ("prueba gratis 7 días") y **recursos**
+  ("plantilla en mi bio"). El prompt pide huecos `[N]` en vez de números
+  inventados. Al tocar el prompt, reprobar eso.
+- **"✦ Proponer con IA"** (`draftStrategy`) propone cliente ideal + 5 pilares
+  desde el perfil y los servicios; **solo llena campos vacíos y no guarda**
+  (mismo principio que "Llenar desde landing"). Si ya hay pilares, pregunta
+  antes de reemplazarlos.
+- Sin la `0017` aplicada, la página muestra un aviso en vez de caerse.
+- Semilla con la estrategia de FLUIA y Paco Cuevas IA:
+  `supabase/seeds/0017_estrategia_fluia_pacocuevasia.sql` (`on conflict do
+  nothing`). Razonamiento en `docs/estrategia-contenido-fluia-pacocuevasia.md`.
+
 ## Fase E — Cobro con Stripe (`lib/billing/*`, migración `0013`)
 
 Plan completo: `docs/fase-e-stripe.md`. Hasta Fase D el portal se prendía con un
