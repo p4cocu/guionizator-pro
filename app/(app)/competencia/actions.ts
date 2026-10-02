@@ -2,6 +2,8 @@
 
 import { normalizeNiche, normalizeTopic } from "@/lib/competencia/research";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { runScrapeJob } from "@/lib/competencia/scrape";
 import { resolveApifyToken } from "@/lib/competencia/apifyToken";
@@ -157,9 +159,15 @@ export type StartScrapeResult =
 
 /**
  * Crea el registro del scrape y lo dispara.
- * - Con SCRAPE_FN_SECRET (producción): invoca la background function de Netlify
- *   y vuelve enseguida; el front consulta el estado por polling.
- * - Sin ese secreto (dev local): corre el scrape de forma síncrona aquí mismo.
+ * - En Vercel (`process.env.VERCEL`): corre el job dentro de `after()` — la
+ *   action responde enseguida y la misma función sigue viva hasta terminarlo
+ *   (tope: el `maxDuration` de `competencia/page.tsx`). No hay fetch a otra URL,
+ *   así que no hay secreto ni `PUBLIC_PATHS` que olvidar, y funciona igual en
+ *   los previews con Deployment Protection. El front consulta el estado por
+ *   polling, como antes.
+ * - Con SCRAPE_FN_SECRET (Netlify, respaldo): invoca la background function de
+ *   Netlify y vuelve enseguida.
+ * - Sin ninguna de las dos (dev local): corre el scrape síncrono aquí mismo.
  */
 export async function startScrape(
   clientId: string,
@@ -200,6 +208,27 @@ export async function startScrape(
     return { ok: false, error: error?.message ?? "No se pudo crear el scrape." };
   }
   const scrapeId = scrape.id as string;
+
+  if (process.env.VERCEL) {
+    // Service role, igual que la background function de Netlify: `after()`
+    // corre cuando la respuesta ya salió y no conviene depender de que las
+    // cookies de la sesión sigan siendo leíbles a esa altura. `runScrapeJob`
+    // saca owner_id/client_id de la fila del scrape.
+    const service = createServiceClient();
+    after(async () => {
+      try {
+        const result = await runScrapeJob(service, scrapeId);
+        if (!result.ok) console.error("[startScrape] job falló:", result.error);
+      } catch (e) {
+        console.error("[startScrape] job lanzó:", e);
+        await service
+          .from("competitor_scrapes")
+          .update({ status: "error", error: "El scrape se interrumpió." })
+          .eq("id", scrapeId);
+      }
+    });
+    return { ok: true, scrapeId, mode: "background" };
+  }
 
   const secret = process.env.SCRAPE_FN_SECRET;
   if (secret) {

@@ -28,6 +28,11 @@ const PUBLIC_PATHS = [
   // redirige (307) a /login antes de que corra su código — el fetch() que las
   // dispara no lanza error con un 307, así que el fallo queda silencioso.
   "/.netlify/functions",
+  // Vercel Cron (`app/api/cron/*`, vercel.json): mismo caso que las de arriba.
+  // Llega sin sesión y se autentica con `Authorization: Bearer CRON_SECRET`
+  // (lib/jobs/cron.ts). Sin esta línea el 307 a /login cuenta como éxito para
+  // Vercel y los tres jobs diarios dejan de correr sin un solo error.
+  "/api/cron",
 ];
 
 /**

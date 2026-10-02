@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "regions": ["pdx1"],
+  "crons": [
+    { "path": "/api/cron/cleanup-competencia", "schedule": "0 7 * * *" },
+    { "path": "/api/cron/refresh-instagram-tokens", "schedule": "10 7 * * *" },
+    { "path": "/api/cron/cleanup-scripts-trash", "schedule": "20 7 * * *" }
+  ]
+}

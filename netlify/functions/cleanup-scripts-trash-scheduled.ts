@@ -1,22 +1,18 @@
 /**
- * Netlify Scheduled Function: borra en firme los guiones que llevan más de
- * RETENTION_DAYS en la papelera (`scripts.trashed_at`, migración `0011`),
- * para TODOS los owners. Corre a diario según el cron configurado en
- * `netlify.toml` ([functions."cleanup-scripts-trash-scheduled"]).
+ * Netlify Scheduled Function (cron `@daily` en netlify.toml). Borra en firme guiones con más de 30 días en la papelera.
  *
- * Mismo patrón que `cleanup-competencia-scheduled.ts`: Netlify solo permite
- * invocar funciones con `schedule` configurado desde su propio scheduler
- * interno, así que no necesita secreto propio.
+ * ⚠️ Respaldo desde la mudanza a Vercel (2026-10-02): en producción lo corre
+ * el cron de Vercel (`app/api/cron/*`). La lógica vive en `lib/jobs/cleanupScriptsTrash.ts`
+ * y es idempotente, así que correr los dos el mismo día no hace daño.
  *
- * Usa la SERVICE ROLE de Supabase (no hay sesión de usuario en un cron).
+ * Netlify solo permite invocar funciones con `schedule` desde su propio
+ * scheduler; cualquier request externo directo recibe 404 (no necesita secreto).
  *
- * Variables de entorno requeridas en Netlify:
- *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ * Variables de entorno: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  */
 
 import { createClient } from "@supabase/supabase-js";
-
-const RETENTION_DAYS = 30;
+import { cleanupScriptsTrash } from "../../lib/jobs/cleanupScriptsTrash";
 
 export const handler = async () => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -29,21 +25,6 @@ export const handler = async () => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
-
-  const { error, count } = await supabase
-    .from("scripts")
-    .delete({ count: "exact" })
-    .not("trashed_at", "is", null)
-    .lt("trashed_at", cutoff.toISOString());
-
-  if (error) {
-    return { statusCode: 500, body: JSON.stringify({ ok: false, error: error.message }) };
-  }
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ ok: true, deleted: count ?? 0, cutoff: cutoff.toISOString() }),
-  };
+  const result = await cleanupScriptsTrash(supabase);
+  return { statusCode: result.ok ? 200 : 500, body: JSON.stringify(result) };
 };
