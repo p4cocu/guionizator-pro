@@ -273,3 +273,64 @@ export function normalizeStrategyDraft(raw: unknown): {
   }
   return { fields, pillars: sanitizePillars(r.pillars) };
 }
+
+// ─── 3. Test de estrategia (0019) ────────────────────────────────────────────
+// Mismo formato de salida que el borrador (se normaliza con
+// `normalizeStrategyDraft`), pero la fuente son las respuestas del cliente con
+// SUS palabras, no el perfil que cargó Paco. La etapa NO se le pide al modelo:
+// la decide `phaseFromAnswers` en código.
+
+export const STRATEGY_TEST_SYSTEM = STRATEGY_DRAFT_SYSTEM;
+
+export function buildStrategyTestPrompt(input: {
+  brandContext: string;
+  productsContext: string;
+  answersText: string;
+  phaseLabel: string;
+}): string {
+  const { brandContext, productsContext, answersText, phaseLabel } = input;
+  const fieldList = STRATEGY_FIELDS.map((f) => `- \`${f.key}\`: ${f.label} — ${f.placeholder}`).join("\n");
+  return `${brandContext}
+
+${productsContext || "(La marca todavía no cargó productos o servicios.)"}
+
+---
+
+## Lo que respondió la marca en su test de estrategia
+Es la fuente principal: manda sobre el perfil de arriba si se contradicen.
+
+${answersText}
+
+Etapa de su cuenta (ya decidida, no la cambies): ${phaseLabel}
+
+---
+
+## Tu tarea
+Arma su estrategia de contenido a partir de SUS respuestas.
+
+1. Los campos del cliente ideal:
+${fieldList}
+   \`avatar\`: en TERCERA persona ("Dueño de casa de…"), máximo 50 palabras.
+   Dolores, deseos y objeciones: 3-4 renglones cada uno, uno por línea, en primera persona del cliente y con las palabras que usó la marca cuando se pueda.
+   \`transformacion\` y \`diferenciador\`: máximo 40 palabras cada uno.
+   \`fuentes\`: de dónde puede sacar material esta marca (sus conversaciones, las preguntas repetidas que mencionó), máximo 30 palabras.
+
+2. **Exactamente 5 pilares**, repartidos según la etapa de la cuenta. Para cada uno:
+   - \`name\`: 2-5 palabras, claro para alguien que no sabe de marketing, propio de esta marca.
+   - \`objective\`: qué hace por la marca, una frase sencilla de máximo 15 palabras.
+   - \`andrea_pillar\`:
+${ANDREA_PILLARS.map((a) => `     - \`${a.id}\` (${a.label}): ${a.hint}`).join("\n")}
+     Los 3 tienen que estar representados.
+   - \`share\`: % del mes; los 5 suman 100.
+   - \`topics\`: 4 temas concretos que salen de sus respuestas, uno por línea, cortos.
+   - \`formats\`: 2-3 formatos sencillos que pueda grabar con su celular, en una línea.
+
+Reglas:
+- Prohibido inventar clientes, casos, cifras, resultados o servicios que no estén en las respuestas o en el perfil.
+- Prohibido agregar superlativos o exclusividades que la marca no dijo ("el único", "el mejor", "el primero"): describe lo que hace, no lo compares.
+- Nada de jerga de marketing (embudo, lead magnet, top of funnel, awareness): esto lo lee el dueño del negocio.
+- Si una respuesta no alcanza para un campo, déjalo en "".
+
+Devuelve ÚNICAMENTE este JSON:
+{"avatar": "...", "dolores": "...", "deseos": "...", "objeciones": "...", "transformacion": "...", "diferenciador": "...", "fuentes": "...", "pillars": [{"name": "...", "objective": "...", "andrea_pillar": "problema|solucion|resultado", "share": 25, "topics": "...", "formats": "..."}]}`;
+}

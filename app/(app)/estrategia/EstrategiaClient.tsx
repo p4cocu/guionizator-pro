@@ -23,6 +23,8 @@ import {
   type StrategyFieldKey,
 } from "@/lib/strategy/pillars";
 import { Layers } from "@/components/hooks/HookParts";
+import StrategyTestForm from "@/components/strategy/StrategyTestForm";
+import { testAnswersToText, type TestAnswers } from "@/lib/strategy/test";
 import {
   HOOK_TYPES,
   SCRIPT_STRUCTURES,
@@ -33,6 +35,7 @@ import {
 import {
   deleteIdea,
   draftStrategy,
+  draftStrategyFromTest,
   generateIdeas,
   saveIdea,
   saveStrategy,
@@ -50,6 +53,8 @@ type Props = {
   clientId: string;
   initialStrategy: Strategy;
   initialIdeas: ContentIdea[];
+  /** Último test de estrategia (0019), del cliente desde el portal o tuyo. */
+  initialTest: { answers: TestAnswers; completedAt: string | null } | null;
 };
 
 const LEVEL_LABEL: Record<AwarenessLevel, string> = Object.fromEntries(
@@ -114,7 +119,7 @@ function scriptHref(clientId: string, idea: ContentIdea, pillars: Pillar[]) {
   return `/guiones/nuevo?${params.toString()}`;
 }
 
-export default function EstrategiaClient({ clientes, clientId, initialStrategy, initialIdeas }: Props) {
+export default function EstrategiaClient({ clientes, clientId, initialStrategy, initialIdeas, initialTest }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(initialStrategy.pillars.length ? "generar" : "estrategia");
 
@@ -135,6 +140,9 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
   const [drafting, startDrafting] = useTransition();
   const [draftPillars, setDraftPillars] = useState<Pillar[] | null>(null);
   const [strategyError, setStrategyError] = useState<string | null>(null);
+  // Test de estrategia (0019): las respuestas viajan con el próximo "Guardar".
+  const [testOpen, setTestOpen] = useState(false);
+  const [pendingTest, setPendingTest] = useState<TestAnswers | null>(null);
 
   // ── Generador ──
   const [source, setSource] = useState<IdeaSource>("matriz");
@@ -204,11 +212,18 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
   function handleSave() {
     setStrategyError(null);
     startSaving(async () => {
-      const res = await saveStrategy({ client_id: clientId, fields, account_phase: phase || null, pillars });
+      const res = await saveStrategy({
+        client_id: clientId,
+        fields,
+        account_phase: phase || null,
+        pillars,
+        test_answers: pendingTest,
+      });
       if (!res.ok) {
         setStrategyError(res.error);
         return;
       }
+      setPendingTest(null);
       setSavedPillars(pillars.filter((p) => p.name.trim()));
       setDirty(false);
       setSaveMsg("Guardado");
@@ -236,6 +251,23 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
       setDirty(true);
       setSaveMsg(null);
     });
+  }
+
+  /** El test REEMPLAZA todo el formulario (no solo lo vacío) y no guarda. */
+  async function handleTest(answers: TestAnswers): Promise<string | null> {
+    const res = await draftStrategyFromTest(clientId, answers);
+    if (!res.ok) return res.error;
+    setFields(
+      Object.fromEntries(STRATEGY_FIELDS.map((f) => [f.key, res.fields[f.key] ?? ""])) as Record<StrategyFieldKey, string>,
+    );
+    setPillars(res.pillars);
+    setPhase(res.account_phase);
+    setDraftPillars(null);
+    setPendingTest(answers);
+    setTestOpen(false);
+    setDirty(true);
+    setSaveMsg(null);
+    return null;
   }
 
   // ── Handlers: generador ──
@@ -448,6 +480,9 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
             <button type="button" className="btn btn-secondary" onClick={handleDraft} disabled={drafting}>
               {drafting ? "Pensando…" : "✦ Proponer con IA"}
             </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setTestOpen((v) => !v)} disabled={drafting}>
+              {testOpen ? "Cerrar el test" : "🧭 Hacer el test"}
+            </button>
             <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving || !dirty}>
               {saving ? "Guardando…" : "Guardar estrategia"}
             </button>
@@ -458,6 +493,30 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
           <p className={styles.muted}>
             La propuesta de la IA solo llena los campos vacíos y no se guarda hasta que tú guardas.
           </p>
+          {initialTest && !pendingTest && (
+            <details className={`card ${styles.testBox}`}>
+              <summary>
+                🧭 Test de estrategia respondido
+                {initialTest.completedAt &&
+                  ` el ${new Date(initialTest.completedAt).toLocaleDateString("es-MX", { day: "numeric", month: "long" })}`}{" "}
+                — ver respuestas
+              </summary>
+              <p className={styles.testAnswers}>{testAnswersToText(initialTest.answers).replace(/\*\*/g, "")}</p>
+            </details>
+          )}
+          {pendingTest && (
+            <p className={styles.muted}>Armado desde el test: revisa y guarda para aplicarlo.</p>
+          )}
+          {testOpen && (
+            <StrategyTestForm
+              initial={pendingTest ?? initialTest?.answers}
+              submitLabel="✦ Armar estrategia"
+              busyLabel="Armando… (unos 20 segundos)"
+              warning="Reemplaza el cliente ideal, los pilares y la etapa del formulario. No se guarda hasta que guardes."
+              onSubmit={handleTest}
+              onCancel={() => setTestOpen(false)}
+            />
+          )}
 
           <div className={`card ${styles.phaseBox}`}>
             <label className="field">

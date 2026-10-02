@@ -29,6 +29,8 @@ import {
   type Strategy,
   type StrategyFieldKey,
 } from "@/lib/strategy/pillars";
+import { strategyFromTest } from "@/lib/strategy/runTest";
+import { missingTestAnswers, sanitizeTestAnswers, type TestAnswers } from "@/lib/strategy/test";
 import {
   STRATEGY_DRAFT_SYSTEM,
   STRATEGY_IDEAS_SYSTEM,
@@ -93,14 +95,19 @@ export async function saveStrategy(input: {
   fields: Partial<Record<StrategyFieldKey, string | null>>;
   account_phase: AccountPhase | null;
   pillars: Pillar[];
+  /** Solo si el formulario salió de "Hacer el test" (0019). */
+  test_answers?: TestAnswers | null;
 }): Promise<SaveResult> {
   try {
     const { supabase, user } = await getAuthUser();
     await loadBrand(supabase, user.id, input.client_id);
     const clean = sanitizeStrategy({ ...input.fields, account_phase: input.account_phase, pillars: input.pillars });
     const updated_at = new Date().toISOString();
+    const test = input.test_answers
+      ? { test_answers: sanitizeTestAnswers(input.test_answers), test_completed_at: updated_at, test_completed_by: user.id }
+      : {};
     const { error } = await supabase.from("content_strategies").upsert(
-      { client_id: input.client_id, owner_id: user.id, ...clean, updated_at },
+      { client_id: input.client_id, owner_id: user.id, ...clean, ...test, updated_at },
       { onConflict: "client_id" },
     );
     if (error) return { ok: false, error: error.message };
@@ -152,6 +159,36 @@ export async function draftStrategy(clientId: string): Promise<DraftResult> {
   } catch (e) {
     if (e instanceof AiJsonError) return { ok: false, error: "La IA no devolvió una propuesta válida. Intenta de nuevo." };
     return { ok: false, error: e instanceof Error ? e.message : "No se pudo generar la propuesta." };
+  }
+}
+
+export type TestDraftResult =
+  | { ok: true; fields: Partial<Record<StrategyFieldKey, string>>; pillars: Pillar[]; account_phase: AccountPhase }
+  | { ok: false; error: string };
+
+/**
+ * "Hacer el test" (0019) desde el estudio: mismo cuestionario y mismo prompt
+ * que el portal, pero propone y NO guarda — el resultado reemplaza el
+ * formulario y se guarda con "Guardar estrategia", como "Proponer con IA".
+ */
+export async function draftStrategyFromTest(clientId: string, rawAnswers: TestAnswers): Promise<TestDraftResult> {
+  try {
+    const answers = sanitizeTestAnswers(rawAnswers);
+    if (missingTestAnswers(answers).length > 0) return { ok: false, error: "Faltan respuestas obligatorias." };
+    const { supabase, user } = await getAuthUser();
+    const [brand, { data: products }] = await Promise.all([
+      loadBrand(supabase, user.id, clientId),
+      supabase.from("client_products").select(PRODUCT_COLUMNS).eq("owner_id", user.id).eq("client_id", clientId),
+    ]);
+    const res = await strategyFromTest({
+      answers,
+      brandContext: buildClientContext(brand),
+      productsContext: ((products ?? []) as unknown as Product[]).map((p) => buildProductContext(p)).join("\n\n"),
+    });
+    return { ok: true, ...res };
+  } catch (e) {
+    if (e instanceof AiJsonError) return { ok: false, error: "La IA no devolvió una estrategia válida. Intenta de nuevo." };
+    return { ok: false, error: e instanceof Error ? e.message : "No se pudo armar la estrategia." };
   }
 }
 

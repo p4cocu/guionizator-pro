@@ -7,6 +7,7 @@ import {
   normalizeStrategyRow,
   type ContentIdea,
 } from "@/lib/strategy/pillars";
+import { sanitizeTestAnswers } from "@/lib/strategy/test";
 import EstrategiaClient from "./EstrategiaClient";
 import styles from "./estrategia.module.css";
 
@@ -20,6 +21,14 @@ function isMissingTable(error: { code?: string; message?: string } | null) {
     error.code === "PGRST205" ||
     /could not find the table|does not exist/i.test(error.message ?? "")
   );
+}
+
+function readTest(row: Record<string, unknown> | null) {
+  if (!row?.test_answers) return null;
+  return {
+    answers: sanitizeTestAnswers(row.test_answers),
+    completedAt: typeof row.test_completed_at === "string" ? row.test_completed_at : null,
+  };
 }
 
 /**
@@ -66,7 +75,8 @@ export default async function EstrategiaPage({
   const [strategyRes, ideasRes] = await Promise.all([
     supabase
       .from("content_strategies")
-      .select(STRATEGY_COLUMNS)
+      // `test_*` (0019): las respuestas del último test, del cliente o tuyas.
+      .select(`${STRATEGY_COLUMNS}, test_answers, test_completed_at`)
       .eq("client_id", selected.id)
       .eq("owner_id", user.id)
       .maybeSingle(),
@@ -100,6 +110,7 @@ export default async function EstrategiaPage({
       clientId={selected.id}
       initialStrategy={normalizeStrategyRow(strategyRes.data as Record<string, unknown> | null, selected.id)}
       initialIdeas={(ideasRes.data ?? []) as unknown as ContentIdea[]}
+      initialTest={readTest(strategyRes.data as Record<string, unknown> | null)}
     />
   );
 }

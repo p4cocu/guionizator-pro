@@ -4,11 +4,11 @@
  * Fuente de verdad única de los slugs que pueden vivir en
  * `clients.enabled_features`. Los `slug` DEBEN coincidir EXACTO con el
  * `CHECK constraint` `clients_enabled_features_check` (migración
- * `0006_portal_cliente.sql`):
+ * `0006_portal_cliente.sql`, ampliado en `0019_portal_estrategia.sql`):
  *
  *   check (enabled_features <@ array[
  *     'reportes','guiones','calendario','competencia','instagram',
- *     'investigacion','generar_ia'
+ *     'investigacion','generar_ia','estrategia'
  *   ]::text[])
  *
  * ⚠️ REGLA DURA (CLAUDE.md): agregar, renombrar o borrar un slug de acá
@@ -37,7 +37,8 @@ export type PortalFeatureSlug =
   | "competencia"
   | "instagram"
   | "investigacion"
-  | "generar_ia";
+  | "generar_ia"
+  | "estrategia";
 
 export type PortalFeature = {
   slug: PortalFeatureSlug;
@@ -134,6 +135,16 @@ export const PORTAL_FEATURES: PortalFeature[] = [
     live: true,
   },
   {
+    // 0019. Gratis: el test no gasta cupo de IA (decisión de Paco, 2026-10-02).
+    slug: "estrategia",
+    label: "Tu estrategia",
+    description:
+      "Un test sin jerga que arma su cliente ideal, sus temas de contenido y en qué etapa está su cuenta. Lo que responda reemplaza la estrategia de /estrategia.",
+    paid: false,
+    path: "estrategia",
+    live: true,
+  },
+  {
     slug: "generar_ia",
     label: "Generación con IA",
     description:
@@ -168,6 +179,7 @@ const _coverage: Record<PortalFeatureSlug, true> = {
   instagram: true,
   investigacion: true,
   generar_ia: true,
+  estrategia: true,
 };
 void _coverage;
 

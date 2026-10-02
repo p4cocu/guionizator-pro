@@ -45,6 +45,15 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0016 | `0016_ficha_servicio.sql` | ✅ 2026-09-29 (antes del deploy) |
 | 0017 | `0017_estrategia_contenido.sql` | ✅ 2026-10-02 |
 | 0018 | `0018_ganchos_3_capas_y_consciencia.sql` | ✅ 2026-10-02 (antes del deploy) + semilla `supabase/seeds/0017_estrategia_fluia_pacocuevasia.sql` corrida |
+| 0019 | `0019_portal_estrategia.sql` | ✅ 2026-10-02 (antes del deploy, vía Supabase MCP) |
+
+### 0019 va ANTES del deploy
+
+Aditiva: amplía el CHECK de `clients.enabled_features` con `estrategia` y suma
+`test_answers`, `test_completed_at` y `test_completed_by` a
+`content_strategies`. La app publicada no conoce el slug (`sanitizeFeatures` lo
+descarta) ni las columnas. Al revés no: `/estrategia` selecciona las columnas
+nuevas y prender el slug sin el CHECK revienta el update del panel de la marca.
 
 ### 0016 va ANTES del deploy
 

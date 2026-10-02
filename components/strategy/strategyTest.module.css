@@ -1,0 +1,123 @@
+/* Test de estrategia (0019): portal y estudio. */
+
+.form {
+  display: grid;
+  gap: 26px;
+}
+
+.block {
+  display: grid;
+  gap: 14px;
+  padding: 20px 22px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+  background-color: var(--glass-base);
+  background-image: var(--glass-overlay);
+  box-shadow: var(--glass-inset), var(--glass-shadow);
+}
+
+.blockTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.step {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--signal);
+}
+
+.intro {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  margin-top: -6px;
+}
+
+.question {
+  display: grid;
+  gap: 6px;
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.flagged .label {
+  color: var(--flare);
+}
+
+.flagged textarea {
+  border-color: var(--flare);
+}
+
+.label {
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 0;
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.hint {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--glass-border);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.option input {
+  accent-color: var(--emerald);
+}
+
+.optionOn {
+  border-color: var(--emerald);
+  background: color-mix(in srgb, var(--emerald) 14%, transparent);
+}
+
+.warning {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--signal);
+}
+
+.error {
+  font-size: 13.5px;
+  color: var(--flare);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}

@@ -64,6 +64,7 @@ estos, dilo explícitamente y entrega la migración a Paco.
 | `competitor_posts.hook_type` | `resultado`, `vacio_info`, `error`, `controversia`, `dolor_comun`, `filtrante`, `negativo` |
 | `competitor_posts.script_structure` | `how_to`, `golpe_valor`, `vacio_info`, `espejo`, `controversial`, `momento_wtf`, `problema_invisible` |
 | `competitor_posts.value_pillar` | `utilidad_practica`, `validacion_emocional`, `revelacion`, `curaduria`, `disrupcion`, `actualidad` |
+| `clients.enabled_features` (array, CHECK de contención) | `reportes`, `guiones`, `calendario`, `competencia`, `instagram`, `investigacion`, `generar_ia`, `estrategia` (fuente de verdad en TS: `lib/portal/features.ts`) |
 | `clients.ai_generation_mode` | `simple`, `completo` (fuente de verdad en TS: `lib/portal/generationMode.ts`) |
 | `client_subscriptions.status` | `incomplete`, `active`, `past_due`, `canceled` (fuente de verdad en TS: `lib/billing/status.ts`) |
 | `ai_usage_log.paid_with` | `plan`, `credit` (fuente de verdad en TS: `lib/billing/plan.ts`) |
@@ -326,7 +327,7 @@ owner-only y es invisible aunque la UI falle.
   (guarda `sha256` del token, nunca el token), `script_comments`, `ai_usage_log`.
 - `clients.enabled_features text[]` — qué secciones ve esa marca. **Tiene `CHECK`
   de contención**: `reportes`, `guiones`, `calendario`, `competencia`,
-  `instagram`, `investigacion`, `generar_ia`. La fuente de verdad en el código es
+  `instagram`, `investigacion`, `generar_ia` y (desde `0019`) `estrategia`. La fuente de verdad en el código es
   `lib/portal/features.ts`; tocar un slug obliga a tocar el `CHECK` en la misma
   entrega (misma regla dura que `taxonomy.ts`).
 - `clients.ai_generation_limit` — tope mensual del add-on de IA (`null` = sin tope).
@@ -1005,6 +1006,34 @@ miembro: el portal no la ve). Método: transcripciones de Andrea Estratega
 - Semilla: `supabase/seeds/0017_estrategia_fluia_pacocuevasia.sql` (corrida el
   2026-10-02). Razonamiento en `docs/estrategia-contenido-fluia-pacocuevasia.md`.
   Checklist de lo que sigue: **`pendientes.md`**.
+
+## "Tu estrategia" y el test de estrategia (migración `0019`)
+
+El cliente arma su propia estrategia desde el portal (`/portal/[id]/estrategia`,
+slug **`estrategia`** en `features.ts` — el CHECK se amplió en `0019`). Lo mismo
+existe en el estudio: botón "🧭 Hacer el test" en `/estrategia`.
+
+- **Preguntas** en `lib/strategy/test.ts` (fuente de verdad): 8 de texto (tu
+  cliente, tu negocio) + 4 de opción (seguidores, oferta clara, mensajes,
+  ventas). `sanitizeTestAnswers` es el único camino de escritura de
+  `content_strategies.test_answers`.
+- **La etapa la decide el código** (`phaseFromAnswers`), no la IA: reglas fijas
+  sobre las 4 de opción. La IA (`lib/strategy/runTest.ts` → `strategyFromTest`,
+  `MODEL_FAST`) arma cliente ideal + 5 pilares a partir de las respuestas, con el
+  mismo `normalizeStrategyDraft` que "Proponer con IA".
+- **Portal: reemplaza directo y es gratis** (decisiones de Paco, 2026-10-02): no
+  exige `generar_ia` ni gasta cupo. Solo `collaborator` o dueño lo hacen; un
+  `viewer` ve el resultado. El resultado se muestra **sin jerga**
+  (`PHASE_PLAIN`, `ANDREA_PILLAR_PLAIN`): "Dónde está tu cuenta hoy", "De esto
+  vas a hablar".
+- `content_strategies` **sigue owner-only**. El portal lee y escribe con service
+  role (`lib/portal/strategy.ts`) filtrando `client_id` a mano, y el upsert
+  lleva el `owner_id` **del dueño de la marca** — con el del miembro, la fila
+  desaparecería de `/estrategia`. El perfil entra al prompt **sin `notas`**.
+- **Estudio: propone, no guarda.** El test reemplaza todo el formulario (no solo
+  lo vacío, a diferencia de "Proponer con IA") y las respuestas viajan con el
+  siguiente "Guardar estrategia". El último test respondido (del cliente o
+  tuyo) se ve en un desplegable arriba del formulario.
 
 ## Ganchos de 3 capas (migración `0018`)
 
