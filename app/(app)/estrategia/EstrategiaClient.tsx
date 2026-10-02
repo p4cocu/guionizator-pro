@@ -727,7 +727,7 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
                     <label className="field">
                       <span className="field-label">Piezas por semana</span>
                       <select className="select" value={weekPosts} onChange={(e) => setWeekPosts(Number(e.target.value))}>
-                        {[3, 4, 5].map((n) => (
+                        {[3, 4, 5, 7].map((n) => (
                           <option key={n} value={n}>
                             {n}
                           </option>

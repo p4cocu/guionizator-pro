@@ -1019,15 +1019,24 @@ miembro: el portal no la ve). Método: transcripciones de Andrea Estratega
 - **Generador** (`lib/strategy/prompts.ts`, `MODEL_FAST`): pilar × cliente
   ideal × **fuente** (`matriz`, `tendencias`, `build`, `preguntas`,
   `competencia`) × filtros (nivel, propósito, formato, taxonomía de Andrea).
-  **"Mi semana"**: 3, 4 o 5 piezas, una por nivel según `WEEK_PLANS`
+  **"Mi semana"**: 3, 4, 5 o 7 piezas, una por nivel según `WEEK_PLANS`
   (lun inconsciente … dom solución única), encadenadas; "Agendar" las inserta
   en `content_calendar` (`status: idea`, `cta_type` según propósito).
-  ⚠️ Topado en **5** a propósito: 5 ideas tardan ~18s medido; 7 rozan el límite
-  de Netlify.
+  Medido en Vercel (2026-10-02): 5 piezas ~18 s, **7 piezas ~25-28 s**
+  (~2.8k tokens de salida), 6 ideas sueltas ~20-22 s. `maxTokens` 5000 y
+  `maxDuration = 120` en `estrategia/page.tsx` (las server actions corren en
+  la función de la página). Ya no hay tope por host: el 7 solo cabía en Vercel.
 - ⚠️ Probado contra la API real: sin reglas explícitas el modelo **inventaba
   cifras**, **ofertas**, **plazos** ("en 48 horas") y **recursos** ("plantilla
   en mi bio"), y escribía textos en pantalla de 5-6 palabras. El prompt pide
   huecos `[N]` y que CUENTE las palabras. Al tocarlo, reprobar eso.
+  ⚠️ Aun pidiéndolo, Haiku **cuenta mal**: ~1 de cada 3 textos en pantalla sale
+  con 5-7 palabras. Por eso `Layers` (`components/hooks/HookParts.tsx`) mide
+  el largo en código y pone el aviso "N palabras · alárgalo/recórtalo" en toda
+  tarjeta de gancho (ideas, panel del guion, revisor). También se iba al
+  **voseo** en pacocuevas.ia ("querés", "sos", "probá"): la regla de tuteo
+  ahora va repetida en la lista de reglas, pegada a los campos (bajó de 6
+  casos a 1 en una semana de 7).
 - **"✦ Proponer con IA"** (`draftStrategy`) propone cliente ideal + 5 pilares
   etiquetados; solo llena campos vacíos y no guarda.
 - Semilla: `supabase/seeds/0017_estrategia_fluia_pacocuevasia.sql` (corrida el
@@ -1090,8 +1099,8 @@ Dos fuentes nuevas en el generador de `/estrategia`.
   Existe porque el modelo seguía escribiendo "47 veces" o "200 pacientes" con la
   regla en el prompt. No atrapa casos inventados sin número ("esta clínica dejó
   de contestar…").
-- `IDEAS_COUNT` bajó de 6 a **5**: 6 ideas tardaban 23.4 s, al borde del límite
-  de Netlify. Subirlo después de la mudanza a Vercel.
+- `IDEAS_COUNT` = **6** (estuvo en 5 mientras el techo era el de Netlify;
+  volvió a 6 con Vercel, ~20-22 s medido).
 
 ## Esqueleto al adaptar desde Competencia (migración `0021`)
 

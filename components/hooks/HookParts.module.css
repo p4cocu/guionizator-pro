@@ -24,6 +24,19 @@
   color: var(--emerald);
 }
 
+.lengthWarn {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--signal);
+  color: var(--signal);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
 .score {
   font-family: var(--font-display);
   font-weight: 700;

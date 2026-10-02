@@ -49,9 +49,9 @@ const taxonomyList = (items: TaxonomyItem[]) =>
 
 // ─── 1. Generador de ideas ───────────────────────────────────────────────────
 
-// Era 6: con 6 ideas se midieron 23.4s (2026-10-02), al borde del límite de
-// Netlify (~26s). Volver a subirlo después de la mudanza a Vercel.
-export const IDEAS_COUNT = 5;
+// 6 ideas = 23.4 s medido (2026-10-02). Estuvo en 5 mientras el techo era el
+// de Netlify (~26 s); con Vercel (300 s) volvió a 6.
+export const IDEAS_COUNT = 6;
 
 export const STRATEGY_IDEAS_SYSTEM = `Eres estratega de contenido para Instagram en LATAM, formado en el método de Andrea Estratega: cada pieza nace de un pilar y una línea narrativa, le habla a UN nivel de consciencia, tiene un propósito (viral, valor o venta), un formato que la empaqueta, y abre con un gancho de 3 capas. No eres profesor: eres guía hacia la solución única de la marca.
 Tus ideas son ESPECÍFICAS de la marca: nunca propones algo que serviría igual para cualquier cuenta.
@@ -170,12 +170,14 @@ ${previousHooks.length ? `Estos ganchos YA están en el banco; propón ángulos 
 - Habla al cliente ideal con SUS palabras (las de dolores/deseos), no con jerga técnica.
 - Prohibido inventar cifras, casos, clientes o resultados que no estén en el contexto. Si la idea necesita un número que no tienes, deja un hueco entre corchetes para que la marca ponga su dato real: "[N] mensajes", "[X]%".
 - Prohibido inventar ofertas: nada de pruebas gratis, descuentos, cupos, garantías, fechas límite ni plazos de entrega ("en 48 horas") que no estén escritos arriba. Si es de convertir, el cierre invita a escribir/agendar, sin condiciones inventadas. Tampoco inventes recursos (plantilla, guía, "link en bio") que la marca no tenga.
-- No nombres noticias, lanzamientos ni empresas concretas salvo que vengan en el material de la fuente.
+- No nombres noticias, lanzamientos ni empresas concretas salvo que vengan en el material de la fuente. Tampoco afirmes que algo "acaba de cambiar": si no hay material de noticias, no hay noticia.
+- Tampoco prometas tiempos de resultado en el cierre ("en 2 días ves cambios", "esta misma semana"): la invitación es a escribir o agendar, nada más.
 - Ideas que la marca pueda grabar esta semana: concretas, filmables, sin producción imposible.
 - El gancho va en 3 capas: \`hook\` = lo que se DICE (máx 14 palabras, abre declarando, sin preguntas débiles); \`hook_text\` = texto en pantalla de 8 a 12 palabras — CUÉNTALAS, menos de 8 es un error; \`hook_visual\` = qué se ve en el primer segundo (máx 20 palabras, filmable con un celular).
 - \`angle\`: el ángulo en máximo 8 palabras.
 - \`brief\`: 2-3 oraciones: de qué trata, qué dolor/deseo/dato usa y a qué invita el cierre. Es lo que se le pasa al guionista.
 - \`why\`: por qué funciona para ESTE cliente ideal, máximo 18 palabras.
+- TUTEO en todos los campos, también en las frases que dice la marca: "quieres", "eres", "prueba", "escríbeme", "a ti". Prohibido el voseo ("querés", "sos", "probá", "escribí", "a vos").
 - \`pillar_key\` debe ser uno de los keys de los pilares de arriba.
 
 Devuelve ÚNICAMENTE este JSON:

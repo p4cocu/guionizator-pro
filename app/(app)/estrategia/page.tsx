@@ -13,6 +13,10 @@ import styles from "./estrategia.module.css";
 
 export const metadata = { title: "Estrategia — Guionizator Pro" };
 
+// Las server actions corren en la función de esta página: "Mi semana" de 7 e
+// IDEAS_COUNT = 6 pasan de los ~26 s que daba Netlify.
+export const maxDuration = 120;
+
 /** Sin la `0017` aplicada, PostgREST no encuentra la tabla. */
 function isMissingTable(error: { code?: string; message?: string } | null) {
   if (!error) return false;

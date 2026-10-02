@@ -27,7 +27,7 @@ export default function VisualHookView({
       <div className={sk.row}>
         <span className={sk.key}>Las 3 capas</span>
         <div>
-          <Layers verbal={hook.verbal} text={hook.text_overlay || null} visual={hook.first_second || null} />
+          <Layers verbal={hook.verbal} text={hook.text_overlay || null} visual={hook.first_second || null} measure={false} />
           <p className={sk.note} style={{ marginTop: 6 }}>
             {hook.text_overlay ? (
               <span className={sk.tag}>

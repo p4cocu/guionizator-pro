@@ -368,13 +368,14 @@ export async function generateIdeas(input: GenerateIdeasInput): Promise<Generate
       .limit(25);
 
     const pillar = strategy.pillars.find((p) => p.key === input.pillar_key) ?? null;
-    const weekSlots = input.week_posts && input.week_posts <= 5 ? (WEEK_PLANS[input.week_posts] ?? null) : null;
+    const weekSlots = input.week_posts && input.week_posts <= 7 ? (WEEK_PLANS[input.week_posts] ?? null) : null;
     const raw = await generateJsonPlain({
       label: "strategy-ideas",
       model: MODEL_FAST,
-      // 5 ideas con gancho de 3 capas ≈ 1.9k tokens, ~18s medido. "Mi semana"
-      // se topa en 5 a propósito: 7 rozaría el límite de Netlify (~26s).
-      maxTokens: 3500,
+      // Medido 2026-10-02 (Vercel): 6 ideas ≈ 2.2k tokens / ~21 s; "Mi semana"
+      // de 7 ≈ 2.7k / ~26 s. 5000 deja margen para no cortar por max_tokens,
+      // que dispara el reintento de lib/ai/json.ts y duplica la espera.
+      maxTokens: 5000,
       system: STRATEGY_IDEAS_SYSTEM,
       userMessage: buildStrategyIdeasPrompt({
         brandContext: buildClientContext(brand),

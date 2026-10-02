@@ -1,4 +1,4 @@
-import { HOOK_CRITERIA, scoreChecks, type HookCheck } from "@/lib/hooks/criteria";
+import { HOOK_CRITERIA, scoreChecks, wordCount, type HookCheck } from "@/lib/hooks/criteria";
 import styles from "./HookParts.module.css";
 
 /**
@@ -40,13 +40,40 @@ export function Checklist({ checks }: { checks: HookCheck[] }) {
 }
 
 /** Las 3 capas de un gancho (verbal siempre; texto y visual si existen). */
-export function Layers({ verbal, text, visual }: { verbal: string; text?: string | null; visual?: string | null }) {
+/**
+ * El modelo cuenta mal las palabras (probado 2026-10-02: ~1 de cada 3 textos
+ * en pantalla del generador de ideas salía con 5-7 pese a la regla), así que
+ * el largo se mide acá y se avisa en vez de confiar en lo que dice la IA.
+ */
+function TextLengthWarning({ text }: { text: string }) {
+  const words = wordCount(text);
+  if (words >= 8 && words <= 12) return null;
+  return (
+    <span className={styles.lengthWarn} title="El texto en pantalla funciona mejor con 8 a 12 palabras">
+      {words} palabras · {words < 8 ? "alárgalo" : "recórtalo"}
+    </span>
+  );
+}
+
+export function Layers({
+  verbal,
+  text,
+  visual,
+  measure = true,
+}: {
+  verbal: string;
+  text?: string | null;
+  visual?: string | null;
+  /** false para ganchos ajenos (Competencia): "alárgalo" no aplica. */
+  measure?: boolean;
+}) {
   return (
     <div className={styles.layers}>
       {text && (
         <p className={styles.layer}>
           <span className={styles.layerTag}>Pantalla</span>
           <strong>{text}</strong>
+          {measure && <TextLengthWarning text={text} />}
         </p>
       )}
       {visual && (
