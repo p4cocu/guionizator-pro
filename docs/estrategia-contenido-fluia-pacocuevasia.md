@@ -10,7 +10,7 @@ la app, en `/estrategia`, y se carga con la semilla
 | | **FLUIA** | **pacocuevas.ia** |
 |---|---|---|
 | Qué es | Agencia: te lo hago yo | Creador: te enseño a hacerlo |
-| Vende | Bot WhatsApp + CRM, automatizaciones, **páginas web**, Sonría | Guionizator ($400/mes; $300 amigos) + mentorías |
+| Vende | Bot WhatsApp + CRM, automatizaciones, **páginas web**, SonrIA | Guionizator ($400/mes; $300 amigos) + mentorías |
 | Le habla a | Dueño de clínica dental (nicho único por 3 meses) | Persona no técnica que le tiene miedo a la IA y quiere crear contenido |
 | CTA | "Escríbeme por WhatsApp" | Seguir → probar → Guionizator / mentoría |
 | Cara | Tú a cámara + pantalla del sistema | Tú a cámara + tus videos cinematográficos |
@@ -30,7 +30,7 @@ del sistema, es una razón más para contratarte.
 | 2 | Caso en vivo: la clínica | Nutrir | 25 | Probar con el bot real: semanas, números, errores |
 | 3 | IA sin miedo para tu negocio | Atraer | 20 | Explicar sin jerga qué puede y qué no |
 | 4 | Esto no se automatiza | Nutrir | 15 | Autoridad: decir los límites que otros callan |
-| 5 | Trabajar con FLUIA | Convertir | 15 | Proceso, demo, Sonría → WhatsApp |
+| 5 | Trabajar con FLUIA | Convertir | 15 | Proceso, demo, SonrIA → WhatsApp |
 
 Tu activo más valioso ahora mismo es **el bot de la clínica, que lleva menos de
 2 semanas**. Documéntalo desde ya (capturas, conversaciones anonimizadas,
