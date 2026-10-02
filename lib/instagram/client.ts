@@ -83,6 +83,24 @@ export async function getMedia(token: string, limit = 25): Promise<IgMedia[]> {
   return res.data ?? [];
 }
 
+/**
+ * Un post puntual. Pedirlo con el token de la cuenta valida además que el post
+ * sea de esa cuenta: con otro token, Instagram responde error.
+ */
+export async function getMediaById(mediaId: string, token: string): Promise<IgMedia> {
+  return igFetch<IgMedia>(mediaId, {
+    fields: "id,caption,media_type,media_url,permalink,thumbnail_url,timestamp",
+    access_token: token,
+  });
+}
+
+/** Métricas válidas según el tipo de post (`views` solo existe en video). */
+export function metricsForType(mediaType: string): string[] {
+  return mediaType === "VIDEO"
+    ? ["reach", "likes", "comments", "shares", "saved", "views"]
+    : ["reach", "likes", "comments", "shares", "saved"];
+}
+
 /** Trae métricas de un post específico. Las métricas válidas dependen del media_type. */
 export async function getMediaInsights(
   mediaId: string,

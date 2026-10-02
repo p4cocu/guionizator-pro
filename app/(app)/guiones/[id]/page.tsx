@@ -6,6 +6,7 @@ import { getVaultHooks } from "./vaultHooksLoader";
 import { getScriptFeedback } from "./feedbackActions";
 import ScriptDetailClient from "./ScriptDetailClient";
 import ClientFeedbackPanel from "./ClientFeedbackPanel";
+import PerformancePanel from "./PerformancePanel";
 
 export default async function ScriptDetailPage({
   params,
@@ -54,6 +55,25 @@ export default async function ScriptDetailPage({
         autoGenerate={autogen === "1"}
         initialCopyPlatform={platform}
       />
+      {/* Rendimiento en Instagram y "✦ Multiplicar" (0022): solo lo publicado. */}
+      {result.script.status === "publicado" && (
+        <PerformancePanel
+          // Se remonta con cada medición nueva: el panel guarda las métricas
+          // en estado y router.refresh() no reinicia un useState.
+          key={`${result.script.ig_media_id ?? "none"}-${result.script.ig_metrics_at ?? ""}`}
+          scriptId={id}
+          clientId={result.script.client_id}
+          scriptTitle={result.script.title ?? ""}
+          productId={result.script.product_id ?? null}
+          initial={{
+            ig_media_id: result.script.ig_media_id ?? null,
+            ig_permalink: result.script.ig_permalink ?? null,
+            ig_posted_at: result.script.ig_posted_at ?? null,
+            ig_metrics: result.script.ig_metrics ?? null,
+            ig_metrics_at: result.script.ig_metrics_at ?? null,
+          }}
+        />
+      )}
       {showFeedback && (
         <ClientFeedbackPanel
           scriptId={id}

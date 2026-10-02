@@ -48,6 +48,7 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0019 | `0019_portal_estrategia.sql` | ✅ 2026-10-02 (antes del deploy, vía Supabase MCP) |
 | 0020 | `0020_nicho_y_tema_competencia.sql` | ✅ 2026-10-02 (antes del deploy, vía Supabase MCP) |
 | 0021 | `0021_esqueleto_competencia.sql` | ✅ 2026-10-02 (antes del deploy, vía Supabase MCP) |
+| 0022 | `0022_rendimiento_guiones.sql` | ✅ 2026-10-02 (antes del deploy, vía Supabase MCP) |
 
 ### 0019 va ANTES del deploy
 

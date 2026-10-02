@@ -16,21 +16,38 @@ import styles from "../guiones.module.css";
 import ClientFilter from "../ClientFilter";
 import ScriptCard from "../ScriptCard";
 import GuionesTabs from "../GuionesTabs";
+import PerformanceToolbar from "./PerformanceToolbar";
+import { evaluatePerformance, sanitizeIgMetrics, WORKED_THRESHOLD } from "@/lib/multiply/metrics";
 
 export default async function GuionesHechosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cliente?: string; tipo?: string; servicio?: string }>;
+  searchParams: Promise<{ cliente?: string; tipo?: string; servicio?: string; funciono?: string }>;
 }) {
-  const { cliente, tipo, servicio } = await searchParams;
+  const { cliente, tipo, servicio, funciono } = await searchParams;
   const scriptType = (tipo === "reel" || tipo === "carousel") ? (tipo as ScriptType) : undefined;
 
-  const [scripts, clients, services] = await Promise.all([
+  const [allScripts, clients, services] = await Promise.all([
     getScripts(cliente, scriptType, ["publicado"], servicio || undefined),
     getClientOptions(),
     getProductFilterOptions(),
   ]);
   const selectedService = services.find((sv) => sv.id === servicio);
+
+  // "Funcionó" lo decide el código contra la mediana de la cuenta (0022).
+  const worked = new Set(
+    allScripts
+      .filter((sc) => evaluatePerformance(sanitizeIgMetrics(sc.ig_metrics), sc.ig_posted_at ?? null).worked)
+      .map((sc) => sc.id),
+  );
+  const onlyWorked = funciono === "1";
+  const scripts = onlyWorked ? allScripts.filter((sc) => worked.has(sc.id)) : allScripts;
+  const toggleParams = new URLSearchParams(
+    Object.entries({ cliente, tipo, servicio, funciono: onlyWorked ? undefined : "1" }).filter(
+      (e): e is [string, string] => typeof e[1] === "string" && e[1] !== "",
+    ),
+  );
+  const toggleHref = `/guiones/hechos${toggleParams.size ? `?${toggleParams}` : ""}`;
 
   const selectedClient = clients.find((c) => c.id === cliente);
   const typeLabel = scriptType === "reel" ? "Reels" : scriptType === "carousel" ? "Carruseles" : null;
@@ -57,14 +74,23 @@ export default async function GuionesHechosPage({
         </div>
       </div>
 
-      <GuionesTabs active="hechos" cliente={cliente} tipo={tipo} servicio={servicio} doneCount={scripts.length} />
+      <GuionesTabs active="hechos" cliente={cliente} tipo={tipo} servicio={servicio} doneCount={allScripts.length} />
+
+      <PerformanceToolbar
+        clientId={cliente || undefined}
+        workedCount={worked.size}
+        onlyWorked={onlyWorked}
+        toggleHref={toggleHref}
+      />
 
       <div className={styles.grid}>
         {scripts.length === 0 ? (
           <div className={styles.empty}>
             <div className={styles.emptyIcon}>✓</div>
             <h2 className={styles.emptyTitle}>
-              {selectedClient
+              {onlyWorked
+                ? `Nada pasó todavía de ${WORKED_THRESHOLD}× la mediana de su cuenta`
+                : selectedClient
                 ? `${selectedClient.nombre} no tiene publicaciones subidas`
                 : "Todavía no marcaste nada como subido"}
             </h2>

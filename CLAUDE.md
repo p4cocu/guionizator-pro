@@ -1093,6 +1093,52 @@ la adaptación completa (anexadas al brief de `/guiones/nuevo`) y a la ligera
   tutorial ("Haz clic en [opción]") en vez de la jugada narrativa, y "cómo
   retiene" arrastraba datos del competidor. Al tocar el prompt, reprobar eso.
 
+## Multiplicar lo que funcionó (migración `0022`)
+
+Método Andrea: "se multiplica este contenido si es que realmente funcionó".
+Panel **"Rendimiento en Instagram"** al pie de `/guiones/[id]` (solo con
+`status = publicado`; `PerformancePanel.tsx`, dibujado desde `page.tsx` como
+`ClientFeedbackPanel`) y badge 🔥 + filtro "Solo lo que funcionó" en
+`/guiones/hechos`. Solo estudio.
+
+- **Vincular**: el guion se une a un post de la cuenta de Instagram **de su
+  marca** (`instagram_accounts.client_id`). `scripts.ig_media_id`,
+  `ig_permalink`, `ig_posted_at`, `ig_metrics` (jsonb), `ig_metrics_at`. El
+  vínculo se valida pidiendo el post con el token de esa cuenta
+  (`getMediaById`): si no es suyo, Instagram da error. `saveScriptVersion` lo
+  arrastra a la versión nueva.
+- **Métricas bajo demanda** ("Actualizar métricas"), sin cron. Server actions
+  en `app/(app)/guiones/rendimiento/actions.ts`. Cada refresco trae los
+  últimos 50 posts de la cuenta con sus insights y guarda en `ig_metrics` las
+  métricas del post **junto con la mediana** de la cuenta en ese momento.
+- **"Funcionó" lo decide el código** (`lib/multiply/metrics.ts` →
+  `evaluatePerformance`), igual que los outliers y los números de investigación:
+  ≥ `WORKED_THRESHOLD` (1.5×) en vistas (video; alcance si no es video) **o**
+  en (compartidos + guardados) ÷ alcance. La mediana solo usa posts **del
+  último año** (`BASELINE_MAX_AGE_DAYS`) y pide mínimo 5: FLUIA tenía 4 posts
+  de 2026 y el resto de 2022, y compararía contra otra época de la cuenta.
+  Posts de menos de 3 días no se juzgan.
+- ⚠️ **El trigger `scripts_guard_member_update` cambió**: congela las 5
+  columnas `ig_*` para quien no es dueño (un `collaborator` tiene `update` sobre
+  `scripts`) y **un update que solo toca columnas `ig_*` ya no sella
+  `last_edited_by/at`**. Sin eso, cada refresco de métricas borraba el aviso
+  "el cliente editó el texto después de aprobarlo".
+- **"✦ Multiplicar"** (`multiplyScript`, `MODEL_FAST`, ~13 s medido): una sola
+  llamada saca el esqueleto de la pieza propia (misma forma que el de
+  Competencia, sin segundos) y propone 3 variaciones, una por eje
+  (`VARIATION_AXES`: otra línea narrativa / otro gancho / otro formato), con
+  gancho de 3 capas y `type` (reel/carrusel). Prompt en
+  `lib/multiply/prompt.ts`. Propone y no guarda; "Desarrollar" abre
+  `/guiones/nuevo` con `variationBrief`. Pasa por `maskInventedNumbers`.
+- ⚠️ Probado contra la API real: con la clave `"hook"` repetida (objeto en el
+  esqueleto, texto en la variación) el modelo **omitía la capa verbal** — por
+  eso las variaciones usan `dice` / `pantalla` / `se_ve`. Además pegaba el
+  conteo al texto ("… (9 palabras)", lo quita `stripCount`), se iba al voseo
+  ("generás") y la "otra línea narrativa" salía con el mismo tema y otro
+  gancho. Al tocar el prompt, reprobar esas cuatro.
+- `components/skeleton/SkeletonView.tsx` dibuja el esqueleto en los dos
+  lugares (Adaptar y Multiplicar).
+
 ## Ganchos de 3 capas (migración `0018`)
 
 El análisis de 1000 ganchos de Andrea: el gancho tiene **3 capas** — lo que se

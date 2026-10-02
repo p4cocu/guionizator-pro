@@ -53,6 +53,16 @@ export type ScriptRow = {
    * su ficha.
    */
   product_id: string | null;
+  /**
+   * Post de Instagram de este guion y su medición (migración `0022`). Los
+   * escribe solo `rendimiento/actions.ts`; forma de `ig_metrics` en
+   * `lib/multiply/metrics.ts`.
+   */
+  ig_media_id?: string | null;
+  ig_permalink?: string | null;
+  ig_posted_at?: string | null;
+  ig_metrics?: unknown;
+  ig_metrics_at?: string | null;
   clients: { nombre: string; marca: string | null } | null;
   /** Solo lo trae `getScriptWithVersions` (badge del detalle). */
   client_products?: { nombre: string; tipo: string } | null;
@@ -630,6 +640,13 @@ export async function saveScriptVersion(
       // (0014): sin arrastrarlos, guardar una versión los borraba en silencio.
       product_id: (current as ScriptRow).product_id ?? null,
       is_external: (current as ScriptRow).is_external === true,
+      // Y el post de Instagram con su medición (0022): sin esto, corregir una
+      // coma de un guion publicado le borraba el rendimiento.
+      ig_media_id: (current as ScriptRow).ig_media_id ?? null,
+      ig_permalink: (current as ScriptRow).ig_permalink ?? null,
+      ig_posted_at: (current as ScriptRow).ig_posted_at ?? null,
+      ig_metrics: (current as ScriptRow).ig_metrics ?? null,
+      ig_metrics_at: (current as ScriptRow).ig_metrics_at ?? null,
     })
     .select("id")
     .single();

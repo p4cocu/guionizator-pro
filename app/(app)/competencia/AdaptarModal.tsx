@@ -10,7 +10,7 @@ import {
   skeletonInstruction,
   type PostSkeleton,
 } from "@/lib/competencia/skeleton";
-import { HOOK_TYPE_LABELS } from "@/lib/competencia/taxonomy";
+import SkeletonView from "@/components/skeleton/SkeletonView";
 import { getProductOptions } from "../clientes/productActions";
 import type { CompetitorPost } from "./actions";
 import s from "./competencia.module.css";
@@ -348,82 +348,19 @@ export default function AdaptarModal({ post, clientId, clientName, onClose, onPo
               )}
 
               {!skLoading && !transcribing && skeleton && (
-                <div className={s.skeletonCard}>
-                  <div className={s.skeletonRow}>
-                    <span className={s.skeletonKey}>Gancho</span>
-                    <div>
-                      {skeleton.hook.quote && <p className={s.skeletonQuote}>“{skeleton.hook.quote}”</p>}
-                      <p className={s.skeletonNote}>
-                        {skeleton.hook.hook_type && (
-                          <span className={s.skeletonTag}>
-                            {HOOK_TYPE_LABELS[skeleton.hook.hook_type] ?? skeleton.hook.hook_type}
-                          </span>
-                        )}
-                        {skeleton.hook.why}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className={s.skeletonRow}>
-                    <span className={s.skeletonKey}>Primer problema</span>
-                    <div>
-                      <p className={s.skeletonNote}>
-                        <span className={s.skeletonTag}>
-                          {skeleton.first_problem.second != null
-                            ? `≈ seg ${skeleton.first_problem.second}`
-                            : !skeleton.first_problem.quote
-                              ? "no plantea"
-                              : skeleton.source === "caption"
-                                ? "sin audio"
-                                : "seg —"}
-                        </span>
-                        {skeleton.first_problem.what}
-                      </p>
-                      {skeleton.first_problem.quote && (
-                        <p className={s.skeletonQuote}>“{skeleton.first_problem.quote}”</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {skeleton.retention.length > 0 && (
-                    <div className={s.skeletonRow}>
-                      <span className={s.skeletonKey}>Cómo retiene</span>
-                      <ul className={s.skeletonList}>
-                        {skeleton.retention.map((r, i) => (
-                          <li key={i}>{r}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  <div className={s.skeletonRow}>
-                    <span className={s.skeletonKey}>Cómo cierra</span>
-                    <div>
-                      {skeleton.closing.quote && <p className={s.skeletonQuote}>“{skeleton.closing.quote}”</p>}
-                      {skeleton.closing.asks && <p className={s.skeletonNote}>Pide: {skeleton.closing.asks}</p>}
-                    </div>
-                  </div>
-
-                  {skeleton.steps.length > 0 && (
-                    <div className={s.skeletonRow}>
-                      <span className={s.skeletonKey}>Esqueleto</span>
-                      <ol className={s.skeletonList}>
-                        {skeleton.steps.map((st, i) => (
-                          <li key={i}>{st}</li>
-                        ))}
-                      </ol>
-                    </div>
-                  )}
-
-                  <p className={s.modalMeta}>
-                    {skeleton.source === "transcription"
-                      ? "El segundo es estimado (≈2.5 palabras/s): la transcripción no trae tiempos."
-                      : "Sacado de la descripción del post."}{" "}
-                    <button className={s.linkBtn} onClick={() => runSkeleton(true)} type="button">
-                      Rehacer
-                    </button>
-                  </p>
-                </div>
+                <SkeletonView
+                  skeleton={skeleton}
+                  footer={
+                    <>
+                      {skeleton.source === "transcription"
+                        ? "El segundo es estimado (≈2.5 palabras/s): la transcripción no trae tiempos."
+                        : "Sacado de la descripción del post."}{" "}
+                      <button className={s.linkBtn} onClick={() => runSkeleton(true)} type="button">
+                        Rehacer
+                      </button>
+                    </>
+                  }
+                />
               )}
 
               {!skLoading && !transcribing && (

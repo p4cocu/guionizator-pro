@@ -1,0 +1,291 @@
+/* Panel "Rendimiento en Instagram" al pie de un guion publicado (0022). */
+
+.panel {
+  margin-top: 32px;
+  padding: 20px 22px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+  background-color: var(--glass-base);
+  background-image: var(--glass-overlay);
+  box-shadow: var(--glass-inset), var(--glass-shadow);
+  display: grid;
+  gap: 14px;
+  scroll-margin-top: 80px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.worked {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--signal);
+}
+
+.normal {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.empty p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm, 10px);
+  background: var(--ink);
+  border: 1px solid var(--glass-border);
+}
+
+.metricValue {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.metricLabel {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.metricMedian {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.meta {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.meta a {
+  color: var(--emerald);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--flare);
+}
+
+/* ── Selector de post ── */
+
+.picker {
+  display: grid;
+  gap: 10px;
+}
+
+.pickerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.postList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.post {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px;
+  text-align: left;
+  border-radius: var(--r-sm, 10px);
+  border: 1px solid var(--glass-border);
+  background: var(--ink);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.post:hover:not(:disabled) {
+  border-color: var(--emerald);
+}
+
+.post:disabled {
+  cursor: default;
+}
+
+.postCurrent {
+  border-color: var(--emerald);
+}
+
+.thumb,
+.thumbEmpty {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.thumbEmpty {
+  display: grid;
+  place-items: center;
+  background: var(--glass-base);
+  color: var(--text-muted);
+}
+
+.postText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.postDate {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--emerald);
+}
+
+.postCaption {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* ── Multiplicar ── */
+
+.multiply {
+  display: grid;
+  gap: 12px;
+}
+
+.variations {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.variation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border);
+  background: var(--ink);
+}
+
+.variation > button {
+  margin-top: auto;
+  align-self: flex-start;
+}
+
+.axis {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--signal);
+  background: color-mix(in srgb, var(--signal) 14%, transparent);
+}
+
+.varTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.changes {
+  margin: 0;
+  font-size: 12px;
+  color: var(--emerald);
+}
+
+.angle {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.layers {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.layers dt {
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.layers dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.warn {
+  margin: 0;
+  font-size: 12px;
+  color: var(--signal);
+}
+
+@media (max-width: 560px) {
+  .panel {
+    padding: 16px;
+  }
+}

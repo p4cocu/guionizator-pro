@@ -14,6 +14,7 @@ import {
 } from "./labels";
 import ScriptIdChip from "./ScriptIdChip";
 import StarButton from "./StarButton";
+import { evaluatePerformance, sanitizeIgMetrics, shortNumber } from "@/lib/multiply/metrics";
 import styles from "./guiones.module.css";
 
 function formatDate(iso: string) {
@@ -98,11 +99,35 @@ export default function ScriptCard({
           <span className={styles.clientGenerated}>✦ Generado por el cliente</span>
         </div>
       )}
+      {/* Rendimiento en Instagram (0022): solo en lo publicado. */}
+      {status === "publicado" && <PerformanceLine script={script} />}
       {!hideClient && <p className={styles.cardClient}>{clientName}</p>}
       <p className={styles.cardStructure}>{script.title || <span style={{ opacity: 0.45 }}>Sin título</span>}</p>
       <p style={{ fontSize: 11, color: "var(--text-dim)", margin: 0 }}>{script.structure_name}</p>
       <p className={styles.cardBrief}>{script.brief}</p>
       <ScriptIdChip id={script.id} />
     </Link>
+  );
+}
+
+function PerformanceLine({ script }: { script: ScriptRow }) {
+  if (!script.ig_media_id) {
+    return <p className={styles.perfLine}>Sin vincular a su post</p>;
+  }
+  const m = sanitizeIgMetrics(script.ig_metrics);
+  if (!m) return <p className={styles.perfLine}>Vinculado · sin métricas</p>;
+  const perf = evaluatePerformance(m, script.ig_posted_at ?? null);
+  return (
+    <div className={styles.perfRow}>
+      {perf.worked && perf.best && (
+        <span className={styles.perfWorked}>
+          🔥 {perf.best.x}× {perf.best.label}
+        </span>
+      )}
+      <span className={styles.perfLine}>
+        {m.views !== null ? `▶ ${shortNumber(m.views)}` : `👁 ${shortNumber(m.reach)}`}
+        {` · ↗ ${shortNumber(m.shares)} · 🔖 ${shortNumber(m.saved)}`}
+      </span>
+    </div>
   );
 }
