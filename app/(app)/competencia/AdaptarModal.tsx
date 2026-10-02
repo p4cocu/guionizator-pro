@@ -120,7 +120,7 @@ export default function AdaptarModal({ post, clientId, clientName, onClose, onPo
         setSkeleton(res.skeleton);
         onPostUpdate?.({ skeleton: res.skeleton, skeleton_at: res.skeleton_at });
       } catch (e) {
-        setSkError((e as Error).message || "No se pudo extraer el esqueleto.");
+        setSkError((e as Error).message || "No se pudo sacar la anatomía del post.");
       } finally {
         setSkLoading(false);
       }
@@ -313,14 +313,14 @@ export default function AdaptarModal({ post, clientId, clientName, onClose, onPo
           {phase === "skeleton" && (
             <div className={s.adaptPicker}>
               <p className={s.adaptPickerLabel}>
-                La estructura que hizo funcionar este post, separada de su tema. Es lo que se va a
-                replicar con el tuyo.
+                Anatomía del post: cómo está armado (gancho, primer problema, cómo retiene, cómo
+                cierra), separado de su tema. Es lo que se va a replicar con el tuyo.
               </p>
 
               {skLoading && (
                 <div className={s.modalLoading}>
                   <div className={s.spinner} />
-                  <p>Sacando el esqueleto…</p>
+                  <p>Sacando la anatomía del post…</p>
                 </div>
               )}
               {transcribing && !skLoading && (
@@ -336,7 +336,7 @@ export default function AdaptarModal({ post, clientId, clientName, onClose, onPo
                   <div className={s.skeletonNoticeActions}>
                     {needsTranscription ? (
                       <button className="btn btn-secondary" onClick={transcribeThenSkeleton}>
-                        🎤 Transcribir y sacar esqueleto
+                        🎤 Transcribir y sacar anatomía
                       </button>
                     ) : (
                       <button className="btn btn-secondary" onClick={() => runSkeleton(true)}>
@@ -564,7 +564,7 @@ export default function AdaptarModal({ post, clientId, clientName, onClose, onPo
                 onClick={() => setPhase("pick")}
                 disabled={skLoading || transcribing}
               >
-                {skeleton ? "Continuar →" : "Seguir sin esqueleto →"}
+                {skeleton ? "Continuar →" : "Seguir sin anatomía →"}
               </button>
             </>
           )}
@@ -572,7 +572,7 @@ export default function AdaptarModal({ post, clientId, clientName, onClose, onPo
           {phase === "pick" && (
             <>
               <button className="btn btn-secondary" onClick={() => setPhase("skeleton")}>
-                ← Esqueleto
+                ← Anatomía
               </button>
               <button className="btn btn-primary" onClick={handleContinuar}>
                 {adaptType === "completa" ? "Ir a generación →" : "Generar →"}

@@ -1068,6 +1068,11 @@ Dos fuentes nuevas en el generador de `/estrategia`.
 
 ## Esqueleto al adaptar desde Competencia (migración `0021`)
 
+> **Nombre para el usuario: "Anatomía del post"** (decisión de Paco,
+> 2026-10-02: "esqueleto" sonaba raro). Todo texto visible —pantallas, errores
+> y lo que llega al brief— dice "anatomía"; el código, la base (`skeleton`) y
+> los prompts internos siguen diciendo esqueleto/skeleton.
+
 "Adaptar a mi marca" en `/competencia` abre ahora con un paso previo (método
 Andrea, "Nivel 2"): el **esqueleto** del post fuente — gancho (cita + tipo de
 `taxonomy.ts`), primer problema, cómo retiene, cómo cierra y la estructura en

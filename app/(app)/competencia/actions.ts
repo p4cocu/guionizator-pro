@@ -689,7 +689,7 @@ export async function extractSkeleton(
     return {
       ok: false,
       needsTranscription: true,
-      error: "Transcribe el reel primero: sin el audio, el esqueleto saldría inventado.",
+      error: "Transcribe el reel primero: sin el audio, la anatomía del post saldría inventada.",
     };
   }
   if (!transcription && !caption) {

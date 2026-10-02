@@ -191,8 +191,8 @@ export function variationBrief(input: {
     v.hook_visual && `- Lo que se ve: ${v.hook_visual}`,
     v.hook && `- Lo que se dice: ${v.hook}`,
     "",
-    `── Esqueleto de la pieza original ──\n${skeletonToText(input.skeleton)}`,
-    "Mantén ESTE esqueleto (orden de las piezas, tipo de cierre y recursos de retención). Cambia solo lo que dice la variación. No agregues cifras, casos, plazos ni ofertas que no estén en el perfil de la marca.",
+    `── Anatomía de la pieza original ──\n${skeletonToText(input.skeleton)}`,
+    "Mantén ESTA anatomía (orden de las piezas, tipo de cierre y recursos de retención). Cambia solo lo que dice la variación. No agregues cifras, casos, plazos ni ofertas que no estén en el perfil de la marca.",
   ]
     .filter((l): l is string => typeof l === "string")
     .join("\n");

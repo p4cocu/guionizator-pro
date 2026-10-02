@@ -80,7 +80,7 @@ export default function SkeletonView({
 
       {skeleton.steps.length > 0 && (
         <div className={s.row}>
-          <span className={s.key}>Esqueleto</span>
+          <span className={s.key}>Paso a paso</span>
           <ol className={s.list}>
             {skeleton.steps.map((st, i) => (
               <li key={i}>{st}</li>

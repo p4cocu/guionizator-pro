@@ -285,9 +285,9 @@ export default function PerformancePanel({
 
       {multi && (
         <div className={s.multiply}>
-          <p className={s.meta}>La estructura que la hizo funcionar:</p>
+          <p className={s.meta}>Anatomía del post: lo que lo hizo funcionar.</p>
           <SkeletonView skeleton={multi.skeleton} timed={false} />
-          <p className={s.meta}>3 variaciones con ese mismo esqueleto. Cada una cambia una sola cosa:</p>
+          <p className={s.meta}>3 variaciones con esa misma anatomía. Cada una cambia una sola cosa:</p>
           <div className={s.variations}>
             {multi.variations.map((v, i) => {
               const axis = VARIATION_AXES.find((a) => a.id === v.axis);

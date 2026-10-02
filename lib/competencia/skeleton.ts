@@ -190,7 +190,7 @@ export function skeletonToText(sk: PostSkeleton): string {
     lines.push(`- Cómo cierra: ${sk.closing.asks || `"${sk.closing.quote}"`}`);
   }
   if (sk.steps.length) {
-    lines.push(`- Esqueleto en ${sk.steps.length} piezas:`);
+    lines.push(`- Paso a paso (${sk.steps.length} piezas):`);
     sk.steps.forEach((st, i) => lines.push(`  ${i + 1}. ${st}`));
   }
   return lines.join("\n");
@@ -205,7 +205,7 @@ export function skeletonInstruction(sk: PostSkeleton | null, interpretation: str
   const parts: string[] = [];
   if (sk) {
     parts.push(
-      `── Esqueleto del post fuente ──\n${skeletonToText(sk)}\nArma ESTE MISMO esqueleto (gancho, momento del primer problema, recursos de retención y tipo de cierre) pero para el tema del cliente. Respeta el orden de las piezas; el contenido de cada una es del cliente.`,
+      `── Anatomía del post fuente ──\n${skeletonToText(sk)}\nArma ESTA MISMA anatomía (gancho, momento del primer problema, recursos de retención y tipo de cierre) pero para el tema del cliente. Respeta el orden de las piezas; el contenido de cada una es del cliente.`,
     );
   }
   const interp = interpretation.trim().slice(0, INTERPRETATION_MAX);
