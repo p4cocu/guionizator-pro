@@ -16,6 +16,12 @@ import {
   type PostCommentsByPost,
 } from "@/lib/competencia/postComments";
 import {
+  buildSkeletonPrompt,
+  estimateSecond,
+  sanitizeSkeleton,
+  type PostSkeleton,
+} from "@/lib/competencia/skeleton";
+import {
   buildTaxonomyPrompt,
   HOOK_TYPE_SLUGS,
   SCRIPT_STRUCTURE_SLUGS,
@@ -269,6 +275,9 @@ export type CompetitorPost = {
   classified_at: string | null;
   /** Tema corto (0020). Null en los clasificados antes de 0020. */
   topic: string | null;
+  /** Esqueleto guardado (0021). jsonb crudo: leer con `sanitizeSkeleton`. */
+  skeleton: unknown;
+  skeleton_at: string | null;
   is_outlier: boolean;
   outlier_multiple: number | null;
   account_median_comments: number | null;
@@ -276,7 +285,7 @@ export type CompetitorPost = {
 
 /** Columnas base de un post (sin los derivados de outlier). */
 const POST_COLUMNS =
-  "id, public_id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual, hook_type, script_structure, value_pillar, classification_notes, classified_at, topic";
+  "id, public_id, username, permalink, type, caption, likes, comments, video_views, followers, posted_at, transcription, is_favorite, is_disliked, is_manual, hook_type, script_structure, value_pillar, classification_notes, classified_at, topic, skeleton, skeleton_at";
 
 export type LatestResults = {
   scrapeId: string | null;
@@ -636,6 +645,95 @@ ${transcription.slice(0, 4000) || "(sin transcripción; clasifica con base en la
   if (updateError) return { ok: false, error: updateError.message };
 
   return { ok: true, classification };
+}
+
+// ─── Esqueleto del post (0021) ────────────────────────────────────────────────
+
+export type SkeletonResult =
+  | { ok: true; skeleton: PostSkeleton; skeleton_at: string }
+  | { ok: false; error: string; needsTranscription?: boolean };
+
+/**
+ * Extrae (o devuelve el guardado) el esqueleto de un post: gancho, primer
+ * problema, retención, cierre y piezas. `force` lo rehace.
+ *
+ * Un reel sin transcripción no se analiza: el caption de un reel casi nunca
+ * cuenta el guion y el esqueleto saldría inventado. El carrusel sí va con su
+ * descripción (no hay audio que transcribir), y por eso no lleva segundos.
+ */
+export async function extractSkeleton(
+  postId: string,
+  opts?: { force?: boolean },
+): Promise<SkeletonResult> {
+  const { supabase, user } = await getAuthUser();
+
+  const { data: post } = await supabase
+    .from("competitor_posts")
+    .select("id, type, transcription, caption, skeleton, skeleton_at")
+    .eq("id", postId)
+    .eq("owner_id", user.id)
+    .single();
+  if (!post) return { ok: false, error: "Post no encontrado." };
+
+  if (!opts?.force) {
+    const saved = sanitizeSkeleton(post.skeleton);
+    if (saved && post.skeleton_at) {
+      return { ok: true, skeleton: saved, skeleton_at: post.skeleton_at as string };
+    }
+  }
+
+  const transcription = (post.transcription as string | null)?.trim() ?? "";
+  const caption = (post.caption as string | null)?.trim() ?? "";
+  const isCarousel = post.type === "carousel" || post.type === "image";
+  if (!transcription && !isCarousel) {
+    return {
+      ok: false,
+      needsTranscription: true,
+      error: "Transcribe el reel primero: sin el audio, el esqueleto saldría inventado.",
+    };
+  }
+  if (!transcription && !caption) {
+    return { ok: false, error: "El post no tiene texto para analizar." };
+  }
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, error: "Falta ANTHROPIC_API_KEY." };
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = await generateJsonPlain({
+      label: "post-skeleton",
+      model: MODEL_FAST,
+      maxTokens: 1200,
+      userMessage: buildSkeletonPrompt({ transcription, caption }),
+    });
+  } catch (e) {
+    if (e instanceof AiJsonError) {
+      return { ok: false, error: "La IA no devolvió un formato válido. Intenta de nuevo." };
+    }
+    throw e;
+  }
+
+  // El segundo se mide acá, nunca lo pone el modelo (ver skeleton.ts).
+  const fp = (parsed.first_problem ?? {}) as Record<string, unknown>;
+  const quote = typeof fp.quote === "string" ? fp.quote : "";
+  const skeleton = sanitizeSkeleton({
+    ...parsed,
+    source: transcription ? "transcription" : "caption",
+    first_problem: {
+      ...fp,
+      second: transcription && quote ? estimateSecond(transcription, quote) : null,
+    },
+  });
+  if (!skeleton) return { ok: false, error: "La IA no encontró una estructura. Intenta de nuevo." };
+
+  const skeleton_at = new Date().toISOString();
+  const { error } = await supabase
+    .from("competitor_posts")
+    .update({ skeleton, skeleton_at })
+    .eq("id", postId)
+    .eq("owner_id", user.id);
+  if (error) return { ok: false, error: error.message };
+
+  return { ok: true, skeleton, skeleton_at };
 }
 
 // ─── Estadísticas de clasificación (subvista de Análisis) ─────────────────────

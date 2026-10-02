@@ -1,8 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveScriptWithNewIdea } from "../guiones/actions";
+import { extractSkeleton } from "./actions";
+import {
+  INTERPRETATION_MAX,
+  sanitizeSkeleton,
+  skeletonInstruction,
+  type PostSkeleton,
+} from "@/lib/competencia/skeleton";
+import { HOOK_TYPE_LABELS } from "@/lib/competencia/taxonomy";
 import { getProductOptions } from "../clientes/productActions";
 import type { CompetitorPost } from "./actions";
 import s from "./competencia.module.css";
@@ -38,6 +46,8 @@ type Props = {
   clientId: string;
   clientName?: string;
   onClose: () => void;
+  /** Avisa al tablero lo que cambió del post (transcripción, esqueleto). */
+  onPostUpdate?: (patch: Partial<CompetitorPost>) => void;
 };
 
 function isReel(c: Content): c is ReelContent {
@@ -51,7 +61,11 @@ function buildBrief(post: CompetitorPost): string {
   return `Adaptación del post de @${post.username} (vía ${source})${excerpt ? `: "${excerpt}"` : ""}`;
 }
 
-function buildCompletaBrief(post: CompetitorPost): string {
+function buildCompletaBrief(
+  post: CompetitorPost,
+  skeleton: PostSkeleton | null,
+  interpretation: string,
+): string {
   const caption = (post.caption ?? "").trim().replace(/\s+/g, " ");
   const excerpt = caption.length > 300 ? caption.slice(0, 300) + "…" : caption;
 
@@ -73,16 +87,75 @@ function buildCompletaBrief(post: CompetitorPost): string {
     metrics ? `\nMétricas del post original: ${metrics}` : null,
     transcriptSection || null,
     `\nObjetivo: tomar el ángulo y gancho ganadores de este post y reescribirlos 100% con el estilo, productos y tono del cliente. No es una copia: apropiarse del patrón que funcionó.`,
+    skeletonInstruction(skeleton, interpretation) || null,
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-export default function AdaptarModal({ post, clientId, clientName, onClose }: Props) {
+export default function AdaptarModal({ post, clientId, clientName, onClose, onPostUpdate }: Props) {
   const router = useRouter();
 
-  // Paso 1: picker
-  const [phase, setPhase] = useState<"pick" | "loading" | "result">("pick");
+  // Paso 0: esqueleto del post fuente + "tu interpretación" (0021)
+  const [phase, setPhase] = useState<"skeleton" | "pick" | "loading" | "result">("skeleton");
+  const [skeleton, setSkeleton] = useState<PostSkeleton | null>(() => sanitizeSkeleton(post.skeleton));
+  const [skLoading, setSkLoading] = useState(false);
+  const [skError, setSkError] = useState<string | null>(null);
+  const [needsTranscription, setNeedsTranscription] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [interpretation, setInterpretation] = useState("");
+
+  const runSkeleton = useCallback(
+    async (force = false) => {
+      setSkLoading(true);
+      setSkError(null);
+      setNeedsTranscription(false);
+      try {
+        const res = await extractSkeleton(post.id, { force });
+        if (!res.ok) {
+          setSkError(res.error);
+          setNeedsTranscription(Boolean(res.needsTranscription));
+          return;
+        }
+        setSkeleton(res.skeleton);
+        onPostUpdate?.({ skeleton: res.skeleton, skeleton_at: res.skeleton_at });
+      } catch (e) {
+        setSkError((e as Error).message || "No se pudo extraer el esqueleto.");
+      } finally {
+        setSkLoading(false);
+      }
+    },
+    [post.id, onPostUpdate]
+  );
+
+  // Al abrir: si no hay esqueleto guardado, se extrae solo (~5s, MODEL_FAST).
+  const autoRan = useRef(false);
+  useEffect(() => {
+    if (autoRan.current || skeleton) return;
+    autoRan.current = true;
+    void runSkeleton(false);
+  }, [skeleton, runSkeleton]);
+
+  async function transcribeThenSkeleton() {
+    setTranscribing(true);
+    setSkError(null);
+    try {
+      const res = await fetch("/api/transcribe-reel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_id: post.id }),
+      });
+      const json = (await res.json()) as { transcription?: string; error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Error al transcribir");
+      onPostUpdate?.({ transcription: json.transcription ?? null });
+      setTranscribing(false);
+      await runSkeleton(true);
+    } catch (e) {
+      setSkError((e as Error).message);
+    } finally {
+      setTranscribing(false);
+    }
+  }
   const [adaptType, setAdaptType] = useState<AdaptType>("completa");
   const [adaptContext, setAdaptContext] = useState("");
 
@@ -126,6 +199,8 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
             adapt_type: type,
             context: context.trim() || undefined,
             product_id: productId || undefined,
+            skeleton: skeleton ?? undefined,
+            interpretation: interpretation.trim() || undefined,
           }),
         });
         const json = await res.json();
@@ -139,12 +214,12 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
         setPhase("result");
       }
     },
-    [clientId, post, productId]
+    [clientId, post, productId, skeleton, interpretation]
   );
 
   function handleContinuar() {
     if (adaptType === "completa") {
-      const brief = buildCompletaBrief(post);
+      const brief = buildCompletaBrief(post, skeleton, interpretation);
       const type = post.type === "carousel" ? "carousel" : "reel";
       const params = new URLSearchParams({
         client_id: clientId,
@@ -233,6 +308,139 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
         </div>
 
         <div className={s.modalBody}>
+
+          {/* ── Paso 0: Esqueleto ── */}
+          {phase === "skeleton" && (
+            <div className={s.adaptPicker}>
+              <p className={s.adaptPickerLabel}>
+                La estructura que hizo funcionar este post, separada de su tema. Es lo que se va a
+                replicar con el tuyo.
+              </p>
+
+              {skLoading && (
+                <div className={s.modalLoading}>
+                  <div className={s.spinner} />
+                  <p>Sacando el esqueleto…</p>
+                </div>
+              )}
+              {transcribing && !skLoading && (
+                <div className={s.modalLoading}>
+                  <div className={s.spinner} />
+                  <p>Transcribiendo el reel…</p>
+                </div>
+              )}
+
+              {!skLoading && !transcribing && skError && (
+                <div className={s.skeletonNotice}>
+                  <p className={s.error}>{skError}</p>
+                  <div className={s.skeletonNoticeActions}>
+                    {needsTranscription ? (
+                      <button className="btn btn-secondary" onClick={transcribeThenSkeleton}>
+                        🎤 Transcribir y sacar esqueleto
+                      </button>
+                    ) : (
+                      <button className="btn btn-secondary" onClick={() => runSkeleton(true)}>
+                        Reintentar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!skLoading && !transcribing && skeleton && (
+                <div className={s.skeletonCard}>
+                  <div className={s.skeletonRow}>
+                    <span className={s.skeletonKey}>Gancho</span>
+                    <div>
+                      {skeleton.hook.quote && <p className={s.skeletonQuote}>“{skeleton.hook.quote}”</p>}
+                      <p className={s.skeletonNote}>
+                        {skeleton.hook.hook_type && (
+                          <span className={s.skeletonTag}>
+                            {HOOK_TYPE_LABELS[skeleton.hook.hook_type] ?? skeleton.hook.hook_type}
+                          </span>
+                        )}
+                        {skeleton.hook.why}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className={s.skeletonRow}>
+                    <span className={s.skeletonKey}>Primer problema</span>
+                    <div>
+                      <p className={s.skeletonNote}>
+                        <span className={s.skeletonTag}>
+                          {skeleton.first_problem.second != null
+                            ? `≈ seg ${skeleton.first_problem.second}`
+                            : !skeleton.first_problem.quote
+                              ? "no plantea"
+                              : skeleton.source === "caption"
+                                ? "sin audio"
+                                : "seg —"}
+                        </span>
+                        {skeleton.first_problem.what}
+                      </p>
+                      {skeleton.first_problem.quote && (
+                        <p className={s.skeletonQuote}>“{skeleton.first_problem.quote}”</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {skeleton.retention.length > 0 && (
+                    <div className={s.skeletonRow}>
+                      <span className={s.skeletonKey}>Cómo retiene</span>
+                      <ul className={s.skeletonList}>
+                        {skeleton.retention.map((r, i) => (
+                          <li key={i}>{r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className={s.skeletonRow}>
+                    <span className={s.skeletonKey}>Cómo cierra</span>
+                    <div>
+                      {skeleton.closing.quote && <p className={s.skeletonQuote}>“{skeleton.closing.quote}”</p>}
+                      {skeleton.closing.asks && <p className={s.skeletonNote}>Pide: {skeleton.closing.asks}</p>}
+                    </div>
+                  </div>
+
+                  {skeleton.steps.length > 0 && (
+                    <div className={s.skeletonRow}>
+                      <span className={s.skeletonKey}>Esqueleto</span>
+                      <ol className={s.skeletonList}>
+                        {skeleton.steps.map((st, i) => (
+                          <li key={i}>{st}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+
+                  <p className={s.modalMeta}>
+                    {skeleton.source === "transcription"
+                      ? "El segundo es estimado (≈2.5 palabras/s): la transcripción no trae tiempos."
+                      : "Sacado de la descripción del post."}{" "}
+                    <button className={s.linkBtn} onClick={() => runSkeleton(true)} type="button">
+                      Rehacer
+                    </button>
+                  </p>
+                </div>
+              )}
+
+              {!skLoading && !transcribing && (
+                <div className={s.adaptContextField}>
+                  <label className="field-label">Tu interpretación (opcional)</label>
+                  <textarea
+                    className="textarea"
+                    rows={3}
+                    maxLength={INTERPRETATION_MAX}
+                    placeholder="Qué ángulo le pones tú, qué te ha pasado con esto, con qué no estás de acuerdo… Se usa tal cual: no se le agregan cifras ni casos."
+                    value={interpretation}
+                    onChange={(e) => setInterpretation(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Paso 1: Picker ── */}
           {phase === "pick" && (
@@ -409,10 +617,25 @@ export default function AdaptarModal({ post, clientId, clientName, onClose }: Pr
 
         {/* ── Footer ── */}
         <div className={s.modalFoot}>
-          {phase === "pick" && (
+          {phase === "skeleton" && (
             <>
               <button className="btn btn-secondary" onClick={onClose}>
                 Cancelar
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => setPhase("pick")}
+                disabled={skLoading || transcribing}
+              >
+                {skeleton ? "Continuar →" : "Seguir sin esqueleto →"}
+              </button>
+            </>
+          )}
+
+          {phase === "pick" && (
+            <>
+              <button className="btn btn-secondary" onClick={() => setPhase("skeleton")}>
+                ← Esqueleto
               </button>
               <button className="btn btn-primary" onClick={handleContinuar}>
                 {adaptType === "completa" ? "Ir a generación →" : "Generar →"}

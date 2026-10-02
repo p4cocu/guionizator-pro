@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   addCompetitor,
   addManualPost,
@@ -151,6 +151,10 @@ export default function CompetenciaClient({ clients }: Props) {
 
   const [competitorSort, setCompetitorSort] = useState<"added" | "name" | "followers">("added");
   const [adaptingPost, setAdaptingPost] = useState<CompetitorPost | null>(null);
+  const adaptingPostIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    adaptingPostIdRef.current = adaptingPost?.id ?? null;
+  }, [adaptingPost]);
   const [adaptTargetClientId, setAdaptTargetClientId] = useState<string | null>(null);
   const [ganchoPost, setGanchoPost] = useState<CompetitorPost | null>(null);
   const [otherBrandPickerPostId, setOtherBrandPickerPostId] = useState<string | null>(null);
@@ -478,6 +482,17 @@ export default function CompetenciaClient({ clients }: Props) {
       setTranscribingId(null);
     }
   }
+
+  // Lo que el modal de adaptar cambió del post (transcripción, esqueleto 0021).
+  // Estable para no re-disparar los efectos del modal en cada render.
+  const handleAdaptPostUpdate = useCallback(
+    (patch: Partial<CompetitorPost>) => {
+      const id = adaptingPostIdRef.current;
+      if (!id) return;
+      setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+    },
+    []
+  );
 
   async function handleClassify(postId: string, opts?: { silent?: boolean }) {
     setClassifyingId(postId);
@@ -1366,6 +1381,7 @@ export default function CompetenciaClient({ clients }: Props) {
             setAdaptingPost(null);
             setAdaptTargetClientId(null);
           }}
+          onPostUpdate={handleAdaptPostUpdate}
         />
       )}
 

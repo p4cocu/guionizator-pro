@@ -13,6 +13,7 @@ Checklist acordado el 2026-10-02. Rama de trabajo: `feat/estrategia-contenido`.
 
 - [x] **Deploy** de la rama (2026-10-02), probado en el navegador: Mi semana, revisor de ganchos, 3 ganchos de 3 capas. De paso: el revisor inventaba estadísticas ("el 40% de…") en la versión mejorada — corregido en `HOOK_RULES_PROMPT`
 - [x] **Test de estrategia** (migración `0019`): sección "Tu estrategia" en el portal (reemplaza directo, gratis) + "Hacer el test" en `/estrategia`
+- [x] **5. Esqueleto visible al adaptar** (migración `0021`): paso previo en "Adaptar a mi marca" de `/competencia` con gancho, primer problema (segundo estimado en código), cómo retiene, cómo cierra y el esqueleto en piezas + "Tu interpretación"; viaja a la adaptación completa y a la ligera. Se guarda por post (lo reusa el punto 6)
 - [x] **4. Posts de autoridad** (migración `0020`): nicho por cuenta en Competencia, tema por post en `classifyPost`, fuentes "Post de investigación" (números calculados en código, mínimo 10 reels) y "Contracorriente" en `/estrategia`, filtro de cifras inventadas (`maskInventedNumbers`)
 
 ## Siguiente
@@ -22,7 +23,7 @@ Checklist acordado el 2026-10-02. Rama de trabajo: `feat/estrategia-contenido`.
 
 - [ ] Revisor de ganchos: la versión mejorada a veces trae texto en pantalla de < 8 palabras (el modelo cuenta mal). Medirla en código igual que el original y avisarlo en la tarjeta
 
-- [ ] **5. Esqueleto visible al adaptar** desde Competencia: gancho, en qué segundo cae el primer problema, cómo retiene, cómo cierra + campo "tu interpretación" antes de reescribir
+- [ ] Esqueleto: "Cómo retiene" a veces arrastra un dato del competidor ("30 segundos", una muletilla citada) pese a la regla. Las piezas y el gancho ya salen limpios. Probado con 3 reels el 2026-10-02
 - [ ] **6. Multiplicar lo que funcionó (circuito cerrado)**: métricas reales de cada pieza → detectar las que funcionaron → 3 variaciones. Se implementa sí o sí
 - [ ] **Mudanza a Vercel** (decidido 2026-10-02, justo ANTES del punto 7; Paco ya tiene Vercel Pro). Motivo: el límite de ~26s de las Functions de Netlify (Gemini sobre video lo va a rozar; también "Mi semana" de 7 y Sonnet en rutas síncronas). A rehacer: 3 crons diarios → Vercel Cron, `scrape-competencia-background` (Background Function de 15 min) → función con `maxDuration` alto o cola, DNS de `guionizator.pacocuevasia.com`, webhook de Stripe, redirect de Instagram, URLs de Supabase Auth, env vars, y las reglas de deploy de CLAUDE.md + memoria. Medir antes con un deploy de preview (región de la función junto a Supabase us-west-2)
 - [ ] **7. Análisis de gancho visual con Gemini** (solo estudio, solo los videos que Paco elija). **Solo el gancho, nunca el reel completo**: recortar con `start_offset`/`end_offset` a los primeros 3-6 s (máx 10 s en casos raros), con más cuadros por segundo. Evalúa texto en pantalla, qué se ve en el primer segundo, dónde vive el gancho (texto/visual/verbal), cámara fija, si se entiende sin audio. Video desde `competitor_posts.video_url` (link firmado de Apify; si murió, `fetchFreshVideoUrl`). `GEMINI_API_KEY` ya está como placeholder en `.env.local` — Paco la crea en Google AI Studio

@@ -1066,6 +1066,33 @@ Dos fuentes nuevas en el generador de `/estrategia`.
 - `IDEAS_COUNT` bajó de 6 a **5**: 6 ideas tardaban 23.4 s, al borde del límite
   de Netlify. Subirlo después de la mudanza a Vercel.
 
+## Esqueleto al adaptar desde Competencia (migración `0021`)
+
+"Adaptar a mi marca" en `/competencia` abre ahora con un paso previo (método
+Andrea, "Nivel 2"): el **esqueleto** del post fuente — gancho (cita + tipo de
+`taxonomy.ts`), primer problema, cómo retiene, cómo cierra y la estructura en
+4-8 piezas genéricas — más un campo **"Tu interpretación"**. Las dos viajan a
+la adaptación completa (anexadas al brief de `/guiones/nuevo`) y a la ligera
+(body de `/api/ai/adapt-competitor`). Solo estudio; el portal no lo tiene.
+
+- Fuente de verdad: **`lib/competencia/skeleton.ts`** (módulo puro: prompt,
+  `sanitizeSkeleton`, `skeletonInstruction`). La extracción es
+  `extractSkeleton` en `competencia/actions.ts`, `MODEL_FAST`, ~4-5 s medido.
+- Se guarda en `competitor_posts.skeleton` (jsonb) + `skeleton_at`: abrir el
+  modal de nuevo no vuelve a pagar. "Rehacer" lo fuerza. Lo va a reusar el
+  punto 6 (multiplicar lo que funcionó).
+- ⚠️ **El segundo del primer problema lo calcula el código**
+  (`estimateSecond`: busca la cita en la transcripción, palabras previas ÷
+  2.5). La transcripción guardada es texto sin tiempos; la IA solo cita. Si la
+  cita no aparece literal, el segundo queda en null y se muestra "—".
+- Un **reel sin transcripción no se analiza** (ofrece "Transcribir y sacar
+  esqueleto"): con solo el caption el esqueleto saldría inventado. El carrusel
+  va con su descripción y sin segundos.
+- ⚠️ Probado contra la API real (3 reels): sin reglas explícitas, el gancho
+  salía citado en 3 oraciones, las piezas copiaban las instrucciones del
+  tutorial ("Haz clic en [opción]") en vez de la jugada narrativa, y "cómo
+  retiene" arrastraba datos del competidor. Al tocar el prompt, reprobar eso.
+
 ## Ganchos de 3 capas (migración `0018`)
 
 El análisis de 1000 ganchos de Andrea: el gancho tiene **3 capas** — lo que se

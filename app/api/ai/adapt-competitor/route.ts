@@ -10,6 +10,7 @@ import {
   withProductContext,
 } from "@/lib/ai/productContext";
 import { loadProductContext } from "@/lib/products/load";
+import { sanitizeSkeleton, skeletonInstruction } from "@/lib/competencia/skeleton";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -73,6 +74,7 @@ function buildCompletePrompt(
   type: "reel" | "carousel",
   format: string,
   hasProduct = false,
+  skeletonBlock = "",
 ): string {
   const sourceMetrics = [
     post.video_views != null && `Vistas: ${fmtMetric(post.video_views)}`,
@@ -97,7 +99,7 @@ Instrucciones:
 2. Aterrízalo al cliente: su producto, su cliente ideal, su dolor/deseo y su tono de voz.
 3. Elige del cerebro la estructura narrativa que mejor encaje y devuélvela en "structure_name".
 4. Propón un "title" de publicación.
-${hasProduct ? PRODUCT_ADAPT_COMPLETE : ""}
+${hasProduct ? PRODUCT_ADAPT_COMPLETE : ""}${skeletonBlock ? `\n${skeletonBlock}\n` : ""}
 Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
 ${format}`;
 }
@@ -108,6 +110,7 @@ function buildLightPrompt(
   format: string,
   context?: string,
   hasProduct = false,
+  skeletonBlock = "",
 ): string {
   const sourceMetrics = [
     post.video_views != null && `Vistas: ${fmtMetric(post.video_views)}`,
@@ -133,7 +136,7 @@ Instrucciones:
 3. ${hasProduct ? "El servicio a promover entra SOLO por el cierre (ver abajo)." : "Usa los productos/servicios del cliente solo si encajan naturalmente — no fuerces el pitch."}
 4. Elige del cerebro la estructura narrativa más similar a la del post fuente.
 5. Propón un "title" de publicación.
-${hasProduct ? PRODUCT_ADAPT_LIGHT : ""}
+${hasProduct ? PRODUCT_ADAPT_LIGHT : ""}${skeletonBlock ? `\n${skeletonBlock}\n` : ""}
 Responde ÚNICAMENTE con JSON válido (sin markdown, sin texto adicional). Formato exacto:
 ${format}`;
 }
@@ -146,7 +149,7 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { client_id, post, type: typeOverride, adapt_type, context, product_id } = (await req.json()) as {
+    const { client_id, post, type: typeOverride, adapt_type, context, product_id, skeleton, interpretation } = (await req.json()) as {
       client_id: string;
       post: SourcePost;
       type?: "reel" | "carousel";
@@ -154,6 +157,9 @@ export async function POST(req: NextRequest) {
       context?: string;
       /** Servicio al que se adapta, además de la marca (migración 0016). */
       product_id?: string | null;
+      /** Esqueleto del post fuente (0021) y "tu interpretación" del modal. */
+      skeleton?: unknown;
+      interpretation?: string;
     };
 
     if (!client_id || !post) {
@@ -196,9 +202,14 @@ export async function POST(req: NextRequest) {
     const isLight = adapt_type === "ligera";
     const hasProduct = productContext !== null;
 
+    const skeletonBlock = skeletonInstruction(
+      sanitizeSkeleton(skeleton),
+      typeof interpretation === "string" ? interpretation : "",
+    );
+
     const userMessage = isLight
-      ? buildLightPrompt(post, type, format, context, hasProduct)
-      : buildCompletePrompt(post, type, format, hasProduct);
+      ? buildLightPrompt(post, type, format, context, hasProduct, skeletonBlock)
+      : buildCompletePrompt(post, type, format, hasProduct, skeletonBlock);
 
     const model = type === "carousel" ? MODEL_FAST : MODEL_DEFAULT;
     const maxTokens = type === "carousel" ? 3000 : 4096;
