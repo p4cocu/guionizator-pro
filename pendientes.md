@@ -24,9 +24,9 @@ Checklist acordado el 2026-10-02. Rama de trabajo: `feat/estrategia-contenido`.
 - [ ] "Mi semana" de 7 piezas: hoy topado en 5 por el límite de Netlify (~26s). Para 7 hay que partir en dos llamadas o mover a background function
 - [ ] Precio: **$300 MXN/mes para todos** (decisión 2026-10-02) — revisar textos de venta/landing que digan otra cosa
 - [ ] "Mi semana" más rápida (hoy Haiku 4.5, ~18s para 5): opciones sin implementar — recortar la salida, mostrar las ideas mientras se generan (streaming), o una llamada corta que arma el arco de la semana + una llamada en paralelo por día
+- [ ] **Al final — Auditoría de lo que sobra**: al terminar todo lo anterior, revisar qué secciones quedaron obsoletas (candidatos ya vistos: "Sugerir del baúl" vs ganchos de 3 capas, categorías viejas del baúl como "pregunta impactante", Tendencias vs fuente de noticias de /estrategia, Prompts, Instagram en pausa)
 
 ## Después (no prioritario)
 
 - [ ] **Ideas y recordatorios de la semana por WhatsApp** (sinergia con FLUIA). Quizá nunca; quizá sí
 - [ ] **Modo agencia / marca blanca** del portal para que agencias lo revendan. Cuando haya al menos 10 clientes en la plataforma
-- [ ] **Auditoría de lo que sobra**: al terminar todo lo anterior, revisar qué secciones quedaron obsoletas (candidatos ya vistos: "Sugerir del baúl" vs ganchos de 3 capas, categorías viejas del baúl como "pregunta impactante", Tendencias vs fuente de noticias de /estrategia, Prompts, Instagram en pausa)
