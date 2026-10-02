@@ -11,9 +11,12 @@ Checklist acordado el 2026-10-02. Rama de trabajo: `feat/estrategia-contenido`.
 - [x] **2. Revisor de ganchos**: en `/ganchos` y botón "Revisar" en cada gancho del guion, con versión mejorada
 - [x] **3. Niveles de consciencia + propósito + formato** en `/estrategia`, etapa de la cuenta (Freshman/Sophomore/Junior/Senior), pilares etiquetados Problema / Solución única / Resultado, y **"Mi semana"** (3-5 piezas, una por nivel) con "Agendar en el calendario"
 
+- [x] **Deploy** de la rama (2026-10-02), probado en el navegador: Mi semana, revisor de ganchos, 3 ganchos de 3 capas. De paso: el revisor inventaba estadísticas ("el 40% de…") en la versión mejorada — corregido en `HOOK_RULES_PROMPT`
+
 ## Siguiente
 
-- [ ] **Deploy** de la rama (migraciones 0017 y 0018 ya aplicadas en Supabase)
+- [ ] Revisor de ganchos: la versión mejorada a veces trae texto en pantalla de < 8 palabras (el modelo cuenta mal). Medirla en código igual que el original y avisarlo en la tarjeta
+
 - [ ] **Test de estrategia para clientes**: cuestionario que llena cliente ideal, pilares (con etiqueta de Andrea) y determina la etapa de la cuenta. Vive en el portal.
 - [ ] **4. Posts de autoridad**: estructuras "contracorriente" e "investigación". La de investigación usa los datos de Competencia ("analicé N reels de clínicas dentales…"). Para que la afirmación sea verdad hay que saber de qué trata cada post: (a) **nicho de la cuenta** — etiqueta en `competitors` ("dentistas", "creadores de IA"); con eso "analicé 80 reels de cuentas de dentistas" es cierto aunque cada reel hable de otra cosa, y el hallazgo es de PATRONES (ganchos, formatos, estructuras), no de tema; (b) **tema del post** — `classifyPost` suma un `topic` corto a partir de la transcripción (misma llamada, sin costo extra); para una afirmación por tema ("analicé 25 reels sobre recordatorios de citas") se filtra por tema y se muestra cuántos hay. Si hay pocos (< 10), la pantalla lo dice y no se arma el post
 - [ ] **5. Esqueleto visible al adaptar** desde Competencia: gancho, en qué segundo cae el primer problema, cómo retiene, cómo cierra + campo "tu interpretación" antes de reescribir
