@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveScriptSilent, linkScriptToCalendar, saveScriptWithNewIdea } from "../actions";
 import { suggestProductIdeas, suggestProductQuestions } from "./productActions";
@@ -87,15 +87,15 @@ function Steps({ current }: { current: Step }) {
         const num = (i + 1) as Step;
         const cls = num === current ? "active" : num < current ? "done" : "";
         return (
-          <>
-            <div key={num} className={`${styles.step} ${cls ? styles[cls] : ""}`}>
+          <Fragment key={num}>
+            <div className={`${styles.step} ${cls ? styles[cls] : ""}`}>
               <div className={styles.stepNum}>{num < current ? "✓" : num}</div>
               <span>{label}</span>
             </div>
             {i < STEP_LABELS.length - 1 && (
-              <div key={`line-${i}`} className={styles.stepLine} />
+              <div className={styles.stepLine} />
             )}
-          </>
+          </Fragment>
         );
       })}
     </div>
