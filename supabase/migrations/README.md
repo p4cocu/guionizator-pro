@@ -43,7 +43,8 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0014 | `0014_publicacion_externa.sql` | ✅ 2026-09-07 (antes del deploy) |
 | 0015 | `0015_competencia_notas_y_retencion.sql` | ✅ 2026-09-10 (antes del deploy) |
 | 0016 | `0016_ficha_servicio.sql` | ✅ 2026-09-29 (antes del deploy) |
-| 0017 | `0017_estrategia_contenido.sql` | ✅ 2026-10-02 + semilla `supabase/seeds/0017_estrategia_fluia_pacocuevasia.sql` |
+| 0017 | `0017_estrategia_contenido.sql` | ✅ 2026-10-02 |
+| 0018 | `0018_ganchos_3_capas_y_consciencia.sql` | ✅ 2026-10-02 (antes del deploy) + semilla `supabase/seeds/0017_estrategia_fluia_pacocuevasia.sql` corrida |
 
 ### 0016 va ANTES del deploy
 

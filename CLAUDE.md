@@ -967,42 +967,72 @@ producto/servicio tiene una **ficha de oferta** y los guiones se pueden hacer
   desde PostgREST. Un `viewer` la ve pero no la toca. Las respuestas de afinado
   guardadas desde Generar pasan por el mismo candado.
 
-## Estrategia de contenido (`/estrategia`, migración `0017`)
+## Estrategia de contenido (`/estrategia`, migraciones `0017` + `0018`)
 
 Hasta acá las ideas salían de **afuera** (Competencia, Tendencias). `/estrategia`
-es el lado de **adentro**: por marca, el cliente ideal + 5 pilares, un generador
-de ideas desde cero y un banco. Estudio solamente (owner-only, sin policies de
-miembro: el portal no la ve).
+es el lado de **adentro**: por marca, cliente ideal + pilares, un generador de
+ideas desde cero y un banco. Estudio solamente (owner-only, sin policies de
+miembro: el portal no la ve). Método: transcripciones de Andrea Estratega
+(2026-10-02) — pilares, niveles de consciencia, propósitos, formatos y ganchos.
 
-- **`content_strategies`** (PK `client_id`): campos de texto del cliente ideal
-  (`avatar`, `dolores`, `deseos`, `objeciones`, `transformacion`,
-  `diferenciador`, `fuentes`) + `pillars` jsonb. Fuente de verdad de la forma:
-  **`lib/strategy/pillars.ts`** (`sanitizeStrategy` es el único camino de
-  escritura; un pilar tiene `key` estable, `name`, `objective`, `stage`
-  atraer/nutrir/convertir, `share` %, `topics`, `formats`).
-- **`content_ideas`**: el banco. `pillar_key`, `source`, `stage`, `format` y las
-  tres columnas de taxonomía son texto **sin CHECK** a propósito (las normaliza
-  el código; renombrar un pilar no debe romper un insert). `used_at` = ya se
-  hizo guion.
-- **Generador** (`lib/strategy/prompts.ts`, `MODEL_FAST`, ~15-17s medido):
-  pilar × cliente ideal × **fuente** (`matriz`, `tendencias` — lee las
-  pendientes de `/tendencias` con el ángulo FLUIA o Paco según la marca —,
-  `build`, `preguntas`, `competencia` — patrones de posts clasificados, nunca
-  el tema) × filtros opcionales de la taxonomía de Andrea (`taxonomy.ts`).
-  "Hacer guion" guarda la idea, la marca usada y abre `/guiones/nuevo` con
-  `client_id`, `brief` y `type` (params que ya existían).
+- **`content_strategies`** (PK `client_id`): campos del cliente ideal +
+  `account_phase` (freshman/sophomore/junior/senior → reparto del mes) +
+  `pillars` jsonb. Fuente de verdad: **`lib/strategy/pillars.ts`**
+  (`sanitizeStrategy` es el único camino de escritura). Decisión de Paco: se
+  quedan **5 pilares temáticos** por marca y cada uno se **etiqueta** con su
+  pilar de Andrea (`andrea_pillar`: problema / solucion / resultado); `topics`
+  son las **líneas narrativas**. Pilares viejos con `stage` se leen mapeados.
+- **`content_ideas`**: el banco. `stage` guarda el **nivel de consciencia**
+  (inconsciente, emocional, racional, oportunidad, solucion_unica — las viejas
+  atraer/nutrir/convertir se mapean con `toAwarenessLevel`), más `purpose`
+  (viral/valor/venta), `format_style` (`FORMAT_STYLES`) y el gancho en 3 capas
+  (`hook` = dice, `hook_text` = pantalla, `hook_visual` = primer segundo).
+  Todo texto **sin CHECK** a propósito. `used_at` = ya se hizo guion.
+- **Generador** (`lib/strategy/prompts.ts`, `MODEL_FAST`): pilar × cliente
+  ideal × **fuente** (`matriz`, `tendencias`, `build`, `preguntas`,
+  `competencia`) × filtros (nivel, propósito, formato, taxonomía de Andrea).
+  **"Mi semana"**: 3, 4 o 5 piezas, una por nivel según `WEEK_PLANS`
+  (lun inconsciente … dom solución única), encadenadas; "Agendar" las inserta
+  en `content_calendar` (`status: idea`, `cta_type` según propósito).
+  ⚠️ Topado en **5** a propósito: 5 ideas tardan ~18s medido; 7 rozan el límite
+  de Netlify.
 - ⚠️ Probado contra la API real: sin reglas explícitas el modelo **inventaba
-  cifras** ("47 mensajes"), **ofertas** ("prueba gratis 7 días") y **recursos**
-  ("plantilla en mi bio"). El prompt pide huecos `[N]` en vez de números
-  inventados. Al tocar el prompt, reprobar eso.
+  cifras**, **ofertas**, **plazos** ("en 48 horas") y **recursos** ("plantilla
+  en mi bio"), y escribía textos en pantalla de 5-6 palabras. El prompt pide
+  huecos `[N]` y que CUENTE las palabras. Al tocarlo, reprobar eso.
 - **"✦ Proponer con IA"** (`draftStrategy`) propone cliente ideal + 5 pilares
-  desde el perfil y los servicios; **solo llena campos vacíos y no guarda**
-  (mismo principio que "Llenar desde landing"). Si ya hay pilares, pregunta
-  antes de reemplazarlos.
-- Sin la `0017` aplicada, la página muestra un aviso en vez de caerse.
-- Semilla con la estrategia de FLUIA y Paco Cuevas IA:
-  `supabase/seeds/0017_estrategia_fluia_pacocuevasia.sql` (`on conflict do
-  nothing`). Razonamiento en `docs/estrategia-contenido-fluia-pacocuevasia.md`.
+  etiquetados; solo llena campos vacíos y no guarda.
+- Semilla: `supabase/seeds/0017_estrategia_fluia_pacocuevasia.sql` (corrida el
+  2026-10-02). Razonamiento en `docs/estrategia-contenido-fluia-pacocuevasia.md`.
+  Checklist de lo que sigue: **`pendientes.md`**.
+
+## Ganchos de 3 capas (migración `0018`)
+
+El análisis de 1000 ganchos de Andrea: el gancho tiene **3 capas** — lo que se
+lee (texto en pantalla, 8-12 palabras; 88% de los ganadores lo tiene), lo que se
+ve (algo concreto en el primer segundo, cámara fija) y lo que se dice (abre
+**declarando**, nunca con pregunta débil). Fuente de verdad:
+**`lib/hooks/criteria.ts`** (`HOOK_CRITERIA`, los 7 criterios;
+`HOOK_RULES_PROMPT`, que se pega a todo prompt que escriba ganchos).
+
+- `script_hooks` ganó `text_overlay`, `visual`, `hook_type`, `checks` (jsonb),
+  `why`. `hook_text` sigue siendo la capa verbal: los ganchos viejos siguen
+  funcionando y se pueden "Revisar" para completarse.
+- Panel "Ganchos" de `/guiones/[id]`: **"✦ 3 ganchos de 3 capas"**
+  (`generateLayeredHooks`, `MODEL_DEFAULT`, ~16s medido, propone y no guarda)
+  y **"Revisar"** por gancho (`reviewScriptHook`, `MODEL_FAST`, ~6s) con
+  versión mejorada. "Sugerir del baúl" quedó como estaba.
+- **Revisor en `/ganchos`** (`HookReviewer.tsx` → `reviewHook`): pegas las
+  capas que tengas, devuelve puntaje + versión mejorada; "Guardar en el baúl"
+  guarda la plantilla con etiquetas `[PANTALLA]/[DICE]/[VISUAL]`.
+- ⚠️ `texto_pantalla` y `largo_texto` se **miden en código**
+  (`withMeasuredChecks`): el modelo contaba mal (marcó "falla" un texto de 8
+  palabras).
+- `components/hooks/HookParts.tsx` (`Layers`, `ScoreBadge`, `Checklist`) lo
+  comparten el panel, el revisor y las tarjetas de ideas.
+- El **cerebro** (`brain/system-prompt.md`; no hay filas en `brain_versions`,
+  así que manda el archivo) ya no pide "situación + pregunta" en el gancho:
+  trae las reglas de Andrea.
 
 ## Fase E — Cobro con Stripe (`lib/billing/*`, migración `0013`)
 
