@@ -1116,6 +1116,13 @@ slugs que ya existían.
   gancho de `taxonomy.ts` no se muestra.
 - `maxDuration = 120` en `portal/[id]/estrategia/page.tsx` y `60` en el guion
   del portal (las server actions corren en la función de su página).
+- ⚠️ **`export type { X }` (re-export) en un módulo `"use server"` tumba la
+  página entera**: el compilador lo trata como valor y en runtime da
+  `ReferenceError: X is not defined` en TODAS las actions del archivo ("This
+  page couldn't load"). `npm run build` y `tsc` pasan igual. Pasó el
+  2026-10-02 con `WeekIdea` en `estrategia/actions.ts`: el tipo se importa
+  desde `lib/strategy/runIdeas.ts`. (`export type X = …` declarado ahí sí
+  funciona; lo que rompe es el re-export.)
 
 ## Posts de autoridad: investigación y contracorriente (migración `0020`)
 

@@ -220,7 +220,6 @@ export type GenerateIdeasInput = {
   research_topic?: string | null;
 };
 
-export type { WeekIdea };
 export type GenerateIdeasResult = { ok: true; ideas: WeekIdea[] } | { ok: false; error: string };
 
 /**

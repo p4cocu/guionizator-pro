@@ -43,8 +43,10 @@ import {
   saveStrategy,
   scheduleWeek,
   setIdeaUsed,
-  type WeekIdea,
 } from "./actions";
+// ⚠️ No desde "./actions": un `export type { … }` en un módulo "use server"
+// lo toma el compilador como valor y tumba todas las actions de la página.
+import type { WeekIdea } from "@/lib/strategy/runIdeas";
 import styles from "./estrategia.module.css";
 
 type Cliente = { id: string; nombre: string; marca: string | null };
