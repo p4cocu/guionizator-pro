@@ -25,6 +25,7 @@ import { getClientOwnerId, getGenerationState } from "@/lib/portal/generate";
 import { listPortalProducts } from "@/lib/portal/products";
 import { toProductOption } from "@/lib/products/fields";
 import GenerarClient from "./GenerarClient";
+import HookReviewPortal from "./HookReviewPortal";
 import s from "./generar.module.css";
 
 const TYPE_LABELS: Record<string, string> = { reel: "Reel", carousel: "Carrusel" };
@@ -47,10 +48,19 @@ function formatDate(iso: string): string {
 
 export default async function PortalGenerarPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ clientId: string }>;
+  searchParams: Promise<{ brief?: string; tipo?: string; tab?: string }>;
 }) {
   const { clientId } = await params;
+  const query = await searchParams;
+  // Pestañas como links (mismo patrón que `/guiones/nuevo?modo=externa`):
+  // GenerarClient es grande y no tiene sentido montarlo para revisar un gancho.
+  const tab = query.tab === "revisar" ? "revisar" : "guion";
+  // "Escribir este guion →" desde Ideas para tu semana llega con el brief armado.
+  const initialBrief = (query.brief ?? "").slice(0, 4000);
+  const initialType = query.tipo === "carousel" ? "carousel" : "reel";
   const { supabase, user } = await requirePortalSession();
   const client = await requirePortalClient(user.id, clientId, "generar_ia");
 
@@ -87,15 +97,36 @@ export default async function PortalGenerarPage({
     <div className={s.wrap}>
       <div className={s.header}>
         <span className="eyebrow">{portalClientLabel(client)}</span>
-        <h2 className={s.title}>Generar guion</h2>
+        <h2 className={s.title}>{tab === "revisar" ? "Revisar un gancho" : "Generar guion"}</h2>
         <p className={s.subtitle}>
-          Cuéntale a la IA de qué quieres hablar y te arma el guion con el
-          criterio y el tono de tu marca. Cuando te guste, guárdalo: queda en tus
-          guiones para que se produzca.
+          {tab === "revisar"
+            ? "El gancho son los primeros segundos: lo que dices, lo que se lee en pantalla y lo que se ve. Escribe el tuyo y te decimos qué le falta para que la gente se quede, con una versión mejorada."
+            : "Cuéntale a la IA de qué quieres hablar y te arma el guion con el criterio y el tono de tu marca. Cuando te guste, guárdalo: queda en tus guiones para que se produzca."}
         </p>
+        <nav className={s.tabs}>
+          <Link href={`/portal/${client.id}/generar`} className={`${s.tabLink} ${tab === "guion" ? s.tabActive : ""}`}>
+            Escribir un guion
+          </Link>
+          <Link
+            href={`/portal/${client.id}/generar?tab=revisar`}
+            className={`${s.tabLink} ${tab === "revisar" ? s.tabActive : ""}`}
+          >
+            Revisar un gancho
+          </Link>
+        </nav>
       </div>
 
+      {tab === "revisar" ? (
+        <HookReviewPortal
+          clientId={client.id}
+          initialRemaining={usage?.remaining ?? null}
+          creditBalance={usage?.creditBalance ?? 0}
+        />
+      ) : (
       <GenerarClient
+        key={initialBrief}
+        initialBrief={initialBrief}
+        initialType={initialType}
         clientId={client.id}
         mode={client.aiGenerationMode}
         canSeeScripts={puedeVerGuiones}
@@ -115,8 +146,9 @@ export default async function PortalGenerarPage({
           nextSource: usage?.nextSource ?? "plan",
         }}
       />
+      )}
 
-      {recent.length > 0 && (
+      {tab === "guion" && recent.length > 0 && (
         <section className={s.recent}>
           <h3 className={s.recentTitle}>Lo que generaste antes</h3>
           <ul className={s.recentList}>

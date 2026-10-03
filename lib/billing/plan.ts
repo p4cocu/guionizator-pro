@@ -54,7 +54,7 @@ export const GRACE_DAYS = 5;
 // ─── Qué gasta un crédito ────────────────────────────────────────────────────
 
 /**
- * Las cinco acciones del portal que escriben una fila en `ai_usage_log`.
+ * Las acciones del portal que escriben filas en `ai_usage_log`.
  *
  * Los valores son exactamente los `endpoint` que ya se registran hoy — esta
  * lista es documentación viva, no una fuente de verdad que el código consulte
@@ -74,7 +74,23 @@ export const AI_CREDIT_ACTIONS: { endpoint: string; label: string }[] = [
   { endpoint: "portal:copy", label: "Copy Expert" },
   // 0016: "Dame ideas para este servicio". Las preguntas de afinado NO cobran.
   { endpoint: "portal:product-ideas", label: "Ideas para un servicio" },
+  // 2026-10-02: herramientas de estrategia y ganchos en el portal.
+  // "Ideas para tu semana" cobra 1 o 2 según el tamaño (ver `weekIdeasCost`):
+  // son 1 o 2 filas, no una fila con peso — el medidor sigue contando filas.
+  { endpoint: "portal:week-ideas", label: "Ideas para tu semana" },
+  { endpoint: "portal:layered-hooks", label: "3 ganchos nuevos para un guion" },
+  { endpoint: "portal:hook-review", label: "Revisar un gancho" },
 ];
+
+/**
+ * Créditos que cuesta "Ideas para tu semana": 3 piezas = 1, 5 o 7 = 2
+ * (decisión de Paco, 2026-10-02). Medio crédito no existe: `credit_balance` es
+ * entero y una fila de `ai_usage_log` = una generación. Es `ceil(n / 4)`; el 5
+ * redondea para arriba.
+ */
+export function weekIdeasCost(posts: number): number {
+  return Math.max(1, Math.ceil(posts / 4));
+}
 
 /**
  * De dónde salió una generación. Espeja el `CHECK` de `ai_usage_log.paid_with`

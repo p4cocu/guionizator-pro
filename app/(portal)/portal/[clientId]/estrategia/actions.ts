@@ -12,7 +12,10 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { rethrowIfNextControlFlow } from "@/lib/portal/generate";
+import { generationErrorInfo, rethrowIfNextControlFlow } from "@/lib/portal/generate";
+import { deletePortalIdea, generatePortalWeek, savePortalIdea, type PortalUsage } from "@/lib/portal/weekIdeas";
+import type { WeekIdea } from "@/lib/strategy/runIdeas";
+import type { ContentIdea } from "@/lib/strategy/pillars";
 import { AiJsonError } from "@/lib/ai/json";
 import {
   PortalStrategyError,
@@ -43,5 +46,53 @@ export async function enviarTestEstrategia(input: {
     if (e instanceof AiJsonError) return { ok: false, error: "No pudimos armar tu estrategia esta vez. Intenta de nuevo." };
     console.error("[portal/estrategia/test]", e);
     return { ok: false, error: "No pudimos armar tu estrategia. Intenta de nuevo." };
+  }
+}
+
+// ─── Ideas para tu semana ────────────────────────────────────────────────────
+// Generar cobra (1 por 3 piezas, 2 por 5 o 7); guardar y quitar son gratis.
+// Candados y escritura en `lib/portal/weekIdeas.ts`.
+
+function errorMessage(e: unknown): string {
+  if (e instanceof PortalStrategyError) return e.message;
+  return generationErrorInfo(e).message;
+}
+
+export async function pedirSemana(input: {
+  clientId: string;
+  posts: number;
+}): Promise<{ ok: true; ideas: WeekIdea[]; usage: PortalUsage; cost: number } | { ok: false; error: string }> {
+  try {
+    return { ok: true, ...(await generatePortalWeek(input)) };
+  } catch (e) {
+    rethrowIfNextControlFlow(e);
+    console.error("[portal/estrategia/semana]", e);
+    return { ok: false, error: errorMessage(e) };
+  }
+}
+
+export async function guardarIdea(input: {
+  clientId: string;
+  idea: ContentIdea;
+}): Promise<{ ok: true; idea: ContentIdea } | { ok: false; error: string }> {
+  try {
+    const idea = await savePortalIdea(input);
+    // Paco la ve en su banco de /estrategia.
+    revalidatePath("/estrategia");
+    return { ok: true, idea };
+  } catch (e) {
+    rethrowIfNextControlFlow(e);
+    return { ok: false, error: errorMessage(e) };
+  }
+}
+
+export async function quitarIdea(input: { clientId: string; ideaId: string }): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await deletePortalIdea(input);
+    revalidatePath("/estrategia");
+    return { ok: true };
+  } catch (e) {
+    rethrowIfNextControlFlow(e);
+    return { ok: false, error: errorMessage(e) };
   }
 }

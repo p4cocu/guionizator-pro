@@ -5,12 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { MODEL_FAST } from "@/lib/ai/anthropic";
 import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
 import { buildClientContext } from "@/lib/ai/clientContext";
-import {
-  HOOK_REVIEW_SYSTEM,
-  buildHookReviewPrompt,
-  normalizeHookReview,
-  type HookReview,
-} from "@/lib/hooks/prompts";
+import { type HookReview } from "@/lib/hooks/prompts";
+import { runHookReview } from "@/lib/hooks/run";
 
 export type HookCategory =
   | "pregunta_impactante"
@@ -196,20 +192,13 @@ export async function reviewHook(input: ReviewHookInput): Promise<ReviewHookResu
       if (client) brandContext = buildClientContext(client);
     }
 
-    const raw = await generateJsonPlain({
-      label: "hook-review",
-      model: MODEL_FAST,
-      maxTokens: 1200,
-      system: HOOK_REVIEW_SYSTEM,
-      userMessage: buildHookReviewPrompt({
-        brandContext,
-        verbal,
-        textOverlay,
-        visual: input.visual?.trim().slice(0, 500) || null,
-        context: input.context?.trim().slice(0, 2000) || null,
-      }),
+    const review = await runHookReview({
+      brandContext,
+      verbal,
+      textOverlay,
+      visual: input.visual?.trim().slice(0, 500) || null,
+      context: input.context?.trim().slice(0, 2000) || null,
     });
-    const review = normalizeHookReview(raw, textOverlay);
     if (!review) return { ok: false, error: "La IA no devolvió una revisión válida. Intenta de nuevo." };
     return { ok: true, review };
   } catch (e) {

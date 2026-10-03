@@ -169,6 +169,9 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
   const [generating, startGenerating] = useTransition();
   const [genError, setGenError] = useState<string | null>(null);
   const [fresh, setFresh] = useState<WeekIdea[]>([]);
+  // "Mi semana": solo se agenda lo que se marca. Nace vacío a propósito
+  // (decisión de Paco, 2026-10-02): ninguna idea entra al calendario por defecto.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
 
   // ── Banco ──
   const [ideas, setIdeas] = useState<ContentIdea[]>(initialIdeas);
@@ -301,6 +304,7 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
         return;
       }
       setFresh(res.ideas);
+      setPicked(new Set());
       setScheduleMsg(null);
     });
   }
@@ -308,11 +312,14 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
   function handleSchedule() {
     setGenError(null);
     startScheduling(async () => {
-      const res = await scheduleWeek({ client_id: clientId, start_date: weekStart, ideas: fresh });
+      const chosen = fresh.filter((i) => picked.has(i.id));
+      if (chosen.length === 0) return;
+      const res = await scheduleWeek({ client_id: clientId, start_date: weekStart, ideas: chosen });
       if (!res.ok) {
         setGenError(res.error);
         return;
       }
+      setPicked(new Set());
       setScheduleMsg(`✓ ${res.created} piezas agendadas en el calendario como "Idea".`);
     });
   }
@@ -374,6 +381,7 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
     return (
       <article key={idea.id} className={`card ${styles.idea}`}>
         <div className={styles.ideaTags}>
+          {idea.generated_by && <span className="badge" style={{ color: "var(--signal)", border: "1px solid var(--signal)" }}>Guardada por el cliente</span>}
           {pillar && (
             <span className="badge badge--emerald" title={`Pilar de Andrea: ${ANDREA_LABEL[pillar.andrea_pillar]}`}>
               {pillar.name} · {ANDREA_LABEL[pillar.andrea_pillar]}
@@ -933,8 +941,12 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
                   {generating ? "Generando…" : mode === "semana" ? "✦ Armar mi semana" : "✦ Generar ideas"}
                 </button>
                 {mode === "semana" && fresh.length > 0 && fresh.some((i) => i.day !== null) && (
-                  <button type="button" className="btn btn-secondary" onClick={handleSchedule} disabled={scheduling}>
-                    {scheduling ? "Agendando…" : "Agendar semana en el calendario"}
+                  <button type="button" className="btn btn-secondary" onClick={handleSchedule} disabled={scheduling || picked.size === 0}>
+                    {scheduling
+                      ? "Agendando…"
+                      : picked.size === 0
+                        ? "Marca las que quieras agendar"
+                        : `Agendar ${picked.size} en el calendario`}
                   </button>
                 )}
                 {scheduleMsg && <span className={styles.ok}>{scheduleMsg}</span>}
@@ -950,7 +962,23 @@ export default function EstrategiaClient({ clientes, clientId, initialStrategy, 
               <div className={styles.ideas}>
                 {fresh.map((idea) => (
                   <div key={idea.id} className={styles.ideaWrap}>
-                    {idea.day !== null && <p className={styles.dayLabel}>{WEEK_DAYS[idea.day]}</p>}
+                    {idea.day !== null && (
+                      <label className={styles.dayLabel}>
+                        <input
+                          type="checkbox"
+                          checked={picked.has(idea.id)}
+                          onChange={(e) =>
+                            setPicked((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(idea.id);
+                              else next.delete(idea.id);
+                              return next;
+                            })
+                          }
+                        />{" "}
+                        {WEEK_DAYS[idea.day]} · agendar
+                      </label>
+                    )}
                     {renderIdea(idea, false)}
                   </div>
                 ))}

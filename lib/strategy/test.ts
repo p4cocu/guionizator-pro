@@ -12,7 +12,7 @@
  * "Hacer el test"). Módulo puro: no importa Supabase.
  */
 
-import type { AccountPhase, AndreaPillar } from "./pillars";
+import { formatStyleLabel, type AccountPhase, type AndreaPillar, type AwarenessLevel, type Purpose } from "./pillars";
 
 export type TestQuestion =
   | { key: string; kind: "text"; label: string; hint: string; required: boolean }
@@ -218,3 +218,37 @@ export const ANDREA_PILLAR_PLAIN: Record<AndreaPillar, string> = {
   solucion: "Cómo lo resuelves tú",
   resultado: "Lo que logra contigo",
 };
+
+/**
+ * Niveles de consciencia, propósitos y formatos sin jerga, para "Ideas para tu
+ * semana" del portal. Mismo criterio que `PHASE_PLAIN`: el cliente no tiene
+ * por qué saber qué es "inconsciente" o "Solución única".
+ */
+export const AWARENESS_PLAIN: Record<AwarenessLevel, string> = {
+  inconsciente: "Para quien aún no sabe que tiene el problema",
+  emocional: "Para quien ya lo siente y le pesa",
+  racional: "Para quien quiere entender por qué le pasa",
+  oportunidad: "Para quien ya busca cómo resolverlo",
+  solucion_unica: "Para quien ya casi te elige",
+};
+
+export const PURPOSE_PLAIN: Record<Purpose, string> = {
+  viral: "Para llegar a gente nueva",
+  valor: "Para que confíen en ti",
+  venta: "Para invitar a trabajar contigo",
+};
+
+/** Formatos cuyo nombre del taller no se entiende fuera de él. El resto se muestra tal cual. */
+const FORMAT_STYLE_PLAIN: Record<string, string> = {
+  camara_claim: "A cámara, con una frase fuerte en pantalla",
+  pov: "Escena actuada (como si lo vivieras)",
+  numero_lista: "Lista (\"3 señales de…\")",
+  contracorriente: "Rompe una creencia de tu sector",
+  investigacion: "Lo que encontraste al analizar contenido",
+  caso_real: "Caso real",
+};
+
+export function formatStylePlain(id: string | null | undefined): string | null {
+  if (!id) return null;
+  return FORMAT_STYLE_PLAIN[id] ?? formatStyleLabel(id);
+}

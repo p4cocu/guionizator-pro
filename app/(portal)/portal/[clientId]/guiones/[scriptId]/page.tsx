@@ -14,6 +14,9 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+
+// "3 ganchos nuevos" usa MODEL_DEFAULT (~16 s) y corre en la función de esta página.
+export const maxDuration = 60;
 import { requirePortalClient, requirePortalSession } from "@/lib/portal/access";
 import { listScriptComments } from "@/lib/portal/comments";
 import { getClientOwnerId, getGenerationState } from "@/lib/portal/generate";
@@ -23,6 +26,8 @@ import { OWNER_FALLBACK_LABEL, UNKNOWN_AUTHOR_LABEL } from "@/lib/portal/profile
 import ScriptActions from "./ScriptActions";
 import ScriptEditorPanel from "./ScriptEditorPanel";
 import ScriptToolsPanel from "./ScriptToolsPanel";
+import ScriptHooksPanel from "./ScriptHooksPanel";
+import { listPortalScriptHooks } from "@/lib/portal/scriptHooks";
 import ScriptFeedback from "./ScriptFeedback";
 import s from "../guiones.module.css";
 
@@ -83,6 +88,9 @@ export default async function PortalGuionDetallePage({
   // Portadas y Copy Expert gastan cupo ⇒ mismo candado de rol que generar.
   const canUseAi =
     hasFeature(client.features, AI_FEATURE_SLUG) && client.role !== "viewer";
+  // Ganchos de 3 capas: `script_hooks` es owner-only, se lee con service role
+  // tras comprobar que el guion es visible para esta marca. Gratis, todos los roles.
+  const hooksPromise = listPortalScriptHooks(client.id, script.id);
   const [covers, copies, aiUsage] = canUseAi
     ? await Promise.all([
         loadCovers(script.id).catch(() => null),
@@ -92,6 +100,7 @@ export default async function PortalGuionDetallePage({
           : Promise.resolve(null),
       ])
     : [null, [], null];
+  const hooks = await hooksPromise;
 
   return (
     <div className={s.detail}>
@@ -144,6 +153,16 @@ export default async function PortalGuionDetallePage({
           </a>
         </p>
       )}
+
+      <ScriptHooksPanel
+        clientId={client.id}
+        scriptId={script.id}
+        initialHooks={hooks}
+        canUseAi={canUseAi}
+        canSave={client.role !== "viewer"}
+        initialRemaining={aiUsage?.remaining ?? null}
+        creditBalance={aiUsage?.creditBalance ?? 0}
+      />
 
       {canUseAi && (
         <ScriptToolsPanel

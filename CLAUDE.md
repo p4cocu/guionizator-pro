@@ -1071,6 +1071,52 @@ existe en el estudio: botón "🧭 Hacer el test" en `/estrategia`.
   siguiente "Guardar estrategia". El último test respondido (del cliente o
   tuyo) se ve en un desplegable arriba del formulario.
 
+## Estrategia y ganchos en el portal (migración `0024`)
+
+Lo que se le lleva al cliente del método Andrea, "solo lo que no abruma"
+(2026-10-02). **No se tocó el CHECK de `enabled_features`**: todo cuelga de
+slugs que ya existían.
+
+| Dónde | Qué | Cuesta | Quién |
+|---|---|---|---|
+| `/portal/[id]/estrategia` | "Ideas para tu semana": 3, 5 o 7 ideas (fuente `matriz`) | 3 = **1**, 5 o 7 = **2** generaciones (`weekIdeasCost`) | `generar_ia` + `collaborator` |
+| ídem | Guardar / quitar una idea | gratis | `collaborator` |
+| `/portal/[id]/guiones/[id]` | Ver los ganchos guardados | gratis | todos |
+| ídem | "✦ 3 ganchos nuevos" / "Revisar" | 1 cada uno | `generar_ia` + `collaborator` |
+| ídem | Guardar un gancho | gratis | `collaborator` |
+| `/portal/[id]/generar?tab=revisar` | "Revisar un gancho" suelto | 1 | `generar_ia` + `collaborator` |
+
+- **Prompts compartidos, no duplicados**: `lib/strategy/runIdeas.ts`
+  (`runStrategyIdeas`) y `lib/hooks/run.ts` (`runLayeredHooks`,
+  `runHookReview`, `scriptToText`). El estudio llama a las mismas funciones; cada
+  lado resuelve sesión, pertenencia y cobro.
+- **Medio crédito no existe** (`credit_balance` es entero, una fila de
+  `ai_usage_log` = una generación). Por eso la semana de 5 o 7 cobra **2 filas**:
+  `assertCanGenerate(..., units)` exige plan + saldo para todas antes de llamar
+  a la IA y `settleGenerations` las cierra en orden (plan primero, recarga
+  después).
+- **Solo se guarda lo que gusta** (decisión de Paco, también para el estudio):
+  ninguna idea entra sola al banco ni al calendario. En `/estrategia`, "Mi
+  semana" tiene casillas y "Agendar" mete solo las marcadas (nacen vacías).
+- **`content_ideas.generated_by`** (`0024`): las guardadas desde el portal van
+  al banco de Paco con service role, `owner_id` **del dueño** y
+  `generated_by` del miembro → badge "Guardada por el cliente". El portal solo
+  lista las de `generated_by` no nulo: el banco interno no se le muestra. No
+  agenda en el calendario (cuándo se publica lo decide Paco, como en
+  `/generar`). "Escribir este guion →" abre `/generar?brief=…&tipo=…`.
+- **`script_hooks` sigue owner-only** (no tiene `client_id`):
+  `lib/portal/scriptHooks.ts` prueba la pertenencia por el guion (mismo
+  `client_id`, `is_latest`, sin `trashed_at`, estado ≠ `idea`/`baul`) y toda
+  consulta filtra por ese `script_id`. El cliente **no borra ni pisa** ganchos
+  (no hay columna de autor: podría ser de Paco); la versión mejorada se guarda
+  como gancho nuevo.
+- **Sin jerga**: `AWARENESS_PLAIN`, `PURPOSE_PLAIN`, `formatStylePlain`
+  (`lib/strategy/test.ts`) y `HOOK_CRITERIA_PLAIN` (`lib/hooks/criteria.ts`);
+  `Layers`/`Checklist` aceptan `plain` ("Se lee / Se ve / Dices"). El tipo de
+  gancho de `taxonomy.ts` no se muestra.
+- `maxDuration = 120` en `portal/[id]/estrategia/page.tsx` y `60` en el guion
+  del portal (las server actions corren en la función de su página).
+
 ## Posts de autoridad: investigación y contracorriente (migración `0020`)
 
 Dos fuentes nuevas en el generador de `/estrategia`.
@@ -1361,7 +1407,9 @@ del ciclo, esa acción sale **gratis para siempre** y el rastro de auditoría
 miente sobre de dónde salió. `settleGeneration` (`lib/portal/generate.ts`)
 descuenta del saldo cuando corresponde y escribe el `paid_with` verdadero.
 
-Las cinco acciones de `AI_CREDIT_ACTIONS` tienen que cerrar así:
+Las acciones de `AI_CREDIT_ACTIONS` tienen que cerrar así (las tres de
+2026-10-02 —`portal:week-ideas`, `portal:layered-hooks`, `portal:hook-review`—
+están en "Estrategia y ganchos en el portal"):
 `/api/portal/generar/guion`, `adaptPortalPost` (competencia),
 `pedirIdeasServicio` (desde 2026-09-30) y —desde el
 2026-08-26— `generarPortadas` y `generarCopy` (`toolsActions.ts`), que se

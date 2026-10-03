@@ -452,7 +452,40 @@ export type ContentIdea = {
   why: string | null;
   used_at?: string | null;
   created_at?: string;
+  /** Quién la guardó desde el portal (0024). null = el dueño. */
+  generated_by?: string | null;
 };
 
 export const IDEA_COLUMNS =
-  "id, pillar_key, source, stage, purpose, format, format_style, value_pillar, hook_type, script_structure, hook, hook_text, hook_visual, angle, brief, why, used_at, created_at";
+  "id, pillar_key, source, stage, purpose, format, format_style, value_pillar, hook_type, script_structure, hook, hook_text, hook_visual, angle, brief, why, used_at, created_at, generated_by";
+
+/**
+ * La fila de `content_ideas` a partir de una idea que viene del browser. Único
+ * camino de escritura del banco (estudio y portal): recorta largos, descarta
+ * pilares que no son de la marca y normaliza los vocabularios. `null` = vacía.
+ * No incluye `owner_id`, `client_id` ni `generated_by`: los pone quien llama.
+ */
+export function ideaInsertRow(idea: Partial<ContentIdea>, pillars: Pillar[]) {
+  const pillarKeys = new Set(sanitizePillars(pillars).map((p) => p.key));
+  const s = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const hook = s(idea.hook, 300);
+  const brief = s(idea.brief, 1500);
+  if (!hook || !brief) return null;
+  return {
+    pillar_key: idea.pillar_key && pillarKeys.has(idea.pillar_key) ? idea.pillar_key : null,
+    source: isIdeaSource(idea.source) ? idea.source : null,
+    stage: toAwarenessLevel(idea.stage),
+    purpose: isPurpose(idea.purpose) ? idea.purpose : null,
+    format: idea.format === "carousel" ? "carousel" : "reel",
+    format_style: s(idea.format_style, 60) || null,
+    hook_text: s(idea.hook_text, 200) || null,
+    hook_visual: s(idea.hook_visual, 300) || null,
+    value_pillar: s(idea.value_pillar, 40) || null,
+    hook_type: s(idea.hook_type, 40) || null,
+    script_structure: s(idea.script_structure, 40) || null,
+    hook,
+    angle: s(idea.angle, 200) || null,
+    brief,
+    why: s(idea.why, 300) || null,
+  };
+}

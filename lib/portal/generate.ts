@@ -298,8 +298,20 @@ export async function assertCanGenerate(
   clientId: string,
   ownerId: string,
   limit: number | null,
+  /** Cuántas generaciones va a cobrar la acción (por defecto 1). */
+  units = 1,
 ): Promise<AiUsageState> {
   const state = await getGenerationState(clientId, ownerId, limit);
+
+  // Con `units > 1` no alcanza con "no bloqueado": tiene que haber cupo del
+  // plan + saldo para TODAS, o se cobraría a medias por algo que ya se entregó.
+  const available = state.remaining === null ? Infinity : Math.max(0, state.remaining) + state.creditBalance;
+  if (units > 1 && !state.blocked && available < units) {
+    throw new PortalGenerationError(
+      `Esto cuesta ${units} generaciones y te ${available === 1 ? "queda 1" : `quedan ${available}`}. Elige menos piezas o recarga desde Facturación.`,
+      429,
+    );
+  }
 
   if (state.blocked) {
     throw new PortalGenerationError(
@@ -366,6 +378,23 @@ export async function settleGeneration(input: {
     });
   } catch (e) {
     console.error("[portal/generate] no se pudo registrar el consumo:", e);
+  }
+}
+
+/**
+ * `settleGeneration` N veces, para las acciones que cuestan más de una
+ * generación ("Ideas para tu semana" de 5 o 7). Cada unidad es su propia fila
+ * de `ai_usage_log`, y de dónde sale cada una se decide en orden: primero lo
+ * que queda del plan, después la recarga — igual que si se hubieran pedido
+ * por separado. Nunca lanza.
+ */
+export async function settleGenerations(input: Parameters<typeof settleGeneration>[0] & { units: number }): Promise<void> {
+  const { units, state, ...rest } = input;
+  let planLeft = state.remaining === null ? Infinity : Math.max(0, state.remaining);
+  for (let i = 0; i < units; i++) {
+    const nextSource: AiUsageState["nextSource"] = planLeft > 0 ? "plan" : "credit";
+    planLeft--;
+    await settleGeneration({ ...rest, state: { ...state, nextSource } });
   }
 }
 

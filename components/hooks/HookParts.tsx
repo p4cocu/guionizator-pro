@@ -1,4 +1,4 @@
-import { HOOK_CRITERIA, scoreChecks, wordCount, type HookCheck } from "@/lib/hooks/criteria";
+import { HOOK_CRITERIA, HOOK_CRITERIA_PLAIN, scoreChecks, wordCount, type HookCheck } from "@/lib/hooks/criteria";
 import styles from "./HookParts.module.css";
 
 /**
@@ -18,18 +18,19 @@ export function ScoreBadge({ checks }: { checks: HookCheck[] }) {
   );
 }
 
-export function Checklist({ checks }: { checks: HookCheck[] }) {
+/** `plain`: etiquetas sin jerga para el portal (`HOOK_CRITERIA_PLAIN`). */
+export function Checklist({ checks, plain = false }: { checks: HookCheck[]; plain?: boolean }) {
   return (
     <ul className={styles.checklist}>
       {checks.map((c) => {
         const def = HOOK_CRITERIA.find((x) => x.id === c.id);
         return (
-          <li key={c.id} className={styles.checkItem} title={def?.hint}>
+          <li key={c.id} className={styles.checkItem} title={plain ? undefined : def?.hint}>
             <span className={c.status === "ok" ? styles.checkOk : c.status === "falla" ? styles.checkFail : styles.checkNa}>
               {c.status === "ok" ? "✓" : c.status === "falla" ? "✕" : "–"}
             </span>
             <span>
-              {def?.label}
+              {plain ? HOOK_CRITERIA_PLAIN[c.id] : def?.label}
               {c.note && <span className={styles.checkNote}> · {c.note}</span>}
             </span>
           </li>
@@ -60,31 +61,35 @@ export function Layers({
   text,
   visual,
   measure = true,
+  plain = false,
 }: {
   verbal: string;
   text?: string | null;
   visual?: string | null;
   /** false para ganchos ajenos (Competencia): "alárgalo" no aplica. */
   measure?: boolean;
+  /** Portal: "Se lee / Se ve / Dices" en vez de las etiquetas del taller. */
+  plain?: boolean;
 }) {
+  const tags = plain ? { text: "Se lee", visual: "Se ve", verbal: "Dices" } : { text: "Pantalla", visual: "Visual", verbal: "Dice" };
   return (
     <div className={styles.layers}>
       {text && (
         <p className={styles.layer}>
-          <span className={styles.layerTag}>Pantalla</span>
+          <span className={styles.layerTag}>{tags.text}</span>
           <strong>{text}</strong>
           {measure && <TextLengthWarning text={text} />}
         </p>
       )}
       {visual && (
         <p className={styles.layer}>
-          <span className={styles.layerTag}>Visual</span>
+          <span className={styles.layerTag}>{tags.visual}</span>
           {visual}
         </p>
       )}
       {verbal && (
         <p className={styles.layer}>
-          <span className={styles.layerTag}>Dice</span>“{verbal}”
+          <span className={styles.layerTag}>{tags.verbal}</span>“{verbal}”
         </p>
       )}
     </div>

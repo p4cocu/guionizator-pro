@@ -11,7 +11,10 @@ import { useState } from "react";
 import StrategyTestForm from "@/components/strategy/StrategyTestForm";
 import { ANDREA_PILLAR_PLAIN, PHASE_PLAIN } from "@/lib/strategy/test";
 import type { PortalStrategy } from "@/lib/portal/strategy";
+import type { ContentIdea } from "@/lib/strategy/pillars";
+import type { PortalUsage } from "@/lib/portal/weekIdeas";
 import { enviarTestEstrategia } from "./actions";
+import WeekIdeasPanel from "./WeekIdeasPanel";
 import s from "./estrategia.module.css";
 
 /** Los campos del cliente ideal, con nombres que entiende el dueño del negocio. */
@@ -29,11 +32,13 @@ export default function EstrategiaPortalClient({
   brandLabel,
   initial,
   canEdit,
+  week,
 }: {
   clientId: string;
   brandLabel: string;
   initial: PortalStrategy;
   canEdit: boolean;
+  week: { canGenerate: boolean; initialSaved: ContentIdea[]; initialUsage: PortalUsage | null };
 }) {
   const [strategy, setStrategy] = useState<PortalStrategy>(initial);
   const hasStrategy = strategy.pillars.length > 0 || Boolean(strategy.avatar);
@@ -124,6 +129,17 @@ export default function EstrategiaPortalClient({
                 ))}
               </div>
             </section>
+          )}
+
+          {strategy.pillars.length > 0 && (
+            <WeekIdeasPanel
+              clientId={clientId}
+              pillars={strategy.pillars}
+              canGenerate={week.canGenerate}
+              canSave={canEdit}
+              initialSaved={week.initialSaved}
+              initialUsage={week.initialUsage}
+            />
           )}
 
           {canEdit && (

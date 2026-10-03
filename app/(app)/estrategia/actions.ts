@@ -3,24 +3,24 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { MODEL_FAST } from "@/lib/ai/anthropic";
+import { runStrategyIdeas, type WeekIdea } from "@/lib/strategy/runIdeas";
 import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
 import { buildClientContext } from "@/lib/ai/clientContext";
 import { buildProductContext } from "@/lib/ai/productContext";
 import { PRODUCT_COLUMNS, type Product } from "@/lib/products/fields";
 import {
   IDEA_COLUMNS,
+  ideaInsertRow,
   IDEA_SOURCES,
   STRATEGY_COLUMNS,
   FORMAT_STYLES,
   PURPOSES,
-  WEEK_PLANS,
   buildStrategyContext,
   formatStyleLabel,
   isIdeaSource,
   isPurpose,
   toAwarenessLevel,
   normalizeStrategyRow,
-  sanitizePillars,
   sanitizeStrategy,
   type ContentIdea,
   type AccountPhase,
@@ -43,12 +43,8 @@ import {
 import { missingTestAnswers, sanitizeTestAnswers, type TestAnswers } from "@/lib/strategy/test";
 import {
   STRATEGY_DRAFT_SYSTEM,
-  STRATEGY_IDEAS_SYSTEM,
   buildStrategyDraftPrompt,
-  buildStrategyIdeasPrompt,
   normalizeStrategyDraft,
-  normalizeStrategyIdeas,
-  maskInventedNumbers,
 } from "@/lib/strategy/prompts";
 
 /**
@@ -224,7 +220,7 @@ export type GenerateIdeasInput = {
   research_topic?: string | null;
 };
 
-export type WeekIdea = ContentIdea & { day: number | null };
+export type { WeekIdea };
 export type GenerateIdeasResult = { ok: true; ideas: WeekIdea[] } | { ok: false; error: string };
 
 /**
@@ -368,57 +364,31 @@ export async function generateIdeas(input: GenerateIdeasInput): Promise<Generate
       .limit(25);
 
     const pillar = strategy.pillars.find((p) => p.key === input.pillar_key) ?? null;
-    const weekSlots = input.week_posts && input.week_posts <= 7 ? (WEEK_PLANS[input.week_posts] ?? null) : null;
-    const raw = await generateJsonPlain({
-      label: "strategy-ideas",
-      model: MODEL_FAST,
-      // Medido 2026-10-02 (Vercel): 6 ideas ≈ 2.2k tokens / ~21 s; "Mi semana"
-      // de 7 ≈ 2.7k / ~26 s. 5000 deja margen para no cortar por max_tokens,
-      // que dispara el reintento de lib/ai/json.ts y duplica la espera.
-      maxTokens: 5000,
-      system: STRATEGY_IDEAS_SYSTEM,
-      userMessage: buildStrategyIdeasPrompt({
-        brandContext: buildClientContext(brand),
-        strategyContext: buildStrategyContext(strategy),
-        source: input.source,
-        sourceMaterial: material,
-        filters: {
-          pillar,
-          level: input.level ? toAwarenessLevel(input.level) : null,
-          purpose: isPurpose(input.purpose) ? input.purpose : null,
-          format: input.format ?? null,
-          // Las fuentes de autoridad (0020) llevan su formato sí o sí: probado,
-          // sin forzarlo 2 de 5 ideas "contracorriente" salían como demo o caso.
-          format_style:
-            input.source === "contracorriente" || input.source === "investigacion"
-              ? input.source
-              : FORMAT_STYLES.some((f) => f.id === input.format_style)
-                ? input.format_style!
-                : null,
-          value_pillar: input.value_pillar || null,
-          hook_type: input.hook_type || null,
-          script_structure: input.script_structure || null,
-        },
-        previousHooks: (prev ?? []).map((r) => r.hook as string),
-        weekSlots,
-      }),
-    });
-    const brandContext = buildClientContext(brand);
-    const strategyContext = buildStrategyContext(strategy);
-    const knownContext = `${brandContext}\n${strategyContext}\n${material ?? ""}`;
-    let ideas = normalizeStrategyIdeas(raw, {
-      pillarKeys: strategy.pillars.map((p) => p.key),
+    const ideas = await runStrategyIdeas({
+      brandContext: buildClientContext(brand),
+      strategy,
       source: input.source,
-    }).map((idea) => maskInventedNumbers(idea, knownContext, ["hook", "hook_text", "hook_visual", "angle", "brief"]));
-    // En "Mi semana" la casilla manda: si la IA se corrió de día o de nivel, se
-    // reacomoda por posición.
-    if (weekSlots) {
-      ideas = ideas.slice(0, weekSlots.length).map((idea, i) => ({
-        ...idea,
-        day: weekSlots[i].day,
-        stage: weekSlots[i].level,
-      }));
-    }
+      material,
+      filters: {
+        pillar,
+        level: input.level ? toAwarenessLevel(input.level) : null,
+        purpose: isPurpose(input.purpose) ? input.purpose : null,
+        format: input.format ?? null,
+        // Las fuentes de autoridad (0020) llevan su formato sí o sí: probado,
+        // sin forzarlo 2 de 5 ideas "contracorriente" salían como demo o caso.
+        format_style:
+          input.source === "contracorriente" || input.source === "investigacion"
+            ? input.source
+            : FORMAT_STYLES.some((f) => f.id === input.format_style)
+              ? input.format_style!
+              : null,
+        value_pillar: input.value_pillar || null,
+        hook_type: input.hook_type || null,
+        script_structure: input.script_structure || null,
+      },
+      previousHooks: (prev ?? []).map((r) => r.hook as string),
+      weekPosts: input.week_posts,
+    });
     if (ideas.length === 0) return { ok: false, error: "La IA no devolvió ideas. Intenta de nuevo." };
     return { ok: true, ideas };
   } catch (e) {
@@ -435,33 +405,12 @@ export async function saveIdea(clientId: string, idea: ContentIdea): Promise<Sav
   try {
     const { supabase, user } = await getAuthUser();
     const strategy = await loadStrategyRow(supabase, user.id, clientId);
-    const pillarKeys = new Set(sanitizePillars(strategy.pillars).map((p) => p.key));
-    const s = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
-    const hook = s(idea.hook, 300);
-    const brief = s(idea.brief, 1500);
-    if (!hook || !brief) return { ok: false, error: "La idea está vacía." };
+    const row = ideaInsertRow(idea, strategy.pillars);
+    if (!row) return { ok: false, error: "La idea está vacía." };
 
     const { data, error } = await supabase
       .from("content_ideas")
-      .insert({
-        owner_id: user.id,
-        client_id: clientId,
-        pillar_key: idea.pillar_key && pillarKeys.has(idea.pillar_key) ? idea.pillar_key : null,
-        source: isIdeaSource(idea.source) ? idea.source : null,
-        stage: toAwarenessLevel(idea.stage),
-        purpose: isPurpose(idea.purpose) ? idea.purpose : null,
-        format: idea.format === "carousel" ? "carousel" : "reel",
-        format_style: s(idea.format_style, 60) || null,
-        hook_text: s(idea.hook_text, 200) || null,
-        hook_visual: s(idea.hook_visual, 300) || null,
-        value_pillar: s(idea.value_pillar, 40) || null,
-        hook_type: s(idea.hook_type, 40) || null,
-        script_structure: s(idea.script_structure, 40) || null,
-        hook,
-        angle: s(idea.angle, 200) || null,
-        brief,
-        why: s(idea.why, 300) || null,
-      })
+      .insert({ owner_id: user.id, client_id: clientId, ...row })
       .select(IDEA_COLUMNS)
       .single();
     if (error) return { ok: false, error: error.message };

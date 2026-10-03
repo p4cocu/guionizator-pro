@@ -2,20 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { MODEL_DEFAULT, MODEL_FAST } from "@/lib/ai/anthropic";
-import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
+import { AiJsonError } from "@/lib/ai/json";
 import { buildClientContext } from "@/lib/ai/clientContext";
 import { normalizeChecks, type HookCheck } from "@/lib/hooks/criteria";
-import {
-  HOOK_REVIEW_SYSTEM,
-  LAYERED_HOOKS_SYSTEM,
-  buildHookReviewPrompt,
-  buildLayeredHooksPrompt,
-  normalizeHookReview,
-  normalizeLayeredHooks,
-  type HookReview,
-  type LayeredHook,
-} from "@/lib/hooks/prompts";
+import { type HookReview, type LayeredHook } from "@/lib/hooks/prompts";
+import { runHookReview, runLayeredHooks, scriptToText } from "@/lib/hooks/run";
 
 /**
  * `hook_text` es la capa VERBAL. Las otras dos capas (`text_overlay`, `visual`)
@@ -137,20 +128,6 @@ export async function reorderScriptHooks(
 
 // ── Ganchos de 3 capas (0018) ────────────────────────────────────────────────
 
-/** El texto del guion tal como lo leen los prompts de ganchos. */
-function scriptToText(type: string, content: unknown): string {
-  const c = (content ?? {}) as { voice_off?: unknown; slides?: unknown };
-  if (type === "carousel" && Array.isArray(c.slides)) {
-    return c.slides
-      .map((sl, i) => {
-        const s = sl as { number?: number; text?: string; title?: string; body?: string };
-        return `Slide ${s.number ?? i + 1}: ${[s.title, s.text, s.body].filter(Boolean).join(" — ")}`;
-      })
-      .join("\n");
-  }
-  return typeof c.voice_off === "string" ? c.voice_off : "";
-}
-
 async function loadScriptForHooks(scriptId: string) {
   const { supabase, user } = await getAuthUser();
   const { data: script } = await supabase
@@ -185,14 +162,7 @@ export async function generateLayeredHooks(scriptId: string): Promise<LayeredHoo
   try {
     const s = await loadScriptForHooks(scriptId);
     if (!s.text.trim()) return { ok: false, error: "El guion está vacío: escribe el guion primero." };
-    const raw = await generateJsonPlain({
-      label: "layered-hooks",
-      model: MODEL_DEFAULT,
-      maxTokens: 1800,
-      system: LAYERED_HOOKS_SYSTEM,
-      userMessage: buildLayeredHooksPrompt({ brandContext: s.brandContext, type: s.type, brief: s.brief, scriptText: s.text }),
-    });
-    const hooks = normalizeLayeredHooks(raw);
+    const hooks = await runLayeredHooks({ brandContext: s.brandContext, type: s.type, brief: s.brief, scriptText: s.text });
     if (hooks.length === 0) return { ok: false, error: "La IA no devolvió ganchos. Intenta de nuevo." };
     return { ok: true, hooks };
   } catch (e) {
@@ -216,20 +186,13 @@ export async function reviewScriptHook(hookId: string, scriptId: string): Promis
     if (!hook) return { ok: false, error: "Ese gancho ya no existe." };
     const s = await loadScriptForHooks(scriptId);
 
-    const raw = await generateJsonPlain({
-      label: "hook-review",
-      model: MODEL_FAST,
-      maxTokens: 1200,
-      system: HOOK_REVIEW_SYSTEM,
-      userMessage: buildHookReviewPrompt({
-        brandContext: s.brandContext,
-        verbal: hook.hook_text as string,
-        textOverlay: (hook.text_overlay as string | null) ?? null,
-        visual: (hook.visual as string | null) ?? null,
-        context: `${s.brief}\n\n${s.text}`,
-      }),
+    const review = await runHookReview({
+      brandContext: s.brandContext,
+      verbal: hook.hook_text as string,
+      textOverlay: (hook.text_overlay as string | null) ?? null,
+      visual: (hook.visual as string | null) ?? null,
+      context: `${s.brief}\n\n${s.text}`,
     });
-    const review = normalizeHookReview(raw, (hook.text_overlay as string | null) ?? null);
     if (!review) return { ok: false, error: "La IA no devolvió una revisión válida. Intenta de nuevo." };
 
     await supabase.from("script_hooks").update({ checks: review.checks }).eq("id", hookId).eq("owner_id", user.id);

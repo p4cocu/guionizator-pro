@@ -11,7 +11,14 @@
 
 import { requirePortalClient, requirePortalSession, portalClientLabel } from "@/lib/portal/access";
 import { loadPortalStrategy } from "@/lib/portal/strategy";
+import { AI_FEATURE_SLUG, hasFeature } from "@/lib/portal/features";
+import { getClientOwnerId, getGenerationState } from "@/lib/portal/generate";
+import { listPortalIdeas } from "@/lib/portal/weekIdeas";
 import EstrategiaPortalClient from "./EstrategiaPortalClient";
+
+// "Ideas para tu semana" corre en la función de esta página (las server
+// actions viven en la función de la página que las llama): 7 piezas ~25-28 s.
+export const maxDuration = 120;
 
 export default async function PortalEstrategiaPage({
   params,
@@ -21,7 +28,16 @@ export default async function PortalEstrategiaPage({
   const { clientId } = await params;
   const { user } = await requirePortalSession();
   const client = await requirePortalClient(user.id, clientId, "estrategia");
-  const strategy = await loadPortalStrategy(client.id);
+  const canGenerate = hasFeature(client.features, AI_FEATURE_SLUG) && client.role !== "viewer";
+  const [strategy, savedIdeas, usage] = await Promise.all([
+    loadPortalStrategy(client.id),
+    listPortalIdeas(client.id),
+    canGenerate
+      ? getClientOwnerId(client.id)
+          .then((ownerId) => getGenerationState(client.id, ownerId, client.aiGenerationLimit))
+          .catch(() => null)
+      : Promise.resolve(null),
+  ]);
 
   return (
     <EstrategiaPortalClient
@@ -29,6 +45,20 @@ export default async function PortalEstrategiaPage({
       brandLabel={portalClientLabel(client)}
       initial={strategy}
       canEdit={client.role !== "viewer"}
+      week={{
+        canGenerate,
+        initialSaved: savedIdeas,
+        // El tope EFECTIVO de `getGenerationState`, nunca el override crudo.
+        initialUsage: usage
+          ? {
+              used: usage.used,
+              limit: usage.limit,
+              remaining: usage.remaining,
+              creditBalance: usage.creditBalance,
+              nextSource: usage.nextSource,
+            }
+          : null,
+      }}
     />
   );
 }

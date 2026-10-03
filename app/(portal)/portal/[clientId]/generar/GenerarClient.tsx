@@ -86,6 +86,9 @@ type Props = {
   initialUsage: Usage;
   /** Servicios de la marca (ficha de oferta, migración 0016). */
   products?: ProductOption[];
+  /** Brief precargado ("Escribir este guion →" desde Ideas para tu semana). */
+  initialBrief?: string;
+  initialType?: ScriptType;
 };
 
 export default function GenerarClient({
@@ -94,13 +97,15 @@ export default function GenerarClient({
   canSeeScripts,
   initialUsage,
   products: initialProducts = [],
+  initialBrief = "",
+  initialType = "reel",
 }: Props) {
   const completo = mode === "completo";
   const steps = generationModeSteps(mode);
 
   const [step, setStep] = useState(0);
-  const [type, setType] = useState<ScriptType>("reel");
-  const [brief, setBrief] = useState("");
+  const [type, setType] = useState<ScriptType>(initialType);
+  const [brief, setBrief] = useState(initialBrief);
 
   // Servicio que promueve el guion (0016). Mismo flujo que el estudio: ideas
   // (cobran 1 generación) y 1-2 preguntas si a la ficha le falta algo (gratis).

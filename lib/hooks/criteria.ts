@@ -63,6 +63,20 @@ export const HOOK_CRITERIA: { id: HookCriterionId; label: string; hint: string }
   },
 ];
 
+/**
+ * Los 7 criterios en palabras del dueño del negocio, para el portal (sin
+ * "portador", "abre declarando" ni porcentajes del análisis).
+ */
+export const HOOK_CRITERIA_PLAIN: Record<HookCriterionId, string> = {
+  texto_pantalla: "Tiene un texto en pantalla al inicio",
+  abre_declarando: "Arranca afirmando algo, sin rodeos ni preguntas",
+  camara_fija: "La cámara no se mueve: te mueves tú",
+  algo_concreto: "Se ve algo concreto desde el primer segundo",
+  sin_audio: "Se entiende sin sonido",
+  largo_texto: "El texto en pantalla tiene de 8 a 12 palabras",
+  portador_nicho: "Lo más fuerte va donde tu público lo nota (texto o imagen)",
+};
+
 export type HookCheckStatus = "ok" | "falla" | "na";
 
 export type HookCheck = { id: HookCriterionId; status: HookCheckStatus; note: string };

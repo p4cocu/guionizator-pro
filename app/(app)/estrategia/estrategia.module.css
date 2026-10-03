@@ -351,3 +351,10 @@
   line-height: 1.55;
   color: var(--text-muted);
 }
+
+label.dayLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}

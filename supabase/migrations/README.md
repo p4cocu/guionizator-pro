@@ -50,6 +50,7 @@ en Supabase; `CLAUDE.md` documenta las columnas con `CHECK constraint`.
 | 0021 | `0021_esqueleto_competencia.sql` | ✅ 2026-10-02 (antes del deploy, vía Supabase MCP) |
 | 0022 | `0022_rendimiento_guiones.sql` | ✅ 2026-10-02 (antes del deploy, vía Supabase MCP) |
 | 0023 | `0023_gancho_visual.sql` | ✅ 2026-10-02 (antes del deploy, vía Supabase MCP) |
+| 0024 | `0024_ideas_del_cliente.sql` | ✅ 2026-10-02 (antes del deploy, SQL Editor) |
 
 ### 0019 va ANTES del deploy
 

@@ -31,6 +31,8 @@ import {
   settleGeneration,
 } from "@/lib/portal/generate";
 import { MODEL_FAST } from "@/lib/ai/anthropic";
+import { reviewPortalHook } from "@/lib/portal/scriptHooks";
+import type { HookReview } from "@/lib/hooks/prompts";
 import { AiJsonError, generateJsonPlain } from "@/lib/ai/json";
 import {
   PRODUCT_IDEAS_SYSTEM,
@@ -262,5 +264,32 @@ export async function guardarRespuestaEnFicha(input: {
     if (e instanceof PortalProductError) return { ok: false, error: e.message };
     console.error("[portal/generar/ficha]", e);
     return { ok: false, error: "No se pudo guardar en la ficha." };
+  }
+}
+
+/**
+ * "Revisar un gancho" (pestaña de `/generar`): califica lo que el cliente
+ * escribió y propone una versión mejorada. Cuesta 1 generación
+ * (`portal:hook-review`) y no guarda nada.
+ */
+export async function revisarGanchoSuelto(input: {
+  clientId: string;
+  verbal: string;
+  textOverlay: string;
+  visual: string;
+  context: string;
+}): Promise<{ ok: true; review: HookReview } | { ok: false; error: string }> {
+  try {
+    const review = await reviewPortalHook({
+      clientId: input.clientId,
+      verbal: input.verbal,
+      textOverlay: input.textOverlay,
+      visual: input.visual,
+      context: input.context,
+    });
+    return { ok: true, review };
+  } catch (e) {
+    rethrowIfNextControlFlow(e);
+    return { ok: false, error: generationErrorInfo(e).message };
   }
 }
